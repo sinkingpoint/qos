@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "assemble-initramfs"
+]
+
+[workspace.dependencies]
+clap = "4.4.11"
+rand = "0.8.5"
+slog = "2.7.0"
+slog-async = "2.8.0"
+slog-json = "2.6.1"
