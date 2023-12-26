@@ -95,3 +95,92 @@ let builder = NewcBuilder::new(s)
 
 Will probably need a way to configure that as well.
 
+## Actually booting into our initramfs
+
+Now that we can make an initramfs, let's run it:
+
+```shell
+~/repos/qos ± ● main
+26/12/2023 16:47:46 AEDT❯ cargo run -p assemble-initramfs
+   Compiling assemble-initramfs v0.1.0 (/home/colin/repos/qos/assemble-initramfs)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.89s
+     Running `target/debug/assemble-initramfs`
+{"msg":"Assembling initramfs structure in /tmp/assemble-initramfs3574388197","level":"INFO","ts":"2023-12-26T05:47:49.446663456Z"}
+{"msg":"Adding file to CPIO archive","level":"DEBG","ts":"2023-12-26T05:47:49.447504205Z","path":"/tmp/assemble-initramfs3574388197/init"}
+
+~/repos/qos ± ●● main
+26/12/2023 16:47:49 AEDT❯ qemu-system-x86_64 -kernel /tmp/cpio/vmlinuz-6.6.8-200.fc39.x86_64 -initrd ./initramfs -display none -serial stdio -append "console=ttyAMA0 console=ttyS0" --enable-kvm
+```
+
+Aaand, we get:
+
+```log
+[    1.129647] Failed to execute /init (error -13)
+[    1.130384] Run /sbin/init as init process
+[    1.131080] Run /etc/init as init process
+[    1.131733] Run /bin/init as init process
+[    1.132405] Run /bin/sh as init process
+[    1.133059] Kernel panic - not syncing: No working init found.  Try passing init= option to kernel. See Linux Documentation/admin-guide/init.rst for guidance.
+```
+
+But we're further! We found a /init . -13 is EACCES (https://unix.stackexchange.com/questions/326766/what-are-the-standard-error-codes-in-linux). Derp - we didn't set the executable bits on our init binary. Let's do this:
+
+```rust
+        let builder = NewcBuilder::new(s)
+            .uid(0)
+            .gid(0)
+            .mode(0o100744);
+```
+
+And we get a new error:
+
+```log
+[    1.202118] Failed to execute /init (error -2)
+```
+
+ENOENT this time - ah ha! shared libraries. Let's see what we need to bring in for /bin/sh:
+
+```
+26/12/2023 16:51:44 AEDT❯ ldd /bin/sh
+        linux-vdso.so.1 (0x00007fff937eb000)
+        libtinfo.so.6 => /lib64/libtinfo.so.6 (0x00007f857fb62000)
+        libc.so.6 => /lib64/libc.so.6 (0x00007f857f980000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007f857fd1c000)
+```
+
+/lib64/libtinfo.so.6, /lib64/libc.so.6, and ld-linux-x86-64.so.2. _fine_. Let's hack that into our assembler.
+
+```
+26/12/2023 16:55:30 AEDT❯ cpio -i < ../initramfs
+cpio: lib64/libtinfo.so.6: Cannot open: No such file or directory
+cpio: lib64/libc.so.6: Cannot open: No such file or directory         
+```
+
+/tableflip . I think that means we have to add the lib64 _directory_ as well? I guess let's add support for that.
+
+Aaand https://github.com/jcreekmore/cpio-rs/blob/master/src/lib.rs#L16 doesn't support adding directories - let's copy it and add support.
+
+```
+[    1.325888] Run /init as init process
+init: cannot set terminal process group (-1): Inappropriate ioctl for device
+init: no job control in this shell
+init-5.2# 
+```
+
+Nice. We boot into /bin/sh and have a prompt. We have nothing else though:
+
+```
+init-5.2# ls
+init: ls: command not found
+init-5.2# clear
+init: clear: command not found
+```
+
+And if we try to exit, we get a kernel panic lol:
+
+```
+init-5.2# exit
+[    1.959097] Kernel panic - not syncing: Attempted to kill init! exitcode=0x00000000
+```
+
+But it's there!
