@@ -13,3 +13,4 @@ slog-async = { workspace = true }
 slog-json = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+cpio = { path = "../cpio" }

@@ -1,5 +1,3 @@
-mod cpio;
-
 use std::{path::{PathBuf, Path}, io, fs::{File, self}};
 
 use clap::Parser;

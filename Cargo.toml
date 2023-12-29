@@ -2,7 +2,8 @@
 resolver = "2"
 
 members = [
-    "assemble-initramfs"
+    "assemble-initramfs", 
+    "cpio"
 ]
 
 [workspace.dependencies]
