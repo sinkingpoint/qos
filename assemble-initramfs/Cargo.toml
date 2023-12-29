@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
-cpio = "0.2.2"
 rand = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-json = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
