@@ -80,3 +80,5 @@ escaped_char = @{ escape ~ ("\\" | "b" | "f" | "n" | "r" | "t" | ("u" ~ ASCII_HE
 
 Let's build our own.
 
+
+Stdin is buffered by default - need to enable "non canonical mode": https://www.gnu.org/software/libc/manual/html_node/Noncanon-Example.html

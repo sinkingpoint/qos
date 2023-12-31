@@ -1,88 +1,61 @@
 mod parser;
-use nix::{
-    libc,
-    sys::signal::{
-        killpg,
-        signal,
-        SigHandler,
-        Signal::{
-            SIGINT,
-            SIGQUIT,
-            SIGTSTP,
-            SIGTTIN,
-            SIGTTOU,
-        },
-    },
-    unistd::{
-        getpgrp,
-        getpid,
-        isatty,
-        setpgid,
-        tcgetpgrp,
-        tcsetpgrp,
-    },
-};
+use std::{io::Read, os::fd::{AsFd, AsRawFd}};
+
+use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
 use slog::{
     o,
     Drain,
+    error
 };
 use slog_json::Json;
 
 fn main() {
     let logger = assemble_logger();
-    let fd = libc::STDIN_FILENO;
-    let is_interactive = match isatty(fd) {
-        Ok(s) => s,
-        Err(errno) => {
-            slog::warn!(logger, "failed to run isatty. Err: {}", errno);
-            false
+    let mut reader = std::io::stdin();
+
+    if !isatty(&reader) {
+        error!(logger, "stdin is not a tty");
+        return;
+    }
+
+    let mut attrs = match tcgetattr(&reader) {
+        Ok(attrs) => attrs,
+        Err(e) => {
+            error!(logger, "Error getting terminal attributes: {}", e);
+            return;
         }
     };
 
-    let mut job_control_enabled = is_interactive;
+    // Disable "Canonical mode" and "Echo".
+    // Canonical mode means that the terminal will buffer input until a newline is received, this allows us to read input one char at a time.
+    // Echo means that the terminal will print input back to the user, this allows us to read input without the user seeing it.
+    attrs.local_flags &= !(LocalFlags::ICANON | LocalFlags::ECHO);
 
-    if is_interactive {
-        loop {
-            let shell_pgid = getpgrp();
-
-            let foreground_pgid = match tcgetpgrp(fd) {
-                Ok(s) => s,
-                Err(e) => {
-                    println!("failed to run tcgetpgrp. Err: {}", e);
-                    job_control_enabled = false;
-                    break;
-                }
-            };
-
-            if foreground_pgid == shell_pgid {
-                break;
-            }
-
-            if let Err(e) = killpg(shell_pgid, SIGTTIN) {
-                slog::error!(logger, "failed to run killpg. Err: {}", e);
-                return;
-            }
-        }
-
-        if !job_control_enabled {
-            println!("no job control for this shell")
-        } else {
-            // Ignore interactive and job-control signals.
-            unsafe {
-                signal(SIGINT, SigHandler::SigIgn).unwrap();
-                signal(SIGQUIT, SigHandler::SigIgn).unwrap();
-                signal(SIGTSTP, SigHandler::SigIgn).unwrap();
-                signal(SIGTTIN, SigHandler::SigIgn).unwrap();
-                signal(SIGTTOU, SigHandler::SigIgn).unwrap();
-            }
-
-            let my_pid = getpid();
-            setpgid(my_pid, my_pid).expect("Failed to set PGID for shell");
-            tcsetpgrp(fd, my_pid).expect("Failed to become the foreground process");
-        }
+    if let Err(e) = nix::sys::termios::tcsetattr(&reader, SetArg::TCSANOW, &attrs) {
+        error!(logger, "Error setting terminal attributes: {}", e);
+        return;
     }
 
-    println!("loaded!");
+    let mut buffer = String::new();
+    loop {
+        let mut char_buffer = [0; 1];
+        if let Err(e) = reader.read_exact(&mut char_buffer) {
+            eprintln!("Error reading from stdin: {}", e);
+            break;
+        }
+
+        let c = char_buffer[0] as char;
+        if c == '\n' {
+            println!("Buffer: {}", buffer);
+            buffer.clear();
+        } else {
+            buffer.push(c);
+        }
+    }
+}
+
+fn isatty<T: AsFd>(fd: T) -> bool {
+    nix::unistd::isatty(fd.as_fd().as_raw_fd()).unwrap_or(false)
 }
 
 fn assemble_logger() -> slog::Logger {
