@@ -13,5 +13,5 @@ run: initramfs
 		-kernel /boot/vmlinuz-6.6.8-200.fc39.x86_64 \
 		-initrd ./initramfs.cpio \
 		-display none \
-		-serial stdio -append "console=ttyAMA0 console=ttyS0" \
+		-serial stdio -append "console=ttyS0" \
 		--enable-kvm
