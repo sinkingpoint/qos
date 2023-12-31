@@ -1,6 +1,8 @@
 mod parser;
-use std::{io::Read, os::fd::{AsFd, AsRawFd}};
+mod buffer;
+use std::os::fd::{AsFd, AsRawFd};
 
+use buffer::Buffer;
 use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
 use slog::{
     o,
@@ -11,7 +13,7 @@ use slog_json::Json;
 
 fn main() {
     let logger = assemble_logger();
-    let mut reader = std::io::stdin();
+    let reader = std::io::stdin();
 
     if !isatty(&reader) {
         error!(logger, "stdin is not a tty");
@@ -21,7 +23,7 @@ fn main() {
     let mut attrs = match tcgetattr(&reader) {
         Ok(attrs) => attrs,
         Err(e) => {
-            error!(logger, "Error getting terminal attributes: {}", e);
+            error!(&logger, "Error getting terminal attributes: {}", e);
             return;
         }
     };
@@ -36,21 +38,17 @@ fn main() {
         return;
     }
 
-    let mut buffer = String::new();
+    let mut buffer = Buffer::new(reader);
     loop {
-        let mut char_buffer = [0; 1];
-        if let Err(e) = reader.read_exact(&mut char_buffer) {
-            eprintln!("Error reading from stdin: {}", e);
-            break;
-        }
+        let line = match buffer.read() {
+            Ok(line) => line,
+            Err(e) => {
+                error!(&logger, "Error reading from stdin: {}", e);
+                return;
+            }
+        };
 
-        let c = char_buffer[0] as char;
-        if c == '\n' {
-            println!("Buffer: {}", buffer);
-            buffer.clear();
-        } else {
-            buffer.push(c);
-        }
+        println!("{}", line);
     }
 }
 
