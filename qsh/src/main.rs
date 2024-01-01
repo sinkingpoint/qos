@@ -1,6 +1,7 @@
 mod parser;
 mod buffer;
-use std::os::fd::{AsFd, AsRawFd};
+
+use std::{os::fd::{AsFd, AsRawFd, FromRawFd}, fs::File};
 
 use buffer::Buffer;
 use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
@@ -38,7 +39,8 @@ fn main() {
         return;
     }
 
-    let mut buffer = Buffer::new(reader);
+    let stdout = unsafe { File::from_raw_fd(1) };
+    let mut buffer = Buffer::new(reader, stdout);
     loop {
         let line = match buffer.read() {
             Ok(line) => line,
@@ -47,8 +49,6 @@ fn main() {
                 return;
             }
         };
-
-        println!("{}", line);
     }
 }
 

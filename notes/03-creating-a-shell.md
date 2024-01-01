@@ -116,3 +116,13 @@ CSI 4i 		AUX Port Off 	Disable aux serial port usually for local serial printer
 
 CSI 6n 	DSR 	Device Status Report 	Reports the cursor position (CPR) by transmitting ESC[n;mR, where n is the row and m is the column. 
 ```
+
+---
+
+Buffering?
+
+Output is only happening when I press enter
+
+Doesn't look like line buffering - `flush` doesn't work.
+
+Disabling "Canonical mode" seems to be the fix
