@@ -1,5 +1,6 @@
 use std::{io::{self, Read}, fmt::{Display, Formatter, self}};
 use thiserror::Error;
+use escapes_derive::EscapeSequence;
 
 pub const ESC: char = '\x1b';
 
@@ -22,99 +23,34 @@ pub enum AnsiParserError {
     IO(#[from] io::Error),
 }
 
-/// Returns an error if the given number of parameters does not match the expected number.
-fn expect_n_params(params: &[u8], n: usize) -> Result<(), AnsiParserError> {
-    if params.len() != n {
-        return Err(AnsiParserError::NumParams(params.len(), n));
-    }
-
-    Ok(())
-}
-
 /// A trait for parsing ANSI escape sequences.
 trait EscapeSequence: Display {
     fn parse(params: &[u8]) -> Result<Self, AnsiParserError> where Self: Sized;
 }
 
 /// Move the cursor up by the given amount of lines.
-#[derive(Debug, PartialEq)]
-pub struct CursorUp(pub u8);
-impl EscapeSequence for CursorUp {
-    fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-        expect_n_params(params, 1)?;
-        Ok(Self(params[0]))
-    }
-}
-
-impl Display for CursorUp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}A", ESC, CSI, self.0)
-    }
-}
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('A')]
+pub struct CursorUp(#[default(1)] pub u8);
 
 /// Move the cursor down by the given amount of lines.
-#[derive(Debug, PartialEq)]
-pub struct CursorDown(pub u8);
-impl EscapeSequence for CursorDown {
-    fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-        expect_n_params(params, 1)?;
-        Ok(Self(params[0]))
-    }
-}
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('B')]
+pub struct CursorDown(#[default(1)] pub u8);
 
-impl Display for CursorDown {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}B", ESC, CSI, self.0)
-    }
-}
+/// Move the cursor down by the given amount of lines.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('C')]
+pub struct CursorForward(#[default(1)] pub u8);
 
-/// Move the cursor forward by the given amount of columns.
-#[derive(Debug, PartialEq)]
-pub struct CursorForward(pub u8);
-impl EscapeSequence for CursorForward {
-    fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-        expect_n_params(params, 1)?;
-        Ok(Self(params[0]))
-    }
-}
+/// Move the cursor down by the given amount of lines.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('D')]
+pub struct CursorBack(#[default(1)] pub u8);
 
-impl Display for CursorForward {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}C", ESC, CSI, self.0)
-    }
-}
-
-/// Move the cursor back by the given amount of columns.
-#[derive(Debug, PartialEq)]
-pub struct CursorBack(pub u8);
-impl EscapeSequence for CursorBack {
-    fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-        expect_n_params(params, 1)?;
-        Ok(Self(params[0]))
-    }
-}
-
-impl Display for CursorBack {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}D", ESC, CSI, self.0)
-    }
-}
-
-
-#[derive(Debug, PartialEq)]
-pub struct EraseInLine(pub u8);
-impl EscapeSequence for EraseInLine {
-    fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-        expect_n_params(params, 1)?;
-        Ok(Self(params[0]))
-    }
-}
-
-impl Display for EraseInLine {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}K", ESC, CSI, self.0)
-    }
-}
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('K')]
+pub struct EraseInLine(#[default(0)] pub u8);
 
 #[derive(Debug, PartialEq)]
 pub enum ANSIEscapeSequence {

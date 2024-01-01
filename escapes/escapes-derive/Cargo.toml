@@ -1,11 +1,13 @@
 [package]
-name = "escapes"
+name = "escapes-derive"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+proc-macro = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thiserror = { workspace = true }
-escapes-derive = { path = "./escapes-derive" }
-enum_dispatch = "0.3.12"
+quote = "1.0.34"
+syn = "2.0.43"

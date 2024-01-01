@@ -5,6 +5,7 @@ members = [
     "assemble-initramfs", 
     "cpio",
     "escapes",
+    "escapes/escapes-derive",
     "qsh"
 ]
 
