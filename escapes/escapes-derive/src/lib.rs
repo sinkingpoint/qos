@@ -1,5 +1,4 @@
 extern crate proc_macro;
-use std::iter;
 
 use quote::quote;
 use proc_macro::TokenStream;
@@ -42,14 +41,14 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
             }
         }
 
-        if defaults.len() > 0 && defaults.len() != num_args {
+        if !defaults.is_empty() && defaults.len() != num_args {
             panic!("All fields must have a default value");
         }
     } else {
         panic!("Only structs are supported");
     }
 
-    let output_string = iter::repeat("{}").take(3 + num_args).collect::<String>();
+    let output_string = "{}".repeat(num_args + 3);
 
     let gen = quote! {
         impl EscapeSequence for #name {

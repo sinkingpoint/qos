@@ -1,6 +1,6 @@
 use std::io::{Read, self, Write};
 
-use escapes::{ESC, ANSIEscapeSequence, CursorForward, CursorBack};
+use escapes::{ESC, ANSIEscapeSequence, CursorForward, CursorBack, EraseInLine};
 
 /// Buffer is a wrapper around a Read that handles terminal IO.
 pub struct Buffer<R: Read, W: Write> {
@@ -80,12 +80,22 @@ impl<R: Read, W: Write> Buffer<R, W> {
     fn push_char(&mut self, c: char) {
         if self.position == self.buffer.len() {
             self.buffer.push(c);
-            write!(self.writer, "{}", c).expect("Failed to write to stdout");
         } else {
             self.buffer.insert(self.position, c);
         }
 
+        self.rerender();
+
         self.position += 1;
+    }
+
+    // Rewrite the current line, starting from the current position.
+    fn rerender(&mut self) {
+        write!(self.writer, "{}{}", EraseInLine(0), &self.buffer[self.position..]).expect("Failed to write to stdout");
+        // After rewriting a line, we are at the end of it. If we were in the middle of the string, we need to move the cursor back.
+        if self.buffer.len() > (self.position + 1) {
+            write!(self.writer, "{}", CursorBack((self.buffer.len() - (self.position + 1)) as u8)).expect("Failed to write to stdout");
+        }
     }
 
     /// Flush the buffer and return the contents.

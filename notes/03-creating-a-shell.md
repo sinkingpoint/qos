@@ -126,3 +126,20 @@ Output is only happening when I press enter
 Doesn't look like line buffering - `flush` doesn't work.
 
 Disabling "Canonical mode" seems to be the fix
+
+---
+
+Rendering in the middle of a line?
+
+buffer = ['f', 'o', 'o']
+cursor = 1 (over the first o)
+
+Inserts should happen _before_ the cursor
+So pressing 'i' should make ['f', 'i', 'o', 'o'] with cursor = 2
+
+Logic:
+
+ - Insert i (cursor = 2, terminal pos = 2)
+ - flush from (cursor-1) -> eol (display is 'fi')
+ - rewrite cursor + 1 -> eol (display is 'fioo', cursor=1, terminal pos=4)
+ - move cursor back (length - cursor + 1 = 4 - 1 + 2 = 2, terminal_pos = 2)
