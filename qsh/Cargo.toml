@@ -11,3 +11,4 @@ once_cell = "1.19.0"
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-json = { workspace = true }
+escapes = { path = "../escapes" }

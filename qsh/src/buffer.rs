@@ -1,5 +1,7 @@
 use std::io::{Read, self, Write};
 
+use escapes::{ESC, ANSIEscapeSequence, CursorForward, CursorBack};
+
 /// Buffer is a wrapper around a Read that handles terminal IO.
 pub struct Buffer<R: Read, W: Write> {
     /// The currently buffered input.
@@ -28,10 +30,50 @@ impl<R: Read, W: Write> Buffer<R, W> {
             if c == '\n' {
                 writeln!(self.writer).expect("Failed to write to stdout");
                 return Ok(self.flush());
+            } else if c == ESC {
+                self.handle_escape_sequence()?;
             } else {
                 self.push_char(c);
             }
         }
+    }
+
+    /// Handle an ANSI escape sequence.
+    fn handle_escape_sequence(&mut self) -> io::Result<()> {
+        let escape = ANSIEscapeSequence::read(&mut self.reader).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to parse ANSI escape sequence: {}", e),
+            )
+        })?;
+
+        match escape {
+            ANSIEscapeSequence::CursorForward(amt) => self.move_cursor(amt.0 as isize),
+            ANSIEscapeSequence::CursorBack(amt) => self.move_cursor(-(amt.0 as isize)),
+            _ => (),
+        }
+
+        return Ok(());
+    }
+
+    /// Move the cursor by the given amount across the buffer.
+    fn move_cursor(&mut self, amt: isize) {
+        // Find the new position and clamp it to the bounds of the buffer.
+        let mut new_position = self.position as isize + amt;
+        if new_position < 0 {
+            new_position = 0;
+        } else if new_position > self.buffer.len() as isize {
+            new_position = self.buffer.len() as isize;
+        }
+
+        // Write out the ANSI escape sequence to move the cursor.
+        if new_position > self.position as isize {
+            write!(self.writer, "{}", CursorForward(new_position as u8 - self.position as u8)).expect("Failed to write to stdout");
+        } else if new_position < self.position as isize {
+            write!(self.writer, "{}", CursorBack(self.position as u8 - new_position as u8)).expect("Failed to write to stdout");
+        }
+
+        self.position = new_position as usize;
     }
 
     /// Add a character to the buffer at the current position.
