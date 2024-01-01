@@ -49,6 +49,8 @@ fn main() {
                 return;
             }
         };
+
+        println!("You entered: {}", line);
     }
 }
 

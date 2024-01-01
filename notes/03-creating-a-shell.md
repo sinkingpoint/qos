@@ -143,3 +143,10 @@ Logic:
  - flush from (cursor-1) -> eol (display is 'fi')
  - rewrite cursor + 1 -> eol (display is 'fioo', cursor=1, terminal pos=4)
  - move cursor back (length - cursor + 1 = 4 - 1 + 2 = 2, terminal_pos = 2)
+
+Backspace?
+
+
+buffer = ['f', 'o', 'b']
+cursor = 2 (over the first o)
+

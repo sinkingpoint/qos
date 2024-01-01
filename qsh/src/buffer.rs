@@ -1,6 +1,9 @@
-use std::io::{Read, self, Write};
+use std::{io::{Read, self, Write}, cmp::Ordering};
 
 use escapes::{ESC, ANSIEscapeSequence, CursorForward, CursorBack, EraseInLine};
+
+// The ASCII character for DEL.
+const DELETE_CHAR: char = '\u{7f}';
 
 /// Buffer is a wrapper around a Read that handles terminal IO.
 pub struct Buffer<R: Read, W: Write> {
@@ -30,6 +33,8 @@ impl<R: Read, W: Write> Buffer<R, W> {
             if c == '\n' {
                 writeln!(self.writer).expect("Failed to write to stdout");
                 return Ok(self.flush());
+            } else if c == DELETE_CHAR {
+                self.backspace();
             } else if c == ESC {
                 self.handle_escape_sequence()?;
             } else {
@@ -53,7 +58,7 @@ impl<R: Read, W: Write> Buffer<R, W> {
             _ => (),
         }
 
-        return Ok(());
+        Ok(())
     }
 
     /// Move the cursor by the given amount across the buffer.
@@ -66,14 +71,15 @@ impl<R: Read, W: Write> Buffer<R, W> {
             new_position = self.buffer.len() as isize;
         }
 
-        // Write out the ANSI escape sequence to move the cursor.
-        if new_position > self.position as isize {
-            write!(self.writer, "{}", CursorForward(new_position as u8 - self.position as u8)).expect("Failed to write to stdout");
-        } else if new_position < self.position as isize {
-            write!(self.writer, "{}", CursorBack(self.position as u8 - new_position as u8)).expect("Failed to write to stdout");
+        let new_position = new_position as usize;
+
+        match new_position.cmp(&self.position) {
+            Ordering::Less => write!(self.writer, "{}", CursorBack((self.position - new_position) as u8)).expect("Failed to write to stdout"),
+            Ordering::Greater => write!(self.writer, "{}", CursorForward((new_position - self.position) as u8)).expect("Failed to write to stdout"),
+            Ordering::Equal => (),
         }
 
-        self.position = new_position as usize;
+        self.position = new_position;
     }
 
     /// Add a character to the buffer at the current position.
@@ -84,17 +90,35 @@ impl<R: Read, W: Write> Buffer<R, W> {
             self.buffer.insert(self.position, c);
         }
 
-        self.rerender();
-
         self.position += 1;
+        self.rerender();
+    }
+
+    // Remove a character from the buffer at the current position.
+    fn backspace(&mut self) {
+        if self.position == 0 {
+            return;
+        }
+        
+        if self.position == self.buffer.len() {
+            self.buffer.pop();
+        } else {
+            self.buffer.remove(self.position - 1);
+        }
+
+        write!(self.writer, "{}", CursorBack(2)).expect("Failed to write to stdout");
+        self.position -= 1;
+        self.rerender();
     }
 
     // Rewrite the current line, starting from the current position.
     fn rerender(&mut self) {
-        write!(self.writer, "{}{}", EraseInLine(0), &self.buffer[self.position..]).expect("Failed to write to stdout");
+        let start = if self.position == 0 { 0 } else { self.position - 1 };
+        write!(self.writer, "{}{}", EraseInLine(0), &self.buffer[start..]).expect("Failed to write to stdout");
+        
         // After rewriting a line, we are at the end of it. If we were in the middle of the string, we need to move the cursor back.
-        if self.buffer.len() > (self.position + 1) {
-            write!(self.writer, "{}", CursorBack((self.buffer.len() - (self.position + 1)) as u8)).expect("Failed to write to stdout");
+        if self.buffer.len() > self.position {
+            write!(self.writer, "{}", CursorBack((self.buffer.len() - self.position) as u8)).expect("Failed to write to stdout");
         }
     }
 
