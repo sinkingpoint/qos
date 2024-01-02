@@ -1,3 +1,6 @@
+use core::fmt;
+use std::error::Error;
+
 //
 #[derive(Debug)]
 pub struct ParserError {
@@ -11,6 +14,14 @@ impl ParserError {
             message: message.to_string(),
             start,
         }
+    }
+}
+
+impl Error for ParserError {}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ParserError: {}", self.message)
     }
 }
 
