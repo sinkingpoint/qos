@@ -1,10 +1,13 @@
 mod parser;
 mod buffer;
+mod process;
+mod shell;
 
 use std::{os::fd::{AsFd, AsRawFd, FromRawFd}, fs::File};
 
 use buffer::Buffer;
 use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
+use shell::Shell;
 use slog::{
     o,
     Drain,
@@ -40,6 +43,7 @@ fn main() {
     }
 
     let stdout = unsafe { File::from_raw_fd(1) };
+    let mut shell = Shell{};
     let mut buffer = Buffer::new(reader, stdout);
     loop {
         let line = match buffer.read() {
@@ -50,7 +54,7 @@ fn main() {
             }
         };
 
-        println!("You entered: {}", line);
+        shell.evaluate(&line).unwrap();
     }
 }
 

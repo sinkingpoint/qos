@@ -12,3 +12,4 @@ slog = { workspace = true }
 slog-async = { workspace = true }
 slog-json = { workspace = true }
 escapes = { path = "../escapes" }
+thiserror = { workspace = true }

@@ -282,6 +282,7 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-json",
+ "thiserror",
 ]
 
 [[package]]

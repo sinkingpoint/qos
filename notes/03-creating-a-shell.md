@@ -150,3 +150,13 @@ Backspace?
 buffer = ['f', 'o', 'b']
 cursor = 2 (over the first o)
 
+---
+
+execing
+
+`execvp` seems like the correct choice for now. `execvpe` once we support environment variables?
+
+For pipelines we probably need something to be able to control the IO streams of started processes. That can come later
+
+General idea: fork -> (parent) -> store and wait on pid
+                   -> (child) -> execve
