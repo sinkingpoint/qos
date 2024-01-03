@@ -16,9 +16,9 @@ static ESCAPED_CHARS_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
 
 // Consumes a sequence of whitespace characters.
 #[derive(Debug)]
-struct WhitespaceConsumer;
+struct Whitespace;
 
-impl Consumer for WhitespaceConsumer {
+impl Consumer for Whitespace {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let literal: String = input[start..].iter().take_while(|c| c.is_whitespace()).collect();
 
@@ -30,7 +30,7 @@ impl Consumer for WhitespaceConsumer {
             length: literal.len(),
             literal,
             start,
-            token: WhitespaceConsumer
+            token: Whitespace
         }))
     }
 }
@@ -38,11 +38,11 @@ impl Consumer for WhitespaceConsumer {
 // Consumes a single escaped character, e.g. "\x". Doesn't concern itself
 // with whether its a valid escape sequence or not, just that it's a \ followed by another character.
 #[derive(Debug)]
-struct EscapedCharacterConsumer {
+struct EscapedCharacter {
     decoded: char,
 }
 
-impl Consumer for EscapedCharacterConsumer {
+impl Consumer for EscapedCharacter {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         if input[start] != '\\' {
             return Ok(None);
@@ -58,7 +58,7 @@ impl Consumer for EscapedCharacterConsumer {
         if ESCAPED_CHARS_MAP.contains_key(next) {
             literal = input[start..start + 2].iter().collect::<String>();
             decoded = *ESCAPED_CHARS_MAP.get(next).unwrap();
-        } else if let Some(token) = HexCharacterConsumer::try_consume(input, start)? {
+        } else if let Some(token) = HexCharacter::try_consume(input, start)? {
             literal = token.literal;
             decoded = token.token.decoded;
         } else {
@@ -69,7 +69,7 @@ impl Consumer for EscapedCharacterConsumer {
             length: literal.len(),
             literal,
             start,
-            token: EscapedCharacterConsumer {
+            token: EscapedCharacter {
                 decoded
             }
         }))
@@ -78,11 +78,11 @@ impl Consumer for EscapedCharacterConsumer {
 
 // Consumes a single hex character, e.g. "\u1234", i.e. a \ followed by a u followed by 2-4 hex characters.
 #[derive(Debug)]
-struct HexCharacterConsumer {
+struct HexCharacter {
     decoded: char
 }
 
-impl Consumer for HexCharacterConsumer {
+impl Consumer for HexCharacter {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let mut literal = String::from("\\u");
         let mut length = 2;
@@ -106,7 +106,7 @@ impl Consumer for HexCharacterConsumer {
             literal,
             start,
             length,
-            token: HexCharacterConsumer {
+            token: HexCharacter {
                 decoded: char
             }
         }))
@@ -115,11 +115,11 @@ impl Consumer for HexCharacterConsumer {
 
 // Consumes a single unescaped character, e.g. "a", "1", etc, but _not_ the start of an escape or a quote - '\' or '"'.
 #[derive(Debug)]
-struct UnescapedCharacterConsumer<const QUOTE: char> {
+struct UnescapedCharacter<const QUOTE: char> {
     decoded: char,
 }
 
-impl<const QUOTE: char> Consumer for UnescapedCharacterConsumer<QUOTE> {
+impl<const QUOTE: char> Consumer for UnescapedCharacter<QUOTE> {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         if input[start] == '\\' || input[start] == QUOTE {
             return Ok(None);
@@ -129,7 +129,7 @@ impl<const QUOTE: char> Consumer for UnescapedCharacterConsumer<QUOTE> {
             literal: input[start..start + 1].iter().collect::<String>(),
             start,
             length: 1,
-            token: UnescapedCharacterConsumer {
+            token: UnescapedCharacter {
                 decoded: input[start]
             }
         }))
@@ -138,18 +138,18 @@ impl<const QUOTE: char> Consumer for UnescapedCharacterConsumer<QUOTE> {
 
 // Consumes a single escaped character, e.g. "\x", "\u1234", etc, returning an error if the escape sequence is invalid.
 #[derive(Debug)]
-struct EscapedStringCharConsumer<const QUOTE: char> {
+struct EscapedStringChar<const QUOTE: char> {
     decoded: char,
 }
 
-impl<const QUOTE: char> Consumer for EscapedStringCharConsumer<QUOTE> {
+impl<const QUOTE: char> Consumer for EscapedStringChar<QUOTE> {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
-        if let Some(token) = EscapedCharacterConsumer::try_consume(input, start)? {
+        if let Some(token) = EscapedCharacter::try_consume(input, start)? {
             Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: EscapedStringCharConsumer {
+                token: EscapedStringChar {
                     decoded: token.token.decoded
                 }
             }))
@@ -159,7 +159,7 @@ impl<const QUOTE: char> Consumer for EscapedStringCharConsumer<QUOTE> {
                     literal: input[start..start + 2].iter().collect::<String>(),
                     start,
                     length: 2,
-                    token: EscapedStringCharConsumer {
+                    token: EscapedStringChar {
                         decoded: QUOTE
                     }
                 }));
@@ -174,11 +174,11 @@ impl<const QUOTE: char> Consumer for EscapedStringCharConsumer<QUOTE> {
 
 // Consumes a string surrounded by the given quotes, with escapes. e.g. "hello world", 'hello world', etc.
 #[derive(Debug)]
-pub struct QuotedStringConsumer<const QUOTE:char> {
+pub struct QuotedString<const QUOTE:char> {
     pub decoded: String
 }
 
-impl<const QUOTE: char> Consumer for QuotedStringConsumer<QUOTE> {
+impl<const QUOTE: char> Consumer for QuotedString<QUOTE> {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         if !has_available_chars(input, start, 2) || input[start] != QUOTE {
             return Ok(None);
@@ -189,11 +189,11 @@ impl<const QUOTE: char> Consumer for QuotedStringConsumer<QUOTE> {
         let mut length = 1;
 
         while start + length < input.len() {
-            if let Some(token) = UnescapedCharacterConsumer::<QUOTE>::try_consume(input, start + length)? {
+            if let Some(token) = UnescapedCharacter::<QUOTE>::try_consume(input, start + length)? {
                 literal.push_str(&token.literal);
                 decoded.push(token.token.decoded);
                 length += token.length;
-            } else if let Some(token) = EscapedStringCharConsumer::<QUOTE>::try_consume(input, start + length)? {
+            } else if let Some(token) = EscapedStringChar::<QUOTE>::try_consume(input, start + length)? {
                 literal.push_str(&token.literal);
                 decoded.push(token.token.decoded);
                 length += token.length;
@@ -213,7 +213,7 @@ impl<const QUOTE: char> Consumer for QuotedStringConsumer<QUOTE> {
             literal,
             start,
             length,
-            token: QuotedStringConsumer {
+            token: QuotedString {
                 decoded
             }
         }))
@@ -221,18 +221,18 @@ impl<const QUOTE: char> Consumer for QuotedStringConsumer<QUOTE> {
 }
 
 // Consumes a single quoted string, with escapes. e.g. 'hello world', 'foo\\', etc.
-pub type SingleQuotedStringConsumer = QuotedStringConsumer<'\''>;
+pub type SingleQuotedString = QuotedString<'\''>;
 
 // Consumes a double quoted string, with escapes. e.g. "hello world", "foo\\", etc.
-pub type DoubleQuotedStringConsumer = QuotedStringConsumer<'"'>;
+pub type DoubleQuotedString = QuotedString<'"'>;
 
 // Consumes a single character that is not whitespace, a quote, or a backslash.
 #[derive(Debug)]
-struct UnquotedCharacterConsumer {
+struct UnquotedCharacter {
     decoded: char,
 }
 
-impl Consumer for UnquotedCharacterConsumer {
+impl Consumer for UnquotedCharacter {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let c = &input[start];
         if c.is_whitespace() || c == &'\'' || c == &'"' || c == &'\\' {
@@ -243,7 +243,7 @@ impl Consumer for UnquotedCharacterConsumer {
             literal: String::from(*c),
             start,
             length: 1,
-            token: UnquotedCharacterConsumer {
+            token: UnquotedCharacter {
                 decoded: *c
             }
         }))
@@ -252,22 +252,22 @@ impl Consumer for UnquotedCharacterConsumer {
 
 // Consumes a string that is not surrounded by quotes, e.g. hello world, foo\\, etc.
 #[derive(Debug)]
-pub struct UnquotedStringConsumer {
+pub struct UnquotedString {
     pub decoded: String
 }
 
-impl Consumer for UnquotedStringConsumer {
+impl Consumer for UnquotedString {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let mut literal = String::new();
         let mut decoded = String::new();
         let mut length = 0;
 
         while start + length < input.len() {
-            if let Some(token) = UnquotedCharacterConsumer::try_consume(input, start + length)? {
+            if let Some(token) = UnquotedCharacter::try_consume(input, start + length)? {
                 literal.push_str(&token.literal);
                 decoded.push(token.token.decoded);
                 length += token.length;
-            } else if let Some(token) = EscapedCharacterConsumer::try_consume(input, start + length)? {
+            } else if let Some(token) = EscapedCharacter::try_consume(input, start + length)? {
                 literal.push_str(&token.literal);
                 decoded.push(token.token.decoded);
                 length += token.length;
@@ -281,7 +281,7 @@ impl Consumer for UnquotedStringConsumer {
                 literal,
                 start,
                 length,
-                token: UnquotedStringConsumer {
+                token: UnquotedString {
                     decoded
                 }
             }))
@@ -293,34 +293,34 @@ impl Consumer for UnquotedStringConsumer {
 
 // Consumes a string that is either quoted or unquoted.
 #[derive(Debug, PartialEq)]
-pub enum QuotedOrUnquotedStringConsumer {
-    SingleQuoted,
-    DoubleQuoted,
-    Unquoted
+pub enum QuotedOrUnquotedString {
+    SingleQuoted(String),
+    DoubleQuoted(String),
+    Unquoted(String)
 }
 
-impl Consumer for QuotedOrUnquotedStringConsumer {
+impl Consumer for QuotedOrUnquotedString {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
-        if let Some(token) = SingleQuotedStringConsumer::try_consume(input, start)?  {
+        if let Some(token) = SingleQuotedString::try_consume(input, start)?  {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedStringConsumer::SingleQuoted
+                token: QuotedOrUnquotedString::SingleQuoted(token.token.decoded)
             }));
-        } else if let Some(token) = DoubleQuotedStringConsumer::try_consume(input, start)? {
+        } else if let Some(token) = DoubleQuotedString::try_consume(input, start)? {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedStringConsumer::DoubleQuoted
+                token: QuotedOrUnquotedString::DoubleQuoted(token.token.decoded)
             }));
-        } else if let Some(token) = UnquotedStringConsumer::try_consume(input, start)? {
+        } else if let Some(token) = UnquotedString::try_consume(input, start)? {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedStringConsumer::Unquoted
+                token: QuotedOrUnquotedString::Unquoted(token.token.decoded)
             }));
         }
 
@@ -331,17 +331,17 @@ impl Consumer for QuotedOrUnquotedStringConsumer {
 // Consumes a string that is made up of component strings, each of which is either quoted or unquoted.
 // e.g. "hello world"foo'bar' would be parsed into 3 parts: "hello world", foo, and 'bar'.
 #[derive(Debug, PartialEq)]
-pub struct CombinedStringConsumer {
-    parts: Vec<Token<QuotedOrUnquotedStringConsumer>>
+pub struct CombinedString {
+    pub parts: Vec<Token<QuotedOrUnquotedString>>
 }
 
-impl Consumer for CombinedStringConsumer {
+impl Consumer for CombinedString {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let mut parts = Vec::new();
         let mut length = 0;
 
         while start + length < input.len() {
-            if let Some(token) = QuotedOrUnquotedStringConsumer::try_consume(input, start + length)? {
+            if let Some(token) = QuotedOrUnquotedString::try_consume(input, start + length)? {
                 length += token.length;
                 parts.push(token);
             } else {
@@ -357,7 +357,7 @@ impl Consumer for CombinedStringConsumer {
             literal: parts.iter().map(|p| p.literal.clone()).collect::<String>(),
             start,
             length,
-            token: CombinedStringConsumer {
+            token: CombinedString {
                 parts
             }
         }))
@@ -366,21 +366,21 @@ impl Consumer for CombinedStringConsumer {
 
 // Consumes a string that is made up of component strings. e.g. "/bin/sh -c 'echo hello world'" would be parsed into 3 parts: "/bin/sh", "-c", and "'echo hello world'".
 #[derive(Debug, PartialEq)]
-pub struct ExpressionConsumer {
-    pub parts: Vec<Token<CombinedStringConsumer>>
+pub struct Expression {
+    pub parts: Vec<Token<CombinedString>>
 }
 
-impl Consumer for ExpressionConsumer {
+impl Consumer for Expression {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let mut literal = String::new();
         let mut parts = Vec::new();
         let mut length = 0;
 
         while start + length < input.len() {
-            if let Some(c) = WhitespaceConsumer::try_consume(input, start + length)? {
+            if let Some(c) = Whitespace::try_consume(input, start + length)? {
                 literal.push_str(&c.literal);
                 length += c.length;
-            } else if let Some(token) = CombinedStringConsumer::try_consume(input, start + length)? {
+            } else if let Some(token) = CombinedString::try_consume(input, start + length)? {
                 literal += &token.literal;
                 length += token.length;
                 parts.push(token);
@@ -397,7 +397,7 @@ impl Consumer for ExpressionConsumer {
             literal,
             start,
             length,
-            token: ExpressionConsumer {
+            token: Expression {
                 parts
             }
         }))
@@ -416,7 +416,7 @@ mod tests {
     fn test_whitespace_consumer() {
         let input = "   \t\t\n";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = WhitespaceConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = Whitespace::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, "   \t\t\n");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 6);
@@ -426,7 +426,7 @@ mod tests {
     fn test_escaped_character_consumer() {
         let input = "\\u1234";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = EscapedCharacterConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = EscapedCharacter::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, "\\u1234");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 6);
@@ -438,13 +438,13 @@ mod tests {
         for c in hex_chars {
             let input = format!("\\u{}{}", c, c);
             let chars = input.chars().collect::<Vec<char>>();
-            let token = HexCharacterConsumer::try_consume(&chars, 0).unwrap().unwrap();
+            let token = HexCharacter::try_consume(&chars, 0).unwrap().unwrap();
             assert_eq!(token.literal, input, "Failed for {}", c);
             assert_eq!(token.start, 0, "Failed for {}", c);
             assert_eq!(token.length, 4, "Failed for {}", c);
         }
 
-        let token = HexCharacterConsumer::try_consume(&['\\', 'u', '1', '2', 'b', 'd'], 0).unwrap().unwrap();
+        let token = HexCharacter::try_consume(&['\\', 'u', '1', '2', 'b', 'd'], 0).unwrap().unwrap();
         assert_eq!(token.literal, "\\u12bd");
         assert_eq!(token.token.decoded, '\u{12bd}');
     }
@@ -453,30 +453,30 @@ mod tests {
     fn test_unescaped_character_consumer() {
         let input = "a";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = UnescapedCharacterConsumer::<'"'>::try_consume(&chars, 0).unwrap().unwrap();
+        let token = UnescapedCharacter::<'"'>::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, "a");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 1);
 
         let input = "\\b";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = UnescapedCharacterConsumer::<'"'>::try_consume(&chars, 0).unwrap();
+        let token = UnescapedCharacter::<'"'>::try_consume(&chars, 0).unwrap();
         assert!(token.is_none());
     }
 
     #[test]
     fn test_escaped_string_char_consumer() {
-        let token = EscapedStringCharConsumer::<'"'>::try_consume(&['\\', '"'], 0).unwrap().unwrap();
+        let token = EscapedStringChar::<'"'>::try_consume(&['\\', '"'], 0).unwrap().unwrap();
         assert_eq!(token.literal, "\\\"");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 2);
 
-        let token = EscapedStringCharConsumer::<'"'>::try_consume(&['\\', 'u', '1', 'f', 'b', '8'], 0).unwrap().unwrap();
+        let token = EscapedStringChar::<'"'>::try_consume(&['\\', 'u', '1', 'f', 'b', '8'], 0).unwrap().unwrap();
         assert_eq!(token.literal, "\\u1fb8");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 6);
 
-        let token = EscapedStringCharConsumer::<'"'>::try_consume(&['\\', 'z'], 0);
+        let token = EscapedStringChar::<'"'>::try_consume(&['\\', 'z'], 0);
         assert!(token.is_err());
     }
 
@@ -484,7 +484,7 @@ mod tests {
     fn test_quoted_string_consumer() {
         let input = "\"\\\\\"";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = DoubleQuotedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = DoubleQuotedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, input);
         assert_eq!(token.token.decoded, "\\");
         assert_eq!(token.start, 0);
@@ -492,7 +492,7 @@ mod tests {
 
         let input = "\'\\u1fb8\\'\'";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = SingleQuotedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = SingleQuotedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, input);
         assert_eq!(token.token.decoded, "\u{1fb8}'");
         assert_eq!(token.start, 0);
@@ -501,24 +501,24 @@ mod tests {
 
     #[test]
     fn test_unquoted_character_consumer() {
-        let token = UnquotedCharacterConsumer::try_consume(&['a'], 0).unwrap().unwrap();
+        let token = UnquotedCharacter::try_consume(&['a'], 0).unwrap().unwrap();
         assert_eq!(token.literal, "a");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 1);
 
-        let token = UnquotedCharacterConsumer::try_consume(&['a', 'b'], 0).unwrap().unwrap();
+        let token = UnquotedCharacter::try_consume(&['a', 'b'], 0).unwrap().unwrap();
         assert_eq!(token.literal, "a");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 1);
 
-        assert!(UnquotedCharacterConsumer::try_consume(&['"'], 0).unwrap().is_none());
+        assert!(UnquotedCharacter::try_consume(&['"'], 0).unwrap().is_none());
     }
 
     #[test]
     fn test_unquoted_string_consumer() {
         let input = "abc";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = UnquotedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = UnquotedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, input);
         assert_eq!(token.token.decoded, input);
         assert_eq!(token.start, 0);
@@ -526,7 +526,7 @@ mod tests {
 
         let input = "abc\\u1fb8";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = UnquotedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = UnquotedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, input);
         assert_eq!(token.token.decoded, "abc\u{1fb8}");
         assert_eq!(token.start, 0);
@@ -537,7 +537,7 @@ mod tests {
     fn test_combined_string_consumer() {
         let input = "abc'test'\"${FOO}\"";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = CombinedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = CombinedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, input);
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 17, "Failed for {}. Got: {}", input, token.literal);
@@ -547,25 +547,25 @@ mod tests {
                 literal: "abc".to_string(),
                 start: 0,
                 length: 3,
-                token: QuotedOrUnquotedStringConsumer::Unquoted
+                token: QuotedOrUnquotedString::Unquoted("abc".to_string())
             },
             Token {
                 literal: "'test'".to_string(),
                 start: 3,
                 length: 6,
-                token: QuotedOrUnquotedStringConsumer::SingleQuoted
+                token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
             },
             Token {
                 literal: "\"${FOO}\"".to_string(),
                 start: 9,
                 length: 8,
-                token: QuotedOrUnquotedStringConsumer::DoubleQuoted
+                token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
             }
         ]);
 
         let input = "abc'test'\"${FOO}\"   test";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = CombinedStringConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = CombinedString::try_consume(&chars, 0).unwrap().unwrap();
         assert_eq!(token.literal, "abc'test'\"${FOO}\"");
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 17, "Failed for {}. Got: {}", input, token.literal);
@@ -575,19 +575,19 @@ mod tests {
                 literal: "abc".to_string(),
                 start: 0,
                 length: 3,
-                token: QuotedOrUnquotedStringConsumer::Unquoted
+                token: QuotedOrUnquotedString::Unquoted("abc".to_string())
             },
             Token {
                 literal: "'test'".to_string(),
                 start: 3,
                 length: 6,
-                token: QuotedOrUnquotedStringConsumer::SingleQuoted
+                token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
             },
             Token {
                 literal: "\"${FOO}\"".to_string(),
                 start: 9,
                 length: 8,
-                token: QuotedOrUnquotedStringConsumer::DoubleQuoted
+                token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
             }
         ]);
     }
@@ -596,7 +596,7 @@ mod tests {
     fn test_expression_consumer() {
         let input = "./bin/sh -c 'echo \"hello world\"'";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = ExpressionConsumer::try_consume(&chars, 0).unwrap().unwrap();
+        let token = Expression::try_consume(&chars, 0).unwrap().unwrap();
 
         assert_eq!(token.literal, input);
         assert_eq!(token.start, 0);
@@ -607,13 +607,13 @@ mod tests {
                 literal: "./bin/sh".to_string(),
                 start: 0,
                 length: 8,
-                token: CombinedStringConsumer {
+                token: CombinedString {
                     parts: vec![
                         Token {
                             literal: "./bin/sh".to_string(),
                             start: 0,
                             length: 8,
-                            token: QuotedOrUnquotedStringConsumer::Unquoted
+                            token: QuotedOrUnquotedString::Unquoted("./bin/sh".to_string())
                         }
                     ]
                 }
@@ -622,13 +622,13 @@ mod tests {
                 literal: "-c".to_string(),
                 start: 9,
                 length: 2,
-                token: CombinedStringConsumer {
+                token: CombinedString {
                     parts: vec![
                         Token {
                             literal: "-c".to_string(),
                             start: 9,
                             length: 2,
-                            token: QuotedOrUnquotedStringConsumer::Unquoted
+                            token: QuotedOrUnquotedString::Unquoted("-c".to_string())
                         }
                     ]
                 }
@@ -637,13 +637,13 @@ mod tests {
                 literal: "'echo \"hello world\"'".to_string(),
                 start: 12,
                 length: 20,
-                token: CombinedStringConsumer {
+                token: CombinedString {
                     parts: vec![
                         Token {
                             literal: "'echo \"hello world\"'".to_string(),
                             start: 12,
                             length: 20,
-                            token: QuotedOrUnquotedStringConsumer::SingleQuoted
+                            token: QuotedOrUnquotedString::SingleQuoted("echo \"hello world\"".to_string())
                         }
                     ]
                 }
@@ -652,7 +652,7 @@ mod tests {
 
         let input = "./bin/sh -c 'echo \"hello world\"";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = ExpressionConsumer::try_consume(&chars, 0);
+        let token = Expression::try_consume(&chars, 0);
         assert!(token.is_err(), "Expected failure, but got {:?}", token.unwrap());
     }
 }
