@@ -161,7 +161,10 @@ impl <const SIZE: usize> ReadFrom for NullTerminatedString<SIZE> {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "String is not null terminated"));
         }
 
-        Ok(NullTerminatedString(String::from_utf8_lossy(&buf[..len]).to_string()))
+        match std::str::from_utf8(&buf[..len]) {
+            Ok(s) => Ok(NullTerminatedString(s.to_string())),
+            Err(_) => Err(io::Error::new(io::ErrorKind::InvalidData, "String is not valid utf8")),
+        }
     }
 }
 
