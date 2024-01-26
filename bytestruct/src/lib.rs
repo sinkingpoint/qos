@@ -37,116 +37,116 @@ pub struct NullTerminatedString<const SIZE: usize>(pub String);
 pub type ByteArray<const T: usize> = Array<U8, T>;
 pub type UUID = ByteArray<16>;
 
-pub trait ReadFrom<T: Read> {
-    fn read_from(source: &mut T) -> io::Result<Self> where Self: Sized;
+pub trait ReadFrom {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> where Self: Sized;
 }
 
-impl<T: Read> ReadFrom<T> for U8 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for U8 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 1];
         source.read_exact(&mut buf)?;
         Ok(U8(buf[0]))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianU16 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianU16 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 2];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianU16(u16::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianU16 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianU16 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 2];
         source.read_exact(&mut buf)?;
         Ok(BigEndianU16(u16::from_be_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianU32 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianU32 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 4];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianU32(u32::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianU32 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianU32 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 4];
         source.read_exact(&mut buf)?;
         Ok(BigEndianU32(u32::from_be_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianU64 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianU64 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 8];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianU64(u64::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianU64 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianU64 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 8];
         source.read_exact(&mut buf)?;
         Ok(BigEndianU64(u64::from_be_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianI16 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianI16 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 2];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianI16(i16::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianI16 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianI16 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 2];
         source.read_exact(&mut buf)?;
         Ok(BigEndianI16(i16::from_be_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianI32 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianI32 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 4];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianI32(i32::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianI32 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianI32 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 4];
         source.read_exact(&mut buf)?;
         Ok(BigEndianI32(i32::from_be_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for LittleEndianI64 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for LittleEndianI64 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 8];
         source.read_exact(&mut buf)?;
         Ok(LittleEndianI64(i64::from_le_bytes(buf)))
     }
 }
 
-impl<T: Read> ReadFrom<T> for BigEndianI64 {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl ReadFrom for BigEndianI64 {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; 8];
         source.read_exact(&mut buf)?;
         Ok(BigEndianI64(i64::from_be_bytes(buf)))
     }
 }
 
-impl <const SIZE: usize, T: Read> ReadFrom<T> for NullTerminatedString<SIZE> {
-    fn read_from(source: &mut T) -> io::Result<Self> {
+impl <const SIZE: usize> ReadFrom for NullTerminatedString<SIZE> {
+    fn read_from<T: Read>(source: &mut T) -> io::Result<Self> {
         let mut buf = [0u8; SIZE];
         source.read_exact(&mut buf)?;
         let mut len = 0;
@@ -165,8 +165,8 @@ impl <const SIZE: usize, T: Read> ReadFrom<T> for NullTerminatedString<SIZE> {
     }
 }
 
-impl <const SIZE: usize, R: Read, T: ReadFrom<R>> ReadFrom<R> for Array<T, SIZE> {
-    fn read_from(source: &mut R) -> io::Result<Self> {
+impl <const SIZE: usize, T: ReadFrom> ReadFrom for Array<T, SIZE> {
+    fn read_from<R: Read>(source: &mut R) -> io::Result<Self> {
         Ok(Array(array::try_from_fn(|_| T::read_from(source))?))
     }
 }

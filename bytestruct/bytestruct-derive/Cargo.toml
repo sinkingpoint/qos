@@ -2,7 +2,7 @@
 name = "bytestruct-derive"
 description = "Derive macro for bytestruct that provides a way to read structs from and to byte slices"
 license = "MIT"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]

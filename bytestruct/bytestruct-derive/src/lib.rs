@@ -16,13 +16,13 @@ pub fn derive_byte_struct(input: TokenStream) -> TokenStream {
             let ty = &field.ty;
 
             quote! {
-                #name: <#ty as ::bytestruct::ReadFrom<T>>::read_from(source)?
+                #name: <#ty as ::bytestruct::ReadFrom>::read_from(source)?
             }
         });
 
         let gen = quote! {
-            impl<T: ::std::io::Read> ::bytestruct::ReadFrom<T> for #name {
-                fn read_from(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
+            impl ::bytestruct::ReadFrom for #name {
+                fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
                     Ok(Self {
                         #(#fields),*
                     })
