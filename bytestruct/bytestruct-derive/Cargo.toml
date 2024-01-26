@@ -1,0 +1,15 @@
+[package]
+name = "bytestruct-derive"
+description = "Derive macro for bytestruct that provides a way to read structs from and to byte slices"
+license = "MIT"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quote = "1.0.34"
+syn = "2.0.43"
