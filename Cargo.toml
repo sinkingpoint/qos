@@ -2,11 +2,15 @@
 resolver = "2"
 
 members = [
-    "assemble-initramfs", 
+    "assemble-initramfs",
+    "bytestruct",
+    "bytestruct/bytestruct-derive",
     "cpio",
     "escapes",
     "escapes/escapes-derive",
-    "qsh"
+    "mount",
+    "qsh",
+    "superblocks"
 ]
 
 [workspace.dependencies]

@@ -26,12 +26,12 @@ impl Device {
     /// Trys to probe the device to work out what type of filesystem it contains.
     pub fn probe(&self) -> io::Result<Option<ProbeResult>> {
         if let Some(result) = self.probe_fs::<ExtSuperBlock>()? {
-            return Ok(Some(result));
+            Ok(Some(result))
         } else if let Some(result) = self.probe_fs::<BtrfsSuperBlock>()? {
-            return Ok(Some(result));
+            Ok(Some(result))
+        } else {
+            Ok(None)
         }
-
-        return Ok(None);
     }
 
     /// Trys to probe the device for a filesystem of the given type.

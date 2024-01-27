@@ -71,6 +71,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
 
 [[package]]
+name = "bytestruct"
+version = "0.2.0"
+
+[[package]]
+name = "bytestruct-derive"
+version = "0.2.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -233,6 +245,15 @@ name = "libc"
 version = "0.2.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
+
+[[package]]
+name = "mount"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "nix",
+ "superblocks",
+]
 
 [[package]]
 name = "nix"
@@ -409,6 +430,15 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "superblocks"
+version = "0.1.0"
+dependencies = [
+ "bytestruct",
+ "bytestruct-derive",
+ "thiserror",
+]
 
 [[package]]
 name = "syn"

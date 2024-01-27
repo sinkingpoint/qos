@@ -80,7 +80,7 @@ pub const COMPAT_EXT_ATTR: u32 = 0x0008;
 pub const COMPAT_RESIZE_INODE: u32 = 0x0010;
 /// Has indexed directories.
 pub const COMPAT_DIR_INDEX: u32 = 0x0020;
-///  	"Lazy BG". Not in Linux kernel, seems to have been for uninitialized block groups?
+/// "Lazy BG". Not in Linux kernel, seems to have been for uninitialized block groups?
 pub const COMPAT_LAZY_BG: u32 = 0x0040;
 /// "Exclude inode". Intended for filesystem snapshot feature, but not used.
 pub const COMPAT_EXCLUDE_INODE: u32 = 0x0080;
