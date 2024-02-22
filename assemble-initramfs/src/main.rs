@@ -1,10 +1,11 @@
-use std::{path::{PathBuf, Path}, io, fs::{File, self}};
+use std::{collections::HashMap, fs::{self, File}, io, path::{Path, PathBuf}};
 
 use clap::Parser;
 
 use cpio::CPIOArchive;
 use slog::{Drain, o, info};
 use slog_json::Json;
+use std::process::ExitCode;
 
 use serde::Deserialize;
 
@@ -13,6 +14,7 @@ struct Config {
     init_file: PathBuf,
     libraries: Vec<PathBuf>,
     binaries: Vec<PathBuf>,
+    files: HashMap<String, PathBuf>,
     output_file: PathBuf,
 }
 
@@ -22,6 +24,7 @@ impl Default for Config {
             init_file: PathBuf::from("/bin/sh"),
             libraries: Vec::new(),
             binaries: Vec::new(),
+            files: HashMap::new(),
             output_file: PathBuf::from("./initramfs.cpio"),
         }
     }
@@ -45,7 +48,7 @@ struct Cli {
     config: String,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let logger = assemble_logger();
@@ -54,7 +57,7 @@ fn main() {
         Ok(config) => config,
         Err(err) => {
             slog::error!(logger, "Failed to load config file: {}", err);
-            return;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -65,31 +68,43 @@ fn main() {
 
     if let Err(e) = fs::create_dir(&base_dir) {
         slog::error!(logger, "Failed to create base directory"; "path"=>base_dir.display(), "error"=>e);
-        return;
+        return ExitCode::FAILURE;
     };
 
     info!(logger, "Using base directory {}", base_dir.display());
 
     if let Err(e) = fs::copy(&config.init_file, base_dir.join("init")) {
         slog::error!(logger, "Failed to copy init file"; "file_name"=>config.init_file.display(),"error"=>e);
-        return;
+        return ExitCode::FAILURE;
     }
 
     if let Err(e) = copy_all_to(&logger, &base_dir.join("lib64"), &config.libraries) {
         slog::error!(logger, "Failed to copy libraries"; "error"=>e);
-        return;
+        return ExitCode::FAILURE;
     }
 
     if let Err(e) = copy_all_to(&logger, &base_dir.join("bin"), &config.binaries) {
         slog::error!(logger, "Failed to copy binaries"; "error"=>e);
-        return;
+        return ExitCode::FAILURE;
+    }
+
+    for (dest, src) in config.files.iter() {
+        if dest.starts_with("/") {
+            slog::error!(logger, "Destination path cannot start with /"; "src"=>src.display(), "dest"=>dest);
+            return ExitCode::FAILURE;
+        }
+
+        if let Err(e) = fs::copy(src, base_dir.join(dest)) {
+            slog::error!(logger, "Failed to copy file"; "src"=>src.display(), "dest"=>dest, "error"=>e);
+            return ExitCode::FAILURE;
+        }
     }
 
     let cpio = match CPIOArchive::from_path(&base_dir) {
         Ok(cpio) => cpio,
         Err(e) => {
             slog::error!(logger, "Failed to generate CPIO archive"; "error"=>e);
-            return;
+            return ExitCode::FAILURE;
         },
     };
 
@@ -97,16 +112,17 @@ fn main() {
         Ok(file) => file,
         Err(e) => {
             slog::error!(logger, "Failed to create output file"; "error"=>e);
-            return;
+            return ExitCode::FAILURE;
         },
     };
     
     if let Err(e) = cpio.write(&mut output_file) {
         slog::error!(logger, "Failed to write CPIO archive"; "error"=>e);
-        return;
+        return ExitCode::FAILURE;
     }
 
     slog::info!(logger, "Successfully wrote CPIO archive to {}", config.output_file.display());
+    ExitCode::SUCCESS
 }
 
 fn copy_all_to(logger: &slog::Logger, dest_dir: &Path, files: &[PathBuf]) -> io::Result<()> {
