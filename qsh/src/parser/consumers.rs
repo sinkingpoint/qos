@@ -1,6 +1,6 @@
 use super::types::*;
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 // Maps escaped characters to their decoded value.
 static ESCAPED_CHARS_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
@@ -30,7 +30,7 @@ impl Consumer for Whitespace {
             length: literal.len(),
             literal,
             start,
-            token: Whitespace
+            token: Whitespace,
         }))
     }
 }
@@ -69,9 +69,7 @@ impl Consumer for EscapedCharacter {
             length: literal.len(),
             literal,
             start,
-            token: EscapedCharacter {
-                decoded
-            }
+            token: EscapedCharacter { decoded },
         }))
     }
 }
@@ -79,7 +77,7 @@ impl Consumer for EscapedCharacter {
 // Consumes a single hex character, e.g. "\u1234", i.e. a \ followed by a u followed by 2-4 hex characters.
 #[derive(Debug)]
 struct HexCharacter {
-    decoded: char
+    decoded: char,
 }
 
 impl Consumer for HexCharacter {
@@ -99,16 +97,14 @@ impl Consumer for HexCharacter {
             length += 1;
         }
 
-        let c = u32::from_str_radix(&encoded_char, 16).unwrap_or_else( |_| panic!("BUG: Invalid hex character: {}", encoded_char));
+        let c = u32::from_str_radix(&encoded_char, 16).unwrap_or_else(|_| panic!("BUG: Invalid hex character: {}", encoded_char));
         let char = std::char::from_u32(c).unwrap_or_else(|| panic!("BUG: Invalid hex character from u32: {}", c));
 
         Ok(Some(Token {
             literal,
             start,
             length,
-            token: HexCharacter {
-                decoded: char
-            }
+            token: HexCharacter { decoded: char },
         }))
     }
 }
@@ -129,9 +125,7 @@ impl<const QUOTE: char> Consumer for UnescapedCharacter<QUOTE> {
             literal: input[start..start + 1].iter().collect::<String>(),
             start,
             length: 1,
-            token: UnescapedCharacter {
-                decoded: input[start]
-            }
+            token: UnescapedCharacter { decoded: input[start] },
         }))
     }
 }
@@ -149,9 +143,7 @@ impl<const QUOTE: char> Consumer for EscapedStringChar<QUOTE> {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: EscapedStringChar {
-                    decoded: token.token.decoded
-                }
+                token: EscapedStringChar { decoded: token.token.decoded },
             }))
         } else if has_available_chars(input, start, 2) && input[start] == '\\' {
             if input[start + 1] == QUOTE {
@@ -159,12 +151,10 @@ impl<const QUOTE: char> Consumer for EscapedStringChar<QUOTE> {
                     literal: input[start..start + 2].iter().collect::<String>(),
                     start,
                     length: 2,
-                    token: EscapedStringChar {
-                        decoded: QUOTE
-                    }
+                    token: EscapedStringChar { decoded: QUOTE },
                 }));
             } else {
-                return Err(ParserError::new(&format!("Invalid escape sequence: \\{}", input[start+1]), start));
+                return Err(ParserError::new(&format!("Invalid escape sequence: \\{}", input[start + 1]), start));
             }
         } else {
             Ok(None)
@@ -174,8 +164,8 @@ impl<const QUOTE: char> Consumer for EscapedStringChar<QUOTE> {
 
 // Consumes a string surrounded by the given quotes, with escapes. e.g. "hello world", 'hello world', etc.
 #[derive(Debug)]
-pub struct QuotedString<const QUOTE:char> {
-    pub decoded: String
+pub struct QuotedString<const QUOTE: char> {
+    pub decoded: String,
 }
 
 impl<const QUOTE: char> Consumer for QuotedString<QUOTE> {
@@ -213,9 +203,7 @@ impl<const QUOTE: char> Consumer for QuotedString<QUOTE> {
             literal,
             start,
             length,
-            token: QuotedString {
-                decoded
-            }
+            token: QuotedString { decoded },
         }))
     }
 }
@@ -243,9 +231,7 @@ impl Consumer for UnquotedCharacter {
             literal: String::from(*c),
             start,
             length: 1,
-            token: UnquotedCharacter {
-                decoded: *c
-            }
+            token: UnquotedCharacter { decoded: *c },
         }))
     }
 }
@@ -253,7 +239,7 @@ impl Consumer for UnquotedCharacter {
 // Consumes a string that is not surrounded by quotes, e.g. hello world, foo\\, etc.
 #[derive(Debug)]
 pub struct UnquotedString {
-    pub decoded: String
+    pub decoded: String,
 }
 
 impl Consumer for UnquotedString {
@@ -281,9 +267,7 @@ impl Consumer for UnquotedString {
                 literal,
                 start,
                 length,
-                token: UnquotedString {
-                    decoded
-                }
+                token: UnquotedString { decoded },
             }))
         } else {
             Ok(None)
@@ -296,31 +280,31 @@ impl Consumer for UnquotedString {
 pub enum QuotedOrUnquotedString {
     SingleQuoted(String),
     DoubleQuoted(String),
-    Unquoted(String)
+    Unquoted(String),
 }
 
 impl Consumer for QuotedOrUnquotedString {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
-        if let Some(token) = SingleQuotedString::try_consume(input, start)?  {
+        if let Some(token) = SingleQuotedString::try_consume(input, start)? {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedString::SingleQuoted(token.token.decoded)
+                token: QuotedOrUnquotedString::SingleQuoted(token.token.decoded),
             }));
         } else if let Some(token) = DoubleQuotedString::try_consume(input, start)? {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedString::DoubleQuoted(token.token.decoded)
+                token: QuotedOrUnquotedString::DoubleQuoted(token.token.decoded),
             }));
         } else if let Some(token) = UnquotedString::try_consume(input, start)? {
             return Ok(Some(Token {
                 literal: token.literal,
                 start,
                 length: token.length,
-                token: QuotedOrUnquotedString::Unquoted(token.token.decoded)
+                token: QuotedOrUnquotedString::Unquoted(token.token.decoded),
             }));
         }
 
@@ -332,7 +316,7 @@ impl Consumer for QuotedOrUnquotedString {
 // e.g. "hello world"foo'bar' would be parsed into 3 parts: "hello world", foo, and 'bar'.
 #[derive(Debug, PartialEq)]
 pub struct CombinedString {
-    pub parts: Vec<Token<QuotedOrUnquotedString>>
+    pub parts: Vec<Token<QuotedOrUnquotedString>>,
 }
 
 impl Consumer for CombinedString {
@@ -357,9 +341,7 @@ impl Consumer for CombinedString {
             literal: parts.iter().map(|p| p.literal.clone()).collect::<String>(),
             start,
             length,
-            token: CombinedString {
-                parts
-            }
+            token: CombinedString { parts },
         }))
     }
 }
@@ -367,7 +349,7 @@ impl Consumer for CombinedString {
 // Consumes a string that is made up of component strings. e.g. "/bin/sh -c 'echo hello world'" would be parsed into 3 parts: "/bin/sh", "-c", and "'echo hello world'".
 #[derive(Debug, PartialEq)]
 pub struct Expression {
-    pub parts: Vec<Token<CombinedString>>
+    pub parts: Vec<Token<CombinedString>>,
 }
 
 impl Consumer for Expression {
@@ -397,9 +379,7 @@ impl Consumer for Expression {
             literal,
             start,
             length,
-            token: Expression {
-                parts
-            }
+            token: Expression { parts },
         }))
     }
 }
@@ -434,7 +414,9 @@ mod tests {
 
     #[test]
     fn test_hex_character_consumer() {
-        let hex_chars = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'A', 'B','C', 'D', 'E', 'F'];
+        let hex_chars = &[
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F',
+        ];
         for c in hex_chars {
             let input = format!("\\u{}{}", c, c);
             let chars = input.chars().collect::<Vec<char>>();
@@ -542,26 +524,29 @@ mod tests {
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 17, "Failed for {}. Got: {}", input, token.literal);
         assert_eq!(token.token.parts.len(), 3);
-        assert_eq!(token.token.parts, vec![
-            Token {
-                literal: "abc".to_string(),
-                start: 0,
-                length: 3,
-                token: QuotedOrUnquotedString::Unquoted("abc".to_string())
-            },
-            Token {
-                literal: "'test'".to_string(),
-                start: 3,
-                length: 6,
-                token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
-            },
-            Token {
-                literal: "\"${FOO}\"".to_string(),
-                start: 9,
-                length: 8,
-                token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
-            }
-        ]);
+        assert_eq!(
+            token.token.parts,
+            vec![
+                Token {
+                    literal: "abc".to_string(),
+                    start: 0,
+                    length: 3,
+                    token: QuotedOrUnquotedString::Unquoted("abc".to_string())
+                },
+                Token {
+                    literal: "'test'".to_string(),
+                    start: 3,
+                    length: 6,
+                    token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
+                },
+                Token {
+                    literal: "\"${FOO}\"".to_string(),
+                    start: 9,
+                    length: 8,
+                    token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
+                }
+            ]
+        );
 
         let input = "abc'test'\"${FOO}\"   test";
         let chars = input.chars().collect::<Vec<char>>();
@@ -570,26 +555,29 @@ mod tests {
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 17, "Failed for {}. Got: {}", input, token.literal);
         assert_eq!(token.token.parts.len(), 3);
-        assert_eq!(token.token.parts, vec![
-            Token {
-                literal: "abc".to_string(),
-                start: 0,
-                length: 3,
-                token: QuotedOrUnquotedString::Unquoted("abc".to_string())
-            },
-            Token {
-                literal: "'test'".to_string(),
-                start: 3,
-                length: 6,
-                token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
-            },
-            Token {
-                literal: "\"${FOO}\"".to_string(),
-                start: 9,
-                length: 8,
-                token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
-            }
-        ]);
+        assert_eq!(
+            token.token.parts,
+            vec![
+                Token {
+                    literal: "abc".to_string(),
+                    start: 0,
+                    length: 3,
+                    token: QuotedOrUnquotedString::Unquoted("abc".to_string())
+                },
+                Token {
+                    literal: "'test'".to_string(),
+                    start: 3,
+                    length: 6,
+                    token: QuotedOrUnquotedString::SingleQuoted("test".to_string())
+                },
+                Token {
+                    literal: "\"${FOO}\"".to_string(),
+                    start: 9,
+                    length: 8,
+                    token: QuotedOrUnquotedString::DoubleQuoted("${FOO}".to_string())
+                }
+            ]
+        );
     }
 
     #[test]
@@ -602,53 +590,50 @@ mod tests {
         assert_eq!(token.start, 0);
         assert_eq!(token.length, 32);
         assert_eq!(token.token.parts.len(), 3);
-        assert_eq!(token.token.parts, vec![
-            Token {
-                literal: "./bin/sh".to_string(),
-                start: 0,
-                length: 8,
-                token: CombinedString {
-                    parts: vec![
-                        Token {
+        assert_eq!(
+            token.token.parts,
+            vec![
+                Token {
+                    literal: "./bin/sh".to_string(),
+                    start: 0,
+                    length: 8,
+                    token: CombinedString {
+                        parts: vec![Token {
                             literal: "./bin/sh".to_string(),
                             start: 0,
                             length: 8,
                             token: QuotedOrUnquotedString::Unquoted("./bin/sh".to_string())
-                        }
-                    ]
-                }
-            },
-            Token {
-                literal: "-c".to_string(),
-                start: 9,
-                length: 2,
-                token: CombinedString {
-                    parts: vec![
-                        Token {
+                        }]
+                    }
+                },
+                Token {
+                    literal: "-c".to_string(),
+                    start: 9,
+                    length: 2,
+                    token: CombinedString {
+                        parts: vec![Token {
                             literal: "-c".to_string(),
                             start: 9,
                             length: 2,
                             token: QuotedOrUnquotedString::Unquoted("-c".to_string())
-                        }
-                    ]
-                }
-            },
-            Token {
-                literal: "'echo \"hello world\"'".to_string(),
-                start: 12,
-                length: 20,
-                token: CombinedString {
-                    parts: vec![
-                        Token {
+                        }]
+                    }
+                },
+                Token {
+                    literal: "'echo \"hello world\"'".to_string(),
+                    start: 12,
+                    length: 20,
+                    token: CombinedString {
+                        parts: vec![Token {
                             literal: "'echo \"hello world\"'".to_string(),
                             start: 12,
                             length: 20,
                             token: QuotedOrUnquotedString::SingleQuoted("echo \"hello world\"".to_string())
-                        }
-                    ]
+                        }]
+                    }
                 }
-            }
-        ]);
+            ]
+        );
 
         let input = "./bin/sh -c 'echo \"hello world\"";
         let chars = input.chars().collect::<Vec<char>>();

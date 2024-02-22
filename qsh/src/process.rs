@@ -1,18 +1,22 @@
 use std::ffi::CString;
 
-use nix::{unistd::{Pid, fork, execvp}, errno::Errno, sys::wait::{waitpid, WaitPidFlag, WaitStatus}};
+use nix::{
+    errno::Errno,
+    sys::wait::{waitpid, WaitPidFlag, WaitStatus},
+    unistd::{execvp, fork, Pid},
+};
 use thiserror::Error;
 
 pub enum ProcessState {
     Unstarted,
     Running(Pid),
-    Terminated(Errno),
+    Terminated(i32),
 }
 
 // A process that can be started and waited on.
 pub struct Process {
     pub argv: Vec<String>,
-    pub state: ProcessState
+    pub state: ProcessState,
 }
 
 impl Process {
@@ -44,12 +48,12 @@ impl Process {
             match fork() {
                 Ok(nix::unistd::ForkResult::Parent { child }) => {
                     self.state = ProcessState::Running(child);
-                },
+                }
                 Ok(nix::unistd::ForkResult::Child) => {
                     self.exec();
-                },
+                }
                 Err(e) => {
-                    self.state = ProcessState::Terminated(e);
+                    self.state = ProcessState::Terminated(128 + e as i32);
                 }
             }
         }
@@ -65,20 +69,20 @@ impl Process {
             _ => return Err(WaitError::NotRunning),
         };
 
-        match waitpid(current_pid,  Some(WaitPidFlag::__WALL | WaitPidFlag::WUNTRACED)) {
+        match waitpid(current_pid, Some(WaitPidFlag::__WALL | WaitPidFlag::WUNTRACED)) {
             Ok(WaitStatus::Exited(_, errno)) => {
-                self.state = ProcessState::Terminated(Errno::from_i32(errno));
-            },
+                self.state = ProcessState::Terminated(errno);
+            }
             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                self.state = ProcessState::Terminated(Errno::from_i32(128 + signal as i32));
-            },
+                self.state = ProcessState::Terminated(128 + signal as i32);
+            }
             Ok(WaitStatus::Continued(_)) => {
                 self.state = ProcessState::Running(current_pid);
-            },
+            }
             Err(e) => {
                 return Err(WaitError::Nix(e));
-            },
-            _ => return Err(WaitError::UnsupportedSignal)
+            }
+            _ => return Err(WaitError::UnsupportedSignal),
         };
 
         Ok(())

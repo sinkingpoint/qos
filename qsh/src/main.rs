@@ -1,18 +1,13 @@
-mod parser;
 mod buffer;
+mod parser;
 mod process;
 mod shell;
 
-use std::{os::fd::{AsFd, AsRawFd, FromRawFd}, fs::File};
+use std::os::fd::{AsFd, AsRawFd};
 
-use buffer::Buffer;
 use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
-use shell::Shell;
-use slog::{
-    o,
-    Drain,
-    error
-};
+use shell::{stdin, stdout, Shell};
+use slog::{error, o, Drain};
 use slog_json::Json;
 
 fn main() {
@@ -42,20 +37,8 @@ fn main() {
         return;
     }
 
-    let stdout = unsafe { File::from_raw_fd(1) };
-    let mut shell = Shell{};
-    let mut buffer = Buffer::new(reader, stdout);
-    loop {
-        let line = match buffer.read() {
-            Ok(line) => line,
-            Err(e) => {
-                error!(&logger, "Error reading from stdin: {}", e);
-                return;
-            }
-        };
-
-        shell.evaluate(&line).unwrap();
-    }
+    let mut shell = Shell::new();
+    shell.run(stdin(), stdout());
 }
 
 fn isatty<T: AsFd>(fd: T) -> bool {
@@ -63,13 +46,8 @@ fn isatty<T: AsFd>(fd: T) -> bool {
 }
 
 fn assemble_logger() -> slog::Logger {
-    let drain = slog_async::Async::new(
-        Json::new(std::io::stderr())
-            .add_default_keys()
-            .build()
-            .fuse(),
-    )
-    .build()
-    .fuse();
+    let drain = slog_async::Async::new(Json::new(std::io::stderr()).add_default_keys().build().fuse())
+        .build()
+        .fuse();
     slog::Logger::root(drain, o!())
 }

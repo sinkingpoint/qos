@@ -1,6 +1,9 @@
-use std::{io::{Read, self, Write}, cmp::Ordering};
+use std::{
+    cmp::Ordering,
+    io::{self, Read, Write},
+};
 
-use escapes::{ESC, ANSIEscapeSequence, CursorForward, CursorBack, EraseInLine};
+use escapes::{ANSIEscapeSequence, CursorBack, CursorForward, EraseInLine, ESC};
 
 // The ASCII character for DEL.
 const DELETE_CHAR: char = '\u{7f}';
@@ -27,7 +30,8 @@ impl<R: Read, W: Write> Buffer<R, W> {
     }
 
     /// Read a line from the buffer.
-    pub fn read(&mut self) -> io::Result<String> {
+    pub fn read(&mut self, prompt: &str) -> io::Result<String> {
+        write!(self.writer, "{}", prompt).expect("Failed to write to stdout");
         loop {
             let c = self.read_char()?;
             if c == '\n' {
@@ -45,12 +49,8 @@ impl<R: Read, W: Write> Buffer<R, W> {
 
     /// Handle an ANSI escape sequence.
     fn handle_escape_sequence(&mut self) -> io::Result<()> {
-        let escape = ANSIEscapeSequence::read(&mut self.reader).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to parse ANSI escape sequence: {}", e),
-            )
-        })?;
+        let escape = ANSIEscapeSequence::read(&mut self.reader)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to parse ANSI escape sequence: {}", e)))?;
 
         match escape {
             ANSIEscapeSequence::CursorForward(amt) => self.move_cursor(amt.0 as isize),
@@ -99,7 +99,7 @@ impl<R: Read, W: Write> Buffer<R, W> {
         if self.position == 0 {
             return;
         }
-        
+
         if self.position == self.buffer.len() {
             self.buffer.pop();
         } else {
@@ -115,7 +115,7 @@ impl<R: Read, W: Write> Buffer<R, W> {
     fn rerender(&mut self) {
         let start = if self.position == 0 { 0 } else { self.position - 1 };
         write!(self.writer, "{}{}", EraseInLine(0), &self.buffer[start..]).expect("Failed to write to stdout");
-        
+
         // After rewriting a line, we are at the end of it. If we were in the middle of the string, we need to move the cursor back.
         if self.buffer.len() > self.position {
             write!(self.writer, "{}", CursorBack((self.buffer.len() - self.position) as u8)).expect("Failed to write to stdout");
