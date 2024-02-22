@@ -7,10 +7,27 @@ use nix::{
 };
 use thiserror::Error;
 
+/// The exit code of a process.
+pub enum ExitCode {
+    /// The process exited successfully with the given exit code. 
+    /// Exitting sucessfully doesn't necessarily mean the program didn't fail,
+    /// it just means that the program exited with its own exit code.
+    Success(i32),
+
+    /// The process was terminated with the given error code.
+    Err(Errno),
+}
+
+/// The state of a process.
 pub enum ProcessState {
+    /// The process has not been started.
     Unstarted,
+
+    /// The process is currently running.
     Running(Pid),
-    Terminated(i32),
+
+    /// The process has terminated.
+    Terminated(ExitCode),
 }
 
 // A process that can be started and waited on.
@@ -53,7 +70,7 @@ impl Process {
                     self.exec();
                 }
                 Err(e) => {
-                    self.state = ProcessState::Terminated(128 + e as i32);
+                    self.state = ProcessState::Terminated(ExitCode::Err(e));
                 }
             }
         }
@@ -70,11 +87,11 @@ impl Process {
         };
 
         match waitpid(current_pid, Some(WaitPidFlag::__WALL | WaitPidFlag::WUNTRACED)) {
-            Ok(WaitStatus::Exited(_, errno)) => {
-                self.state = ProcessState::Terminated(errno);
+            Ok(WaitStatus::Exited(_, exit)) => {
+                self.state = ProcessState::Terminated(ExitCode::Success(exit));
             }
             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                self.state = ProcessState::Terminated(128 + signal as i32);
+                self.state = ProcessState::Terminated(ExitCode::Err(Errno::from_i32(signal as i32)));
             }
             Ok(WaitStatus::Continued(_)) => {
                 self.state = ProcessState::Running(current_pid);

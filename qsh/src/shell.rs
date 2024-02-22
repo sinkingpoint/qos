@@ -7,7 +7,7 @@ use crate::{
         consumers::{Expression, QuotedOrUnquotedString},
         types::Token,
     },
-    process::{Process, ProcessState, WaitError},
+    process::{Process, ProcessState, WaitError, ExitCode},
 };
 
 pub struct Shell {
@@ -55,8 +55,10 @@ impl Shell {
         process.wait()?;
 
         match process.state {
-            ProcessState::Terminated(exitcode) if exitcode != 0 => {
-                println!("Process exited with code {}", exitcode);
+            ProcessState::Terminated(exitcode) => {
+                if let ExitCode::Success(code) = exitcode {
+                    println!("Process exited with code {}", code);
+                }
             }
             _ => {}
         };

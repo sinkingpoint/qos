@@ -5,7 +5,7 @@ mod shell;
 
 use std::os::fd::{AsFd, AsRawFd};
 
-use nix::sys::termios::{tcgetattr, LocalFlags, SetArg};
+use nix::{sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg}, unistd};
 use shell::{stdin, stdout, Shell};
 use slog::{error, o, Drain};
 use slog_json::Json;
@@ -32,7 +32,7 @@ fn main() {
     // Echo means that the terminal will print input back to the user, this allows us to read input without the user seeing it.
     attrs.local_flags &= !(LocalFlags::ICANON | LocalFlags::ECHO);
 
-    if let Err(e) = nix::sys::termios::tcsetattr(&reader, SetArg::TCSANOW, &attrs) {
+    if let Err(e) = tcsetattr(&reader, SetArg::TCSANOW, &attrs) {
         error!(logger, "Error setting terminal attributes: {}", e);
         return;
     }
@@ -42,7 +42,7 @@ fn main() {
 }
 
 fn isatty<T: AsFd>(fd: T) -> bool {
-    nix::unistd::isatty(fd.as_fd().as_raw_fd()).unwrap_or(false)
+    unistd::isatty(fd.as_fd().as_raw_fd()).unwrap_or(false)
 }
 
 fn assemble_logger() -> slog::Logger {
