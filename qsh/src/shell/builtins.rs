@@ -54,3 +54,17 @@ impl Builtin for Cat {
         ExitCode::Success(0)
     }
 }
+
+pub struct Echo;
+
+impl Builtin for Echo {
+    fn run(&self, triple: IOTriple, args: &[String]) -> ExitCode {
+        let mut output = triple.stdout();
+
+        let message = args[1..].join(" ");
+        output.write_all(message.as_bytes()).unwrap();
+        output.write_all(b"\n").unwrap();
+
+        ExitCode::Success(0)
+    }
+}

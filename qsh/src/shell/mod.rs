@@ -121,6 +121,7 @@ fn default_environment_vars() -> HashMap<String, String> {
 fn default_builtins() -> HashMap<String, Box<dyn Builtin>> {
     let mut builtins: HashMap<String, Box<dyn Builtin>> = HashMap::new();
     builtins.insert("cat".to_string(), Box::new(builtins::Cat) as Box<dyn Builtin>);
+    builtins.insert("echo".to_string(), Box::new(builtins::Echo) as Box<dyn Builtin>);
     builtins
 }
 
