@@ -5,8 +5,12 @@ mod shell;
 
 use std::os::fd::{AsFd, AsRawFd};
 
-use nix::{sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg}, unistd};
-use shell::{stdin, stdout, Shell};
+use nix::{
+    sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg},
+    unistd,
+};
+
+use shell::Shell;
 use slog::{error, o, Drain};
 use slog_json::Json;
 
@@ -38,7 +42,7 @@ fn main() {
     }
 
     let mut shell = Shell::new();
-    shell.run(stdin(), stdout());
+    shell.run();
 }
 
 fn isatty<T: AsFd>(fd: T) -> bool {

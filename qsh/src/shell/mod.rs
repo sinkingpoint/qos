@@ -1,4 +1,6 @@
-use std::{collections::HashMap, fs::File, os::fd::FromRawFd};
+mod builtins;
+
+use std::{collections::HashMap, io::Write};
 
 use crate::{
     buffer::Buffer,
@@ -7,33 +9,48 @@ use crate::{
         consumers::{Expression, QuotedOrUnquotedString},
         types::Token,
     },
-    process::{Process, ProcessState, WaitError, ExitCode},
+    process::{ExitCode, IOTriple, Process, ProcessState, WaitError},
 };
+
+use self::builtins::Builtin;
 
 pub struct Shell {
     environment: HashMap<String, String>,
+    builtins: HashMap<String, Box<dyn Builtin>>,
+    pub triple: IOTriple,
 }
 
 impl Shell {
     pub fn new() -> Self {
         Shell {
             environment: default_environment_vars(),
+            builtins: default_builtins(),
+            triple: IOTriple::default(),
         }
     }
 
-    pub fn run(&mut self, input: File, output: File) {
+    pub fn run(&mut self) {
+        let input = self.triple.stdin();
+        let output = self.triple.stdout();
+        let mut err = self.triple.stderr();
         let mut buffer = Buffer::new(input, output);
 
         loop {
             let prompt = self.environment.get("PS1").unwrap();
             let line = match buffer.read(prompt) {
                 Ok(line) => line,
-                Err(_e) => {
+                Err(e) => {
+                    writeln!(err, "Error reading input: {}", e).unwrap();
                     return;
                 }
             };
 
-            self.evaluate(&line).unwrap();
+            match self.evaluate(&line) {
+                Ok(()) => {}
+                Err(e) => {
+                    writeln!(err, "Error evaluating input: {}", e).unwrap();
+                }
+            }
         }
     }
 
@@ -48,23 +65,31 @@ impl Shell {
             }
         };
 
+        let mut err = self.triple.stderr();
+
         let args = self.concrete_arguments(expression);
+        if let Some(builtin) = self.builtins.get(&args[0]) {
+            match builtin.run(self.triple, &args) {
+                ExitCode::Success(_) => {}
+                ExitCode::Err(errno) => {
+                    writeln!(err, "Process exited with error: {}", errno).unwrap();
+                }
+            }
+
+            return Ok(());
+        }
+
         let mut process = Process::new(args);
-        process.start()?;
+        process.start(self.triple)?;
 
         process.wait()?;
 
-        match process.state {
-            ProcessState::Terminated(exitcode) => {
-                if let ExitCode::Success(code) = exitcode {
-                    println!("Process exited with code {}", code);
-                }
-            }
-            _ => {}
-        };
+        if let ProcessState::Terminated(ExitCode::Success(code)) = process.state {
+            write!(err, "Process exited with code {}", code).unwrap();
+        }
+
         Ok(())
     }
-
     /// Construct the concrete expression from the token.
     /// At the moment, this just takes each string literally, but eventually this will do variable interpolation etc.
     fn concrete_arguments(&mut self, expression: Token<Expression>) -> Vec<String> {
@@ -93,12 +118,10 @@ fn default_environment_vars() -> HashMap<String, String> {
     env
 }
 
-pub fn stdout() -> File {
-    unsafe { File::from_raw_fd(1) }
-}
-
-pub fn stdin() -> File {
-    unsafe { File::from_raw_fd(0) }
+fn default_builtins() -> HashMap<String, Box<dyn Builtin>> {
+    let mut builtins: HashMap<String, Box<dyn Builtin>> = HashMap::new();
+    builtins.insert("cat".to_string(), Box::new(builtins::Cat) as Box<dyn Builtin>);
+    builtins
 }
 
 #[cfg(test)]
