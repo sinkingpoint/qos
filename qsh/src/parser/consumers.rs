@@ -223,7 +223,7 @@ struct UnquotedCharacter {
 impl Consumer for UnquotedCharacter {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let c = &input[start];
-        if c.is_whitespace() || c == &'\'' || c == &'"' || c == &'\\' {
+        if c.is_whitespace() || c == &'\'' || c == &'"' || c == &'\\' || c == &'|' {
             return Ok(None);
         }
 
@@ -346,13 +346,31 @@ impl Consumer for CombinedString {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct Pipe;
+
+impl Consumer for Pipe {
+    fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
+        if input[start] == '|' {
+            Ok(Some(Token {
+                literal: "|".to_string(),
+                start,
+                length: 1,
+                token: Pipe,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 // Consumes a string that is made up of component strings. e.g. "/bin/sh -c 'echo hello world'" would be parsed into 3 parts: "/bin/sh", "-c", and "'echo hello world'".
 #[derive(Debug, PartialEq)]
-pub struct Expression {
+pub struct Command {
     pub parts: Vec<Token<CombinedString>>,
 }
 
-impl Consumer for Expression {
+impl Consumer for Command {
     fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
         let mut literal = String::new();
         let mut parts = Vec::new();
@@ -371,6 +389,9 @@ impl Consumer for Expression {
             }
         }
 
+        literal = literal.trim().to_string();
+        length = literal.len();
+
         if parts.is_empty() {
             return Ok(None);
         }
@@ -379,7 +400,73 @@ impl Consumer for Expression {
             literal,
             start,
             length,
-            token: Expression { parts },
+            token: Command { parts },
+        }))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Pipeline {
+    pub commands: Vec<Token<Command>>,
+}
+
+impl Consumer for Pipeline {
+    fn try_consume(input: &[char], start: usize) -> ParserResult<Self> {
+        let mut commands = Vec::new();
+        let mut length = 0;
+        let mut literal = String::new();
+
+        #[derive(Debug, PartialEq)]
+        enum State {
+            Start,
+            Command,
+            Pipe,
+        }
+
+        let mut state = State::Start;
+        while start + length < input.len() {
+            match state {
+                State::Start | State::Pipe => {
+                    if let Some(token) = Whitespace::try_consume(input, start + length)? {
+                        length += token.length;
+                        literal.push_str(&token.literal);
+                    } else if let Some(token) = Command::try_consume(input, start + length)? {
+                        length += token.length;
+                        literal.push_str(&token.literal);
+                        commands.push(token);
+                        state = State::Command;
+                    } else {
+                        return Err(ParserError::new("Expected command after pipe", start + length));
+                    }
+                },
+                State::Command => {
+                    if let Some(token) = Whitespace::try_consume(input, start + length)? {
+                        length += token.length;
+                        literal.push_str(&token.literal);
+                    } else if let Some(token) = Pipe::try_consume(input, start + length)? {
+                        length += token.length;
+                        literal.push_str(&token.literal);
+                        state = State::Pipe;
+                    } else {
+                        return Err(ParserError::new("Expected pipe after command", start + length));
+                    }
+                },
+            }
+        }
+
+        if state == State::Pipe {
+            return Err(ParserError::new("Expected command after pipe", start + length));
+        }
+
+        if commands.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(Token {
+            literal,
+            start,
+            length,
+            token: Pipeline { commands },
         }))
     }
 }
@@ -581,10 +668,10 @@ mod tests {
     }
 
     #[test]
-    fn test_expression_consumer() {
+    fn test_command_consumer() {
         let input = "./bin/sh -c 'echo \"hello world\"'";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = Expression::try_consume(&chars, 0).unwrap().unwrap();
+        let token = Command::try_consume(&chars, 0).unwrap().unwrap();
 
         assert_eq!(token.literal, input);
         assert_eq!(token.start, 0);
@@ -637,7 +724,99 @@ mod tests {
 
         let input = "./bin/sh -c 'echo \"hello world\"";
         let chars = input.chars().collect::<Vec<char>>();
-        let token = Expression::try_consume(&chars, 0);
+        let token = Command::try_consume(&chars, 0);
+        assert!(token.is_err(), "Expected failure, but got {:?}", token.unwrap());
+    }
+
+    #[test]
+    fn test_pipeline_consumer() {
+        let input = "cat test | read foo";
+        let chars = input.chars().collect::<Vec<char>>();
+        let token = Pipeline::try_consume(&chars, 0).unwrap().unwrap();
+
+        assert_eq!(token.literal, input);
+        assert_eq!(token.start, 0);
+        assert_eq!(token.length, 19);
+        assert_eq!(token.token.commands.len(), 2);
+
+        assert_eq!(token.token.commands[0], Token {
+            literal: "cat test".to_string(),
+            start: 0,
+            length: 8,
+            token: Command {
+                parts: vec![
+                    Token {
+                        literal: "cat".to_string(),
+                        start: 0,
+                        length: 3,
+                        token: CombinedString {
+                            parts: vec![Token {
+                                literal: "cat".to_string(),
+                                start: 0,
+                                length: 3,
+                                token: QuotedOrUnquotedString::Unquoted("cat".to_string())
+                            }]
+                        }
+                    },
+                    Token {
+                        literal: "test".to_string(),
+                        start: 4,
+                        length: 4,
+                        token: CombinedString {
+                            parts: vec![Token {
+                                literal: "test".to_string(),
+                                start: 4,
+                                length: 4,
+                                token: QuotedOrUnquotedString::Unquoted("test".to_string())
+                            }]
+                        }
+                    }
+                ]
+            }
+        });
+
+        assert_eq!(token.token.commands[1], Token {
+            literal: "read foo".to_string(),
+            start: 11,
+            length: 8,
+            token: Command {
+                parts: vec![
+                    Token {
+                        literal: "read".to_string(),
+                        start: 11,
+                        length: 4,
+                        token: CombinedString {
+                            parts: vec![Token {
+                                literal: "read".to_string(),
+                                start: 11,
+                                length: 4,
+                                token: QuotedOrUnquotedString::Unquoted("read".to_string())
+                            }]
+                        }
+                    },
+                    Token {
+                        literal: "foo".to_string(),
+                        start: 16,
+                        length: 3,
+                        token: CombinedString {
+                            parts: vec![Token {
+                                literal: "foo".to_string(),
+                                start: 16,
+                                length: 3,
+                                token: QuotedOrUnquotedString::Unquoted("foo".to_string())
+                            }]
+                        }
+                    }
+                ]
+            }
+        });
+    }
+
+    #[test]
+    fn test_pipeline_consumer_missing_command() {
+        let input = "cat test |";
+        let chars = input.chars().collect::<Vec<char>>();
+        let token = Pipeline::try_consume(&chars, 0);
         assert!(token.is_err(), "Expected failure, but got {:?}", token.unwrap());
     }
 }

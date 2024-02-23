@@ -6,7 +6,7 @@ use crate::{
     buffer::Buffer,
     parser::{
         self,
-        consumers::{Expression, QuotedOrUnquotedString},
+        consumers::{Command, QuotedOrUnquotedString},
         types::Token,
     },
     process::{ExitCode, IOTriple, Process, ProcessState, WaitError},
@@ -56,7 +56,7 @@ impl Shell {
 
     /// Evaluate the input as a shell expression.
     pub fn evaluate(&mut self, input: &str) -> Result<(), WaitError> {
-        let expression = match parser::try_parse::<Expression>(input) {
+        let expression = match parser::try_parse::<Command>(input) {
             Ok(Some(expr)) => expr,
             Ok(None) => return Ok(()),
             Err(e) => {
@@ -92,7 +92,7 @@ impl Shell {
     }
     /// Construct the concrete expression from the token.
     /// At the moment, this just takes each string literally, but eventually this will do variable interpolation etc.
-    fn concrete_arguments(&mut self, expression: Token<Expression>) -> Vec<String> {
+    fn concrete_arguments(&mut self, expression: Token<Command>) -> Vec<String> {
         let mut args = Vec::new();
         for arg in expression.token.parts {
             let mut build = String::new();
