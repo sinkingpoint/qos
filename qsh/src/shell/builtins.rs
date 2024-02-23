@@ -1,4 +1,5 @@
 use crate::process::{ExitCode, IOTriple};
+use escapes::{CursorPosition, EraseInDisplay};
 use nix::errno::Errno;
 use std::{
     fs::File,
@@ -64,6 +65,17 @@ impl Builtin for Echo {
         let message = args[1..].join(" ");
         output.write_all(message.as_bytes()).unwrap();
         output.write_all(b"\n").unwrap();
+
+        ExitCode::Success(0)
+    }
+}
+
+pub struct Clear;
+
+impl Builtin for Clear {
+    fn run(&self, triple: IOTriple, _args: &[String]) -> ExitCode {
+        let mut output = triple.stdout();
+        output.write_all(format!("{}{}", EraseInDisplay(1), CursorPosition(1, 1)).as_bytes()).unwrap();
 
         ExitCode::Success(0)
     }
