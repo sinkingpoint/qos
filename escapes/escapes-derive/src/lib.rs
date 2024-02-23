@@ -28,7 +28,7 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
     if let Data::Struct(data) = &input.data {
         num_args = data.fields.len();
         for field in data.fields.iter() {
-            for (idx, attr) in field.attrs.iter().enumerate() {
+            for attr in field.attrs.iter() {
                 if attr.path().is_ident("default") {
                     if let Lit::Int(default) = attr.parse_args().unwrap() {
                         defaults.push(default.base10_parse().unwrap());
@@ -37,7 +37,7 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                idxs.push(syn::Index::from(idx));
+                idxs.push(syn::Index::from(idxs.len()));
             }
         }
 
@@ -48,7 +48,11 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
         panic!("Only structs are supported");
     }
 
-    let output_string = "{}".repeat(num_args + 3);
+    let joined = if num_args > 1 {
+        quote! { [#(self.#idxs),*].map(|i| format!("{}", i)).join(";") }
+    } else {
+        quote! { format!("{}", self.0) }
+    };
 
     let gen = quote! {
         impl EscapeSequence for #name {
@@ -68,7 +72,8 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
 
         impl std::fmt::Display for #name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, #output_string, ESC, CSI, #(self.#idxs),*, #escape)
+                let joined = #joined;
+                write!(f, "{}{}{}{}", ESC, CSI, joined, #escape)
             }
         }
     };
