@@ -49,6 +49,14 @@ pub struct CursorForward(#[default(1)] pub u8);
 pub struct CursorBack(#[default(1)] pub u8);
 
 #[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('H')]
+pub struct CursorPosition(#[default(1)] pub u8, #[default(1)] pub u8);
+
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('J')]
+pub struct EraseInDisplay(#[default(0)] pub u8);
+
+#[derive(Debug, PartialEq, EscapeSequence)]
 #[escape('K')]
 pub struct EraseInLine(#[default(0)] pub u8);
 
@@ -59,6 +67,8 @@ pub enum ANSIEscapeSequence {
     CursorForward(CursorForward),
     CursorBack(CursorBack),
     EraseInLine(EraseInLine),
+    EraseInDisplay(EraseInDisplay),
+    CursorPosition(CursorPosition),
 }
 
 impl ANSIEscapeSequence {
@@ -68,6 +78,8 @@ impl ANSIEscapeSequence {
             'B' => Ok(ANSIEscapeSequence::CursorDown(CursorDown::parse(params)?)),
             'C' => Ok(ANSIEscapeSequence::CursorForward(CursorForward::parse(params)?)),
             'D' => Ok(ANSIEscapeSequence::CursorBack(CursorBack::parse(params)?)),
+            'H' => Ok(ANSIEscapeSequence::CursorPosition(CursorPosition::parse(params)?)),
+            'J' => Ok(ANSIEscapeSequence::EraseInDisplay(EraseInDisplay::parse(params)?)),
             'K' => Ok(ANSIEscapeSequence::EraseInLine(EraseInLine::parse(params)?)),
             _ => Err(AnsiParserError::Unsupported(c)),
         }
@@ -120,6 +132,8 @@ impl Display for ANSIEscapeSequence {
             ANSIEscapeSequence::CursorForward(c) => write!(f, "{}", c),
             ANSIEscapeSequence::CursorBack(c) => write!(f, "{}", c),
             ANSIEscapeSequence::EraseInLine(c) => write!(f, "{}", c),
+            ANSIEscapeSequence::EraseInDisplay(c) => write!(f, "{}", c),
+            ANSIEscapeSequence::CursorPosition(c) => write!(f, "{}", c),
         }
     }
 }
