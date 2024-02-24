@@ -438,7 +438,7 @@ impl Consumer for Pipeline {
                     } else {
                         return Err(ParserError::new("Expected command after pipe", start + length));
                     }
-                },
+                }
                 State::Command => {
                     if let Some(token) = Whitespace::try_consume(input, start + length)? {
                         length += token.length;
@@ -450,7 +450,7 @@ impl Consumer for Pipeline {
                     } else {
                         return Err(ParserError::new("Expected pipe after command", start + length));
                     }
-                },
+                }
             }
         }
 
@@ -739,77 +739,83 @@ mod tests {
         assert_eq!(token.length, 19);
         assert_eq!(token.token.commands.len(), 2);
 
-        assert_eq!(token.token.commands[0], Token {
-            literal: "cat test".to_string(),
-            start: 0,
-            length: 8,
-            token: Command {
-                parts: vec![
-                    Token {
-                        literal: "cat".to_string(),
-                        start: 0,
-                        length: 3,
-                        token: CombinedString {
-                            parts: vec![Token {
-                                literal: "cat".to_string(),
-                                start: 0,
-                                length: 3,
-                                token: QuotedOrUnquotedString::Unquoted("cat".to_string())
-                            }]
+        assert_eq!(
+            token.token.commands[0],
+            Token {
+                literal: "cat test".to_string(),
+                start: 0,
+                length: 8,
+                token: Command {
+                    parts: vec![
+                        Token {
+                            literal: "cat".to_string(),
+                            start: 0,
+                            length: 3,
+                            token: CombinedString {
+                                parts: vec![Token {
+                                    literal: "cat".to_string(),
+                                    start: 0,
+                                    length: 3,
+                                    token: QuotedOrUnquotedString::Unquoted("cat".to_string())
+                                }]
+                            }
+                        },
+                        Token {
+                            literal: "test".to_string(),
+                            start: 4,
+                            length: 4,
+                            token: CombinedString {
+                                parts: vec![Token {
+                                    literal: "test".to_string(),
+                                    start: 4,
+                                    length: 4,
+                                    token: QuotedOrUnquotedString::Unquoted("test".to_string())
+                                }]
+                            }
                         }
-                    },
-                    Token {
-                        literal: "test".to_string(),
-                        start: 4,
-                        length: 4,
-                        token: CombinedString {
-                            parts: vec![Token {
-                                literal: "test".to_string(),
-                                start: 4,
-                                length: 4,
-                                token: QuotedOrUnquotedString::Unquoted("test".to_string())
-                            }]
-                        }
-                    }
-                ]
+                    ]
+                }
             }
-        });
+        );
 
-        assert_eq!(token.token.commands[1], Token {
-            literal: "read foo".to_string(),
-            start: 11,
-            length: 8,
-            token: Command {
-                parts: vec![
-                    Token {
-                        literal: "read".to_string(),
-                        start: 11,
-                        length: 4,
-                        token: CombinedString {
-                            parts: vec![Token {
-                                literal: "read".to_string(),
-                                start: 11,
-                                length: 4,
-                                token: QuotedOrUnquotedString::Unquoted("read".to_string())
-                            }]
+        assert_eq!(
+            token.token.commands[1],
+            Token {
+                literal: "read foo".to_string(),
+                start: 11,
+                length: 8,
+                token: Command {
+                    parts: vec![
+                        Token {
+                            literal: "read".to_string(),
+                            start: 11,
+                            length: 4,
+                            token: CombinedString {
+                                parts: vec![Token {
+                                    literal: "read".to_string(),
+                                    start: 11,
+                                    length: 4,
+                                    token: QuotedOrUnquotedString::Unquoted("read".to_string())
+                                }]
+                            }
+                        },
+                        Token {
+                            literal: "foo".to_string(),
+                            start: 16,
+                            length: 3,
+                            token: CombinedString {
+                                parts: vec![Token {
+                                    literal: "foo".to_string(),
+                                    start: 16,
+                                    length: 3,
+                                    token: QuotedOrUnquotedString::Unquoted("foo".to_string())
+                                }]
+                            }
                         }
-                    },
-                    Token {
-                        literal: "foo".to_string(),
-                        start: 16,
-                        length: 3,
-                        token: CombinedString {
-                            parts: vec![Token {
-                                literal: "foo".to_string(),
-                                start: 16,
-                                length: 3,
-                                token: QuotedOrUnquotedString::Unquoted("foo".to_string())
-                            }]
-                        }
-                    }
-                ]
+                    ]
+                }
             }
-        });
+        );
     }
 
     #[test]

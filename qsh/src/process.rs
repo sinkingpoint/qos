@@ -7,8 +7,8 @@ use std::{
 
 use nix::{
     errno::Errno,
-    sys::wait::{waitpid, WaitPidFlag, WaitStatus},
-    unistd::{close, dup2, execvp, fork, Pid},
+    sys::wait::{waitid, Id, WaitPidFlag, WaitStatus},
+    unistd::{close, dup2, execvp, fork, pipe, setpgid, ForkResult, Pid},
 };
 
 use thiserror::Error;
@@ -41,6 +41,7 @@ impl From<io::Error> for ExitCode {
 }
 
 /// The state of a process.
+#[derive(Debug)]
 pub enum ProcessState {
     /// The process has not been started.
     Unstarted,
@@ -84,6 +85,27 @@ impl IOTriple {
         let file = Box::new(unsafe { File::from_raw_fd(self.stderr) });
         Box::leak(file)
     }
+
+    /// Create a new pipe, and return the read and write ends of the pipe.
+    /// The first element of the tuple is the read end of the pipe, which should be used to read from the pipe,
+    /// and the second element is the write end of the pipe which should be used to write to the pipe.
+    pub fn pipe(&self) -> Result<(IOTriple, IOTriple), nix::Error> {
+        let (read, write) = pipe()?;
+
+        let read = IOTriple {
+            stdin: read,
+            stdout: self.stdout,
+            stderr: self.stderr,
+        };
+
+        let write = IOTriple {
+            stdin: self.stdin,
+            stdout: write,
+            stderr: self.stderr,
+        };
+
+        Ok((read, write))
+    }
 }
 
 impl Default for IOTriple {
@@ -97,6 +119,7 @@ impl Default for IOTriple {
 }
 
 // A process that can be started and waited on.
+#[derive(Debug)]
 pub struct Process {
     pub argv: Vec<String>,
     pub state: ProcessState,
@@ -134,20 +157,43 @@ impl Process {
         if let Err(e) = execvp(&filename, &args) {
             if e == Errno::ENOENT {
                 std::process::exit(127);
-            } else {
-                std::process::exit(e as i32);
             }
+
+            std::process::exit(e as i32);
+        }
+
+        // We can never reach this point (because we've `exec`ed), but the compiler doesn't know that.
+        panic!("BUG: exec failed");
+    }
+
+    pub fn handle_wait_status(&mut self, status: WaitStatus) {
+        match status {
+            WaitStatus::Exited(_, code) => {
+                self.state = ProcessState::Terminated(ExitCode::Success(code));
+            }
+            WaitStatus::Signaled(_, signal, _) => {
+                self.state = ProcessState::Terminated(ExitCode::Err(Errno::from_i32(signal as i32)));
+            }
+            WaitStatus::Stopped(_, signal) => {
+                self.state = ProcessState::Terminated(ExitCode::Err(Errno::from_i32(signal as i32)));
+            }
+            _ => {}
         }
     }
 
     /// Start the process in a new child process.
-    pub fn start(&mut self, triple: IOTriple) -> nix::Result<()> {
+    pub fn start(&mut self, pgid: Option<Pid>, triple: IOTriple) -> nix::Result<()> {
         unsafe {
             match fork() {
-                Ok(nix::unistd::ForkResult::Parent { child }) => {
+                Ok(ForkResult::Parent { child }) => {
+                    if let Some(pgid) = pgid {
+                        setpgid(child, pgid)?;
+                    } else {
+                        setpgid(child, child)?;
+                    }
                     self.state = ProcessState::Running(child);
                 }
-                Ok(nix::unistd::ForkResult::Child) => {
+                Ok(ForkResult::Child) => {
                     self.exec(triple);
                 }
                 Err(e) => {
@@ -158,33 +204,6 @@ impl Process {
 
         Ok(())
     }
-
-    /// Block until the process exits, or is otherwise stopped.
-    pub fn wait(&mut self) -> Result<(), WaitError> {
-        // If the process is not running, return an error.
-        let current_pid = match self.state {
-            ProcessState::Running(pid) => pid,
-            _ => return Err(WaitError::NotRunning),
-        };
-
-        match waitpid(current_pid, Some(WaitPidFlag::__WALL | WaitPidFlag::WUNTRACED)) {
-            Ok(WaitStatus::Exited(_, exit)) => {
-                self.state = ProcessState::Terminated(ExitCode::Success(exit));
-            }
-            Ok(WaitStatus::Signaled(_, signal, _)) => {
-                self.state = ProcessState::Terminated(ExitCode::Err(Errno::from_i32(signal as i32)));
-            }
-            Ok(WaitStatus::Continued(_)) => {
-                self.state = ProcessState::Running(current_pid);
-            }
-            Err(e) => {
-                return Err(WaitError::Nix(e));
-            }
-            _ => return Err(WaitError::UnsupportedSignal),
-        };
-
-        Ok(())
-    }
 }
 
 #[derive(Debug, Error)]
@@ -192,9 +211,111 @@ pub enum WaitError {
     #[error("Process is not running")]
     NotRunning,
 
-    #[error("Unsupported Signal")]
-    UnsupportedSignal,
-
     #[error("Nix error: {0}")]
     Nix(#[from] nix::Error),
+}
+
+/// The state of a pipeline of processes.
+#[derive(Debug)]
+pub enum PipelineState {
+    Unstarted,
+    // The process group ID of the pipeline.
+    Running(Pid),
+    Terminated,
+}
+
+/// A pipeline of processes.
+pub struct ProcessPipeline {
+    pub processes: Vec<Process>,
+    pub status: PipelineState,
+}
+
+impl ProcessPipeline {
+    pub fn new(processes: Vec<Process>) -> Self {
+        ProcessPipeline {
+            processes,
+            status: PipelineState::Unstarted,
+        }
+    }
+
+    // Execute the pipeline, starting each process in the pipeline.
+    pub fn execute(&mut self, triple: IOTriple) -> Result<(), WaitError> {
+        let (last, rest) = self.processes.split_last_mut().expect("BUG: empty commands");
+        let mut triple = triple;
+        let mut pgid = None;
+        for command in rest.iter_mut() {
+            let (read, write) = triple.pipe()?;
+            command.start(pgid, write)?;
+
+            // The process group ID of the pipeline will be the pgid of the first process in the pipeline.
+            if pgid.is_none() {
+                match command.state {
+                    ProcessState::Running(pid) => pgid = Some(pid),
+                    _ => return Err(WaitError::NotRunning),
+                }
+            }
+
+            // Close any pipe file descriptors, because they've been moved into the child process.
+            if write.stdin != STDIN_FD {
+                close(write.stdin)?;
+            }
+
+            if write.stdout != STDOUT_FD {
+                close(write.stdout)?;
+            }
+
+            if write.stderr != STDERR_FD {
+                close(write.stderr)?;
+            }
+
+            triple = read;
+        }
+
+        last.start(pgid, triple)?;
+        if pgid.is_none() {
+            match last.state {
+                ProcessState::Running(pid) => pgid = Some(pid),
+                _ => return Err(WaitError::NotRunning),
+            }
+        }
+
+        self.status = PipelineState::Running(pgid.unwrap());
+        Ok(())
+    }
+
+    /// Returns true if all processes in the pipeline have finished.
+    pub fn has_terminated(&self) -> bool {
+        self.processes.iter().all(|p| matches!(p.state, ProcessState::Terminated(_)))
+    }
+
+    fn get_process_by_id(&mut self, pid: Pid) -> Option<&mut Process> {
+        self.processes.iter_mut().find(|p| match p.state {
+            ProcessState::Running(pgid) => pgid == pid,
+            _ => false,
+        })
+    }
+
+    pub fn wait(&mut self) -> Result<(), WaitError> {
+        let pgid = match self.status {
+            PipelineState::Running(pgid) => pgid,
+            _ => return Err(WaitError::NotRunning),
+        };
+
+        while !self.has_terminated() {
+            let status = waitid(Id::PGid(pgid), WaitPidFlag::__WALL | WaitPidFlag::WEXITED)?;
+            if let Some(pid) = status.pid() {
+                match self.get_process_by_id(pid) {
+                    Some(process) => process.handle_wait_status(status),
+                    None => {
+                        // This should never happen, because we only wait on processes in the pipeline.
+                        panic!("BUG: process not found");
+                    }
+                }
+            }
+        }
+
+        self.status = PipelineState::Terminated;
+
+        Ok(())
+    }
 }

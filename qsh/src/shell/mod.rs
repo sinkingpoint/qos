@@ -6,10 +6,10 @@ use crate::{
     buffer::Buffer,
     parser::{
         self,
-        consumers::{Command, QuotedOrUnquotedString},
+        consumers::{Command, Pipeline, QuotedOrUnquotedString},
         types::Token,
     },
-    process::{ExitCode, IOTriple, Process, ProcessState, WaitError},
+    process::{IOTriple, Process, ProcessPipeline, WaitError},
 };
 
 use self::builtins::Builtin;
@@ -56,51 +56,52 @@ impl Shell {
 
     /// Evaluate the input as a shell expression.
     pub fn evaluate(&mut self, input: &str) -> Result<(), WaitError> {
-        let expression = match parser::try_parse::<Command>(input) {
+        let mut err = self.triple.stderr();
+
+        let raw_pipe = match parser::try_parse::<Pipeline>(input) {
             Ok(Some(expr)) => expr,
             Ok(None) => return Ok(()),
             Err(e) => {
-                println!("Error: {}", e);
+                writeln!(err, "Error parsing input: {}", e).unwrap();
                 return Ok(());
             }
         };
 
-        let mut err = self.triple.stderr();
-
-        let args = self.concrete_arguments(expression);
-        if let Some(builtin) = self.builtins.get(&args[0]) {
-            match builtin.run(self.triple, &args) {
-                ExitCode::Success(_) => {}
-                ExitCode::Err(errno) => {
-                    writeln!(err, "Process exited with error: {}", errno).unwrap();
-                }
-            }
-
+        if raw_pipe.token.commands.is_empty() {
             return Ok(());
         }
 
-        let mut process = Process::new(args);
-        process.start(self.triple)?;
-
-        process.wait()?;
-
-        if let ProcessState::Terminated(ExitCode::Success(code)) = process.state {
-            write!(err, "Process exited with code {}", code).unwrap();
-        }
-
-        Ok(())
+        self.execute(raw_pipe, self.triple)
     }
+
+    fn execute(&mut self, raw_pipe: Token<Pipeline>, triple: IOTriple) -> Result<(), WaitError> {
+        let commands = raw_pipe
+            .token
+            .commands
+            .iter()
+            .map(|c| {
+                let args = self.concrete_arguments(c);
+                Process::new(args)
+            })
+            .collect();
+
+        let mut pipeline = ProcessPipeline::new(commands);
+        pipeline.execute(triple)?;
+
+        pipeline.wait()
+    }
+
     /// Construct the concrete expression from the token.
     /// At the moment, this just takes each string literally, but eventually this will do variable interpolation etc.
-    fn concrete_arguments(&mut self, expression: Token<Command>) -> Vec<String> {
+    fn concrete_arguments(&mut self, expression: &Token<Command>) -> Vec<String> {
         let mut args = Vec::new();
-        for arg in expression.token.parts {
+        for arg in expression.token.parts.iter() {
             let mut build = String::new();
-            for token in arg.token.parts {
-                match token.token {
+            for token in arg.token.parts.iter() {
+                match &token.token {
                     QuotedOrUnquotedString::Unquoted(decoded)
                     | QuotedOrUnquotedString::SingleQuoted(decoded)
-                    | QuotedOrUnquotedString::DoubleQuoted(decoded) => build.push_str(&decoded),
+                    | QuotedOrUnquotedString::DoubleQuoted(decoded) => build.push_str(decoded),
                 }
             }
 
@@ -134,15 +135,15 @@ mod tests {
     fn test_shell_concrete_expression() {
         let mut shell = Shell::new();
         assert_eq!(
-            shell.concrete_arguments(parser::try_parse("echo hello world").unwrap().unwrap()),
+            shell.concrete_arguments(&parser::try_parse("echo hello world").unwrap().unwrap()),
             vec!["echo", "hello", "world"]
         );
         assert_eq!(
-            shell.concrete_arguments(parser::try_parse("echo 'hello' \"world\"").unwrap().unwrap()),
+            shell.concrete_arguments(&parser::try_parse("echo 'hello' \"world\"").unwrap().unwrap()),
             vec!["echo", "hello", "world"]
         );
         assert_eq!(
-            shell.concrete_arguments(parser::try_parse("echo'hello'\"world\"").unwrap().unwrap()),
+            shell.concrete_arguments(&parser::try_parse("echo'hello'\"world\"").unwrap().unwrap()),
             vec!["echohelloworld"]
         );
     }
