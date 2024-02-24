@@ -1,5 +1,3 @@
-mod builtins;
-
 use std::{collections::HashMap, io::Write};
 
 use crate::{
@@ -12,11 +10,8 @@ use crate::{
     process::{IOTriple, Process, ProcessPipeline, WaitError},
 };
 
-use self::builtins::Builtin;
-
 pub struct Shell {
     environment: HashMap<String, String>,
-    builtins: HashMap<String, Box<dyn Builtin>>,
     pub triple: IOTriple,
 }
 
@@ -24,7 +19,6 @@ impl Shell {
     pub fn new() -> Self {
         Shell {
             environment: default_environment_vars(),
-            builtins: default_builtins(),
             triple: IOTriple::default(),
         }
     }
@@ -117,14 +111,6 @@ fn default_environment_vars() -> HashMap<String, String> {
     env.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
     env.insert("PS1".to_string(), "$ ".to_string());
     env
-}
-
-fn default_builtins() -> HashMap<String, Box<dyn Builtin>> {
-    let mut builtins: HashMap<String, Box<dyn Builtin>> = HashMap::new();
-    builtins.insert("cat".to_string(), Box::new(builtins::Cat) as Box<dyn Builtin>);
-    builtins.insert("echo".to_string(), Box::new(builtins::Echo) as Box<dyn Builtin>);
-    builtins.insert("clear".to_string(), Box::new(builtins::Clear) as Box<dyn Builtin>);
-    builtins
 }
 
 #[cfg(test)]
