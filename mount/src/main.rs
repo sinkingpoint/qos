@@ -18,7 +18,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let device = Device::new(cli.device.clone());
+    let device = Device::new(&cli.device);
     let filesystem = match device.probe() {
         Ok(Some(filesystem)) => filesystem,
         Ok(None) => {

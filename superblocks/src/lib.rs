@@ -2,7 +2,7 @@ mod types;
 mod ext;
 mod btrfs;
 
-use std::{fs::File, io::{self, Cursor, Read, Seek, SeekFrom}, path::PathBuf};
+use std::{fs::File, io::{self, Cursor, Read, Seek, SeekFrom}, path::{Path, PathBuf}};
 
 use bytestruct::{ReadFrom, UUID};
 pub use types::Superblock;
@@ -17,9 +17,9 @@ pub struct Device {
 
 impl Device {
     /// Creates a new device from the given path.
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(path: &Path) -> Self {
         Self {
-            path,
+            path: path.to_path_buf(),
         }
     }
 
