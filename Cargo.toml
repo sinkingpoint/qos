@@ -9,6 +9,7 @@ members = [
     "escapes",
     "escapes/escapes-derive",
     "mount",
+    "qinit",
     "qsh",
     "superblocks"
 ]

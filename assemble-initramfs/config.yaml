@@ -1,4 +1,4 @@
-init_file: ./target/x86_64-unknown-linux-musl/debug/qsh
+init_file: ./target/x86_64-unknown-linux-musl/debug/qinit
 libraries:
  - /lib64/libtinfo.so.6
  - /lib64/libc.so.6

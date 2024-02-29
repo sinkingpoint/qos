@@ -294,6 +294,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "qinit"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "nix",
+ "superblocks",
+ "thiserror",
+]
+
+[[package]]
 name = "qsh"
 version = "0.1.0"
 dependencies = [

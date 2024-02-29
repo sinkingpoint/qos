@@ -1,0 +1,10 @@
+[package]
+name = "qinit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+nix = { workspace = true }
+superblocks = { path = "../superblocks" }
+thiserror = { workspace = true }
