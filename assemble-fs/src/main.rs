@@ -1,8 +1,9 @@
+mod formats;
+
 use std::{collections::HashMap, fs::{self, File}, io, path::{Path, PathBuf}};
 
 use clap::Parser;
 
-use cpio::CPIOArchive;
 use slog::{Drain, o, info};
 use slog_json::Json;
 use std::process::ExitCode;
@@ -11,7 +12,6 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Config {
-    init_file: PathBuf,
     libraries: Vec<PathBuf>,
     binaries: Vec<PathBuf>,
     files: HashMap<String, PathBuf>,
@@ -21,7 +21,6 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            init_file: PathBuf::from("/bin/sh"),
             libraries: Vec::new(),
             binaries: Vec::new(),
             files: HashMap::new(),
@@ -73,11 +72,6 @@ fn main() -> ExitCode {
 
     info!(logger, "Using base directory {}", base_dir.display());
 
-    if let Err(e) = fs::copy(&config.init_file, base_dir.join("init")) {
-        slog::error!(logger, "Failed to copy init file"; "file_name"=>config.init_file.display(),"error"=>e);
-        return ExitCode::FAILURE;
-    }
-
     if let Err(e) = copy_all_to(&logger, &base_dir.join("lib64"), &config.libraries) {
         slog::error!(logger, "Failed to copy libraries"; "error"=>e);
         return ExitCode::FAILURE;
@@ -100,28 +94,23 @@ fn main() -> ExitCode {
         }
     }
 
-    let cpio = match CPIOArchive::from_path(&base_dir) {
-        Ok(cpio) => cpio,
-        Err(e) => {
-            slog::error!(logger, "Failed to generate CPIO archive"; "error"=>e);
+    let extension = config.output_file.extension().expect("Output file must have an extension").to_str().expect("Output file extension must be a valid UTF-8 string");
+
+    let write = match extension {
+        "cpio" => formats::write_cpio(&base_dir, &config.output_file),
+        "ext4" => formats::write_ext4(&base_dir, &config.output_file),
+        _ => {
+            slog::error!(logger, "Unsupported output file extension"; "extension"=>extension);
             return ExitCode::FAILURE;
-        },
+        }
     };
 
-    let mut output_file = match File::create(&config.output_file) {
-        Ok(file) => file,
-        Err(e) => {
-            slog::error!(logger, "Failed to create output file"; "error"=>e);
-            return ExitCode::FAILURE;
-        },
-    };
-    
-    if let Err(e) = cpio.write(&mut output_file) {
-        slog::error!(logger, "Failed to write CPIO archive"; "error"=>e);
+    if let Err(e) = write {
+        slog::error!(logger, "Failed to write output file"; "error"=>e);
         return ExitCode::FAILURE;
     }
 
-    slog::info!(logger, "Successfully wrote CPIO archive to {}", config.output_file.display());
+    slog::info!(logger, "Successfully wrote Filesystem to {}", config.output_file.display());
     ExitCode::SUCCESS
 }
 

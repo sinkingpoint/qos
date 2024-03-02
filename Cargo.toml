@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "assemble-initramfs",
+    "assemble-fs",
     "bytestruct",
     "bytestruct/bytestruct-derive",
     "cpio",

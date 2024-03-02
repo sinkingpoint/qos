@@ -4,7 +4,7 @@ build:
 
 .PHONY: initramfs
 initramfs: build
-	cargo run -p assemble-initramfs -- --config ./assemble-initramfs/config.yaml
+	cargo run -p assemble-fs -- --config ./assemble-fs/initramfs-config.yaml
 
 .PHONY: run
 run: initramfs

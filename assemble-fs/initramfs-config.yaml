@@ -1,9 +1,8 @@
-init_file: ./target/x86_64-unknown-linux-musl/debug/qinit
 libraries:
  - /lib64/libtinfo.so.6
  - /lib64/libc.so.6
  - /lib64/ld-linux-x86-64.so.2
 binaries: []
 files:
-  cat-test: README.md
+  init: ./target/x86_64-unknown-linux-musl/debug/qinit
 output_file: ./initramfs.cpio
