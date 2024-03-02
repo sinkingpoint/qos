@@ -1,0 +1,6 @@
+libraries:
+ - /lib64/ld-linux-x86-64.so.2
+binaries: []
+secure_binaries: [./target/x86_64-unknown-linux-musl/debug/qinit]
+files:
+output_file: ./target/filesystem.ext4

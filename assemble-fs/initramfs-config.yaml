@@ -1,8 +1,7 @@
 libraries:
- - /lib64/libtinfo.so.6
- - /lib64/libc.so.6
  - /lib64/ld-linux-x86-64.so.2
 binaries: []
+secure_binaries: []
 files:
   init: ./target/x86_64-unknown-linux-musl/debug/qinit
-output_file: ./initramfs.cpio
+output_file: ./target/initramfs.cpio

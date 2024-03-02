@@ -14,6 +14,7 @@ use serde::Deserialize;
 struct Config {
     libraries: Vec<PathBuf>,
     binaries: Vec<PathBuf>,
+    secure_binaries: Vec<PathBuf>,
     files: HashMap<String, PathBuf>,
     output_file: PathBuf,
 }
@@ -23,6 +24,7 @@ impl Default for Config {
         Config {
             libraries: Vec::new(),
             binaries: Vec::new(),
+            secure_binaries: Vec::new(),
             files: HashMap::new(),
             output_file: PathBuf::from("./initramfs.cpio"),
         }
@@ -82,8 +84,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    if let Err(e) = copy_all_to(&logger, &base_dir.join("sbin"), &config.secure_binaries) {
+        slog::error!(logger, "Failed to copy sbinaries"; "error"=>e);
+        return ExitCode::FAILURE;
+    }
+
     for (dest, src) in config.files.iter() {
-        if dest.starts_with("/") {
+        if dest.starts_with('/') {
             slog::error!(logger, "Destination path cannot start with /"; "src"=>src.display(), "dest"=>dest);
             return ExitCode::FAILURE;
         }
