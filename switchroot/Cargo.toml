@@ -1,0 +1,10 @@
+[package]
+name = "switchroot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+nix = { workspace = true }
+superblocks = { path = "../superblocks" }
+anyhow = { workspace = true }

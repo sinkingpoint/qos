@@ -14,7 +14,8 @@ members = [
     "qinit",
     "qsh",
     "superblocks", 
-    "tables"
+    "tables",
+    "switchroot",
 ]
 
 [workspace.dependencies]

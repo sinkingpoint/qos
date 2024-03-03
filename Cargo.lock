@@ -318,12 +318,6 @@ dependencies = [
 [[package]]
 name = "qinit"
 version = "0.1.0"
-dependencies = [
- "clap",
- "nix",
- "superblocks",
- "thiserror",
-]
 
 [[package]]
 name = "qsh"
@@ -470,6 +464,16 @@ dependencies = [
  "bytestruct",
  "bytestruct-derive",
  "thiserror",
+]
+
+[[package]]
+name = "switchroot"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "nix",
+ "superblocks",
 ]
 
 [[package]]
