@@ -18,23 +18,22 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let device = Device::new(&cli.device);
-    let filesystem = match device.probe() {
-        Ok(Some(filesystem)) => filesystem,
-        Ok(None) => {
-            eprintln!("mount: Error: Unknown filesystem type");
-            return;
+    let filesystem_type = if cli.types == "auto" {
+        let device = Device::new(&cli.device);
+        match device.probe() {
+            Ok(Some(filesystem)) => filesystem.filesystem_type,
+            Ok(None) => {
+                eprintln!("mount: Error: Unknown filesystem type");
+                return;
+            }
+            Err(errno) => {
+                eprintln!("mount: Error: {}", errno);
+                return;
+            }
         }
-        Err(errno) => {
-            eprintln!("mount: Error: {}", errno);
-            return;
-        }
+    } else {
+        cli.types
     };
-
-    let filesystem_type = Some(match cli.types.as_str() {
-        "auto" => filesystem.filesystem_type.as_str(),
-        _ => cli.types.as_str(),
-    });
 
     let device = cli.device.to_str();
     let mount_point = match cli.mount_point.to_str() {
@@ -44,10 +43,8 @@ fn main() {
             return;
         }
     };
-    
-    let flags = MsFlags::empty();
 
-    match mount::<_, _, _, str>(device, mount_point, filesystem_type, flags, None){
+    match mount::<_, _, str, str>(device, mount_point, Some(&filesystem_type), MsFlags::empty(), None){
         Ok(()) => {}
         Err(errno) => {
             eprintln!("mount: Error: {}", errno);
