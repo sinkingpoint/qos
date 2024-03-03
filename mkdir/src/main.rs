@@ -1,4 +1,8 @@
-use std::{fs::{self, create_dir, create_dir_all, Permissions}, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{
+	fs::{self, create_dir, create_dir_all, Permissions},
+	os::unix::fs::PermissionsExt,
+	path::PathBuf,
+};
 
 use clap::{Arg, ArgAction, Command};
 
@@ -7,16 +11,47 @@ fn main() {
 		.about("make directories")
 		.author("Colin Douch")
 		.version("0.1")
-		.arg(Arg::new("mode").short('m').help("set file mode (as in chmod), not a=rwx - umask").num_args(1).default_value("755"))
-		.arg(Arg::new("parents").short('p').help("no error if existing, make parent directories as needed").long("parents").action(ArgAction::SetTrue))
-		.arg(Arg::new("verbose").short('v').help("print a message for each created directory").long("verbose").action(ArgAction::SetTrue))
-		.arg(Arg::new("directory").required(true).num_args(1..).help("directories to create"))
+		.arg(
+			Arg::new("mode")
+				.short('m')
+				.help("set file mode (as in chmod), not a=rwx - umask")
+				.num_args(1)
+				.default_value("755"),
+		)
+		.arg(
+			Arg::new("parents")
+				.short('p')
+				.help("no error if existing, make parent directories as needed")
+				.long("parents")
+				.action(ArgAction::SetTrue),
+		)
+		.arg(
+			Arg::new("verbose")
+				.short('v')
+				.help("print a message for each created directory")
+				.long("verbose")
+				.action(ArgAction::SetTrue),
+		)
+		.arg(
+			Arg::new("directory")
+				.required(true)
+				.num_args(1..)
+				.help("directories to create"),
+		)
 		.get_matches();
 
-	let mode = match matches.get_one::<String>("mode").map(|m| u32::from_str_radix(m, 8)).unwrap() {
+	let mode = match matches
+		.get_one::<String>("mode")
+		.map(|m| u32::from_str_radix(m, 8))
+		.unwrap()
+	{
 		Ok(mode) => mode,
 		Err(e) => {
-			eprintln!("mkdir: invalid mode '{}': {}", matches.get_one::<String>("mode").unwrap(), e);
+			eprintln!(
+				"mkdir: invalid mode '{}': {}",
+				matches.get_one::<String>("mode").unwrap(),
+				e
+			);
 			return;
 		}
 	};
@@ -39,7 +74,11 @@ fn main() {
 		}
 
 		if let Err(e) = fs::set_permissions(&directory, Permissions::from_mode(mode)) {
-			eprintln!("mkdir: cannot set permissions of directory '{}': {}", directory.display(), e);
+			eprintln!(
+				"mkdir: cannot set permissions of directory '{}': {}",
+				directory.display(),
+				e
+			);
 			continue;
 		}
 
