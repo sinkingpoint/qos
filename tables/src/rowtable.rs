@@ -98,12 +98,7 @@ mod test {
 		table.add_value("world".to_string()).unwrap();
 		table.add_value("foo".to_string()).unwrap();
 		table.add_value("bar".to_string()).unwrap();
-		assert_eq!(
-			table.to_string(),
-			"hello world\nfoo   bar  \n",
-			"\n{}",
-			table.to_string()
-		);
+		assert_eq!(table.to_string(), "hello world\nfoo   bar  \n", "\n{}", table);
 	}
 
 	#[test]
