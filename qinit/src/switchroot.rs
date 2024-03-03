@@ -1,12 +1,12 @@
 use std::{fs, io, path::PathBuf};
 
+use anyhow::{anyhow, Context, Result};
 use nix::{
 	mount::{mount, MsFlags},
 	sys::stat::Mode,
 	unistd::{chroot, mkdir},
 };
 use superblocks::Device;
-use thiserror::Error;
 
 /// A command to switch the root filesystem.
 pub struct SwitchrootCommand {
@@ -32,11 +32,16 @@ impl SwitchrootCommand {
 	}
 
 	/// Mount the new root filesystem.
-	fn mount(&self) -> Result<(), SwitchRootError> {
+	fn mount(&self) -> Result<()> {
 		let device = Device::new(&self.new_root);
 		let probe = match device.probe()? {
 			Some(fstype) => fstype,
-			None => return Err(SwitchRootError::UnsupportedFilesystem),
+			None => {
+				return Err(anyhow!(
+					"{} doesn't contain a recognized filesystem",
+					self.new_root.display()
+				))
+			}
 		};
 
 		println!("Mounting {} to {}", self.new_root.display(), self.mount_path.display());
@@ -47,30 +52,28 @@ impl SwitchrootCommand {
 			MsFlags::empty(),
 			None,
 		)
-		.map_err(|e| {
-			SwitchRootError::Nix(
-				format!(
-					"failed to mount {} at {}",
-					&self.new_root.display(),
-					&self.mount_path.display()
-				),
-				e,
+		.with_context(|| {
+			format!(
+				"failed to mount {} at {}",
+				&self.new_root.display(),
+				&self.mount_path.display()
 			)
 		})?;
 		Ok(())
 	}
 
 	/// Move the device filesystems (/dev, /proc, /sys, /run) into the new root filesystem.
-	fn move_devices(&self) -> Result<(), SwitchRootError> {
+	fn move_devices(&self) -> Result<()> {
 		for mount_dev in ["/dev", "/proc", "/sys", "/run"] {
-			let mount_dev = PathBuf::from(mount_dev);
-			let target = self.mount_path.join(mount_dev.file_name().unwrap());
+			let target = self.mount_path.join(mount_dev);
 			mkdir(&target, Mode::from_bits(0o755).unwrap())
-				.map_err(|e| SwitchRootError::Nix(format!("failed to create {}", &target.display()), e))?;
-			mount::<_, _, str, str>(Some(&mount_dev), &target, None, MsFlags::MS_MOVE, None).map_err(|e| {
-				SwitchRootError::Nix(
-					format!("failed to move {} to {}", &mount_dev.display(), &target.display()),
-					e,
+				.with_context(|| format!("failed to create {}", &target.display()))?;
+
+			mount::<str, _, str, str>(Some(mount_dev), &target, None, MsFlags::MS_MOVE, None).with_context(|| {
+				format!(
+					"failed to move system folder from {} to {}",
+					&mount_dev,
+					&target.display()
 				)
 			})?;
 		}
@@ -79,13 +82,13 @@ impl SwitchrootCommand {
 	}
 
 	/// Run the switchroot command.
-	pub fn run(&self) -> Result<(), SwitchRootError> {
+	pub fn run(&self) -> Result<()> {
 		println!("Switching root to {}", self.new_root.display());
-		fs::create_dir_all(&self.mount_path).unwrap();
+		fs::create_dir_all(&self.mount_path)?;
 
 		self.mount()?;
 		self.move_devices()?;
-		chroot(&self.mount_path).map_err(|e| SwitchRootError::Nix("Failed to chroot".to_string(), e))?;
+		chroot(&self.mount_path).with_context(|| format!("failed to change root to {}", &self.mount_path.display()))?;
 
 		Ok(())
 	}
@@ -101,16 +104,4 @@ fn default_new_root() -> io::Result<Option<PathBuf>> {
 	}
 
 	Ok(None)
-}
-
-#[derive(Error, Debug)]
-pub enum SwitchRootError {
-	#[error("Failed to mount new root: {0}")]
-	Nix(String, nix::Error),
-
-	#[error("Failed to mount new root: {0}")]
-	IO(#[from] io::Error),
-
-	#[error("Unsupported Filesystem to mount")]
-	UnsupportedFilesystem,
 }

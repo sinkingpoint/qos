@@ -7,4 +7,4 @@ edition = "2021"
 clap = { workspace = true }
 nix = { workspace = true }
 superblocks = { path = "../superblocks" }
-thiserror = { workspace = true }
+anyhow = { workspace = true }

@@ -15,7 +15,7 @@ fn create_device_folders() {
 	];
 	for (folder, devtype) in device_folders {
 		std::fs::create_dir_all(folder).unwrap();
-		mount::<_, _, _, str>(Some(devtype), folder, Some(devtype), MsFlags::empty(), None).unwrap();
+		mount::<_, _, _, str>(Some(folder), folder, Some(devtype), MsFlags::empty(), None).unwrap();
 	}
 }
 
