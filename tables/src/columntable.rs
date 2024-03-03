@@ -1,5 +1,5 @@
 use std::fmt::{self, Display, Formatter};
-use thiserror::Error;
+use crate::TableError;
 
 /// A setting that can be applied to a table.
 pub enum TableSetting {
@@ -156,12 +156,6 @@ impl<const COLS: usize> Display for Table<COLS> {
 		}
 		Ok(())
 	}
-}
-
-#[derive(Debug, Error)]
-pub enum TableError {
-	#[error("incorrect number of columns: expected {0}, got {1}")]
-	IncorrectNumberOfColumns(usize, usize),
 }
 
 #[cfg(test)]
