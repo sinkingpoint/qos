@@ -1,7 +1,11 @@
-use std::{fs, os::unix::fs::MetadataExt, path::{Path, PathBuf}};
+use std::{
+	fs,
+	os::unix::fs::MetadataExt,
+	path::{Path, PathBuf},
+};
 
-use clap::{Arg, ArgAction, Command};
 use anyhow::{Context, Result};
+use clap::{Arg, ArgAction, Command};
 use tables::{RowTable, Table};
 
 struct LsArgs {
@@ -26,7 +30,9 @@ fn ls_dir(file: &Path, args: &LsArgs) -> Result<Vec<LsFile>> {
 		let entry = entry?;
 		let name = entry.file_name();
 		if args.all || !name.to_str().unwrap().starts_with('.') {
-			let metadata = entry.metadata().with_context(|| format!("failed to get metadata for {}", name.to_string_lossy()))?;
+			let metadata = entry
+				.metadata()
+				.with_context(|| format!("failed to get metadata for {}", name.to_string_lossy()))?;
 			let ls_file = LsFile {
 				name: entry.path().strip_prefix(file)?.to_path_buf(),
 				mode: metadata.mode(),
@@ -39,7 +45,12 @@ fn ls_dir(file: &Path, args: &LsArgs) -> Result<Vec<LsFile>> {
 
 			result.push(ls_file);
 
-			if args.recursive && entry.file_type().with_context(|| format!("failed to get file type for {}", name.to_string_lossy()))?.is_dir() {
+			if args.recursive
+				&& entry
+					.file_type()
+					.with_context(|| format!("failed to get file type for {}", name.to_string_lossy()))?
+					.is_dir()
+			{
 				result.append(&mut ls_dir(&entry.path(), args)?);
 			}
 		}
@@ -51,7 +62,10 @@ fn ls_dir(file: &Path, args: &LsArgs) -> Result<Vec<LsFile>> {
 fn ls_file(file: &Path) -> Result<LsFile> {
 	let stat = fs::metadata(file).with_context(|| format!("failed to get metadata for {}", file.display()))?;
 	Ok(LsFile {
-		name: file.strip_prefix("./").with_context(|| "failed to strip `./` prefix")?.to_path_buf(),
+		name: file
+			.strip_prefix("./")
+			.with_context(|| "failed to strip `./` prefix")?
+			.to_path_buf(),
 		mode: stat.mode(),
 		nlink: stat.nlink(),
 		uid: stat.uid(),
@@ -74,16 +88,33 @@ fn ls(file: &Path, args: &LsArgs) -> Result<Vec<LsFile>> {
 
 fn main() {
 	let matches = Command::new("ls")
-								.about("List files in a directory")
-								.author("Colin Douch")
-								.version("1.0")
-								.arg(Arg::new("file").num_args(0..).default_value("."))
-								.arg(Arg::new("long").short('l').long("long").help("use long listing format").action(ArgAction::SetTrue))
-								.arg(Arg::new("recursive").short('R').long("recursive").help("list subdirectories recursively").action(ArgAction::SetTrue))
-								.arg(Arg::new("all").short('a').long("all").help("do not ignore entries starting with .").action(ArgAction::SetTrue))
-								.get_matches();
+		.about("List files in a directory")
+		.author("Colin Douch")
+		.version("1.0")
+		.arg(Arg::new("file").num_args(0..).default_value("."))
+		.arg(
+			Arg::new("long")
+				.short('l')
+				.long("long")
+				.help("use long listing format")
+				.action(ArgAction::SetTrue),
+		)
+		.arg(
+			Arg::new("recursive")
+				.short('R')
+				.long("recursive")
+				.help("list subdirectories recursively")
+				.action(ArgAction::SetTrue),
+		)
+		.arg(
+			Arg::new("all")
+				.short('a')
+				.long("all")
+				.help("do not ignore entries starting with .")
+				.action(ArgAction::SetTrue),
+		)
+		.get_matches();
 
-								
 	let args = LsArgs {
 		all: *matches.get_one("all").expect("all is missing"),
 		recursive: *matches.get_one("recursive").expect("recursive is missing"),
@@ -103,24 +134,26 @@ fn main() {
 		if long {
 			let mut table = Table::new();
 			for file in files {
-				table.add_row([
-					file.mode.to_string(),
-					file.nlink.to_string(),
-					file.uid.to_string(),
-					file.gid.to_string(),
-					file.size.to_string(),
-					file.mtime.to_string(),
-					file.name.to_string_lossy().to_string(),
-				]).unwrap();
+				table
+					.add_row([
+						file.mode.to_string(),
+						file.nlink.to_string(),
+						file.uid.to_string(),
+						file.gid.to_string(),
+						file.size.to_string(),
+						file.mtime.to_string(),
+						file.name.to_string_lossy().to_string(),
+					])
+					.unwrap();
 			}
-	
+
 			println!("{}", table);
 		} else {
 			let mut table = RowTable::new(238);
 			for file in files {
 				table.add_value(file.name.to_string_lossy().to_string()).unwrap();
 			}
-	
+
 			println!("{}", table);
 		}
 	}

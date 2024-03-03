@@ -1,5 +1,5 @@
-use std::fmt::{self, Display, Formatter};
 use crate::TableError;
+use std::fmt::{self, Display, Formatter};
 
 /// A setting that can be applied to a table.
 pub enum TableSetting {
@@ -22,7 +22,6 @@ pub struct Table<const COLS: usize> {
 	widths: [usize; COLS],
 
 	// Settings
-
 	/// Add a seperator between the headers and the rows.
 	header_seperator: bool,
 
@@ -30,7 +29,7 @@ pub struct Table<const COLS: usize> {
 	column_seperators: bool,
 
 	/// Add a border around the table.
-	border: bool
+	border: bool,
 }
 
 impl<const COLS: usize> Default for Table<COLS> {
@@ -98,7 +97,7 @@ impl<const COLS: usize> Table<COLS> {
 		for (i, cell) in row.iter().enumerate() {
 			self.widths[i] = self.widths[i].max(cell.len());
 		}
-		
+
 		self.rows.push(row);
 		Ok(())
 	}
@@ -109,8 +108,8 @@ impl<const COLS: usize> Table<COLS> {
 		}
 
 		for (i, cell) in row.iter().enumerate() {
-			write!(f, "{:width$}", cell, width=self.widths[i])?;
-			if  i != row.len()-1 {
+			write!(f, "{:width$}", cell, width = self.widths[i])?;
+			if i != row.len() - 1 {
 				write!(f, " ")?;
 				if self.column_seperators {
 					write!(f, "| ")?;
@@ -165,96 +164,155 @@ mod tests {
 	#[test]
 	fn test_table() {
 		let mut table = Table::new_with_headers(["Name".to_string(), "Age".to_string(), "Occupation".to_string()]);
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
 
 		let output = format!("{}", table);
-		assert_eq!(output, "Name  Age Occupation       \n\
+		assert_eq!(
+			output,
+			"Name  Age Occupation       \n\
 							Colin 25  Software Engineer\n\
 							John  30  Doctor           \n\
-							Jane  28  Nurse            \n");
+							Jane  28  Nurse            \n"
+		);
 	}
 
 	#[test]
 	fn test_table_with_border() {
 		let mut table = Table::new_with_headers(["Name".to_string(), "Age".to_string(), "Occupation".to_string()]);
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
 		table.with_setting(TableSetting::Border);
 
 		let output = format!("{}", table);
-		assert_eq!(output, "+-----------------------------+\n\
+		assert_eq!(
+			output,
+			"+-----------------------------+\n\
 							| Name  Age Occupation        |\n\
 							| Colin 25  Software Engineer |\n\
 							| John  30  Doctor            |\n\
 							| Jane  28  Nurse             |\n\
-							+-----------------------------+\n", "\n{}", output);
+							+-----------------------------+\n",
+			"\n{}",
+			output
+		);
 	}
 
 	#[test]
 	fn test_table_with_header_seperator() {
 		let mut table = Table::new_with_headers(["Name".to_string(), "Age".to_string(), "Occupation".to_string()]);
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
 		table.with_setting(TableSetting::HeaderSeperator);
 
 		let output = format!("{}", table);
-		assert_eq!(output, "Name  Age Occupation       \n\
+		assert_eq!(
+			output,
+			"Name  Age Occupation       \n\
 							---------------------------\n\
 							Colin 25  Software Engineer\n\
 							John  30  Doctor           \n\
-							Jane  28  Nurse            \n");
+							Jane  28  Nurse            \n"
+		);
 	}
 
 	#[test]
 	fn test_table_with_column_seperators() {
 		let mut table = Table::new_with_headers(["Name".to_string(), "Age".to_string(), "Occupation".to_string()]);
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
 		table.with_setting(TableSetting::ColumnSeperators);
 
 		let output = format!("{}", table);
-		assert_eq!(output, "Name  | Age | Occupation       \n\
+		assert_eq!(
+			output,
+			"Name  | Age | Occupation       \n\
 							Colin | 25  | Software Engineer\n\
 							John  | 30  | Doctor           \n\
-							Jane  | 28  | Nurse            \n");
+							Jane  | 28  | Nurse            \n"
+		);
 	}
 
 	#[test]
 	fn test_table_with_all_settings() {
 		let mut table = Table::new_with_headers(["Name".to_string(), "Age".to_string(), "Occupation".to_string()]);
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
-		table.with_setting(TableSetting::Border)
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
+		table
+			.with_setting(TableSetting::Border)
 			.with_setting(TableSetting::HeaderSeperator)
 			.with_setting(TableSetting::ColumnSeperators);
 
 		let output = format!("{}", table);
-		assert_eq!(output, "+---------------------------------+\n\
+		assert_eq!(
+			output,
+			"+---------------------------------+\n\
 							| Name  | Age | Occupation        |\n\
 							|---------------------------------|\n\
 							| Colin | 25  | Software Engineer |\n\
 							| John  | 30  | Doctor            |\n\
 							| Jane  | 28  | Nurse             |\n\
-							+---------------------------------+\n", "\n{}", output);
+							+---------------------------------+\n",
+			"\n{}",
+			output
+		);
 	}
 
 	#[test]
 	fn test_table_without_headers() {
 		let mut table = Table::new();
-		table.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()]).unwrap();
-		table.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()]).unwrap();
-		table.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()]).unwrap();
+		table
+			.add_row(["Colin".to_string(), "25".to_string(), "Software Engineer".to_string()])
+			.unwrap();
+		table
+			.add_row(["John".to_string(), "30".to_string(), "Doctor".to_string()])
+			.unwrap();
+		table
+			.add_row(["Jane".to_string(), "28".to_string(), "Nurse".to_string()])
+			.unwrap();
 		table.headers = None;
 
 		let output = format!("{}", table);
-		assert_eq!(output, "Colin 25 Software Engineer\n\
+		assert_eq!(
+			output,
+			"Colin 25 Software Engineer\n\
 							John  30 Doctor           \n\
-							Jane  28 Nurse            \n");
+							Jane  28 Nurse            \n"
+		);
 	}
 }
