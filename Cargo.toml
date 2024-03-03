@@ -8,6 +8,7 @@ members = [
     "cpio",
     "escapes",
     "escapes/escapes-derive",
+    "ls",
     "mount",
     "qinit",
     "qsh",
