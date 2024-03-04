@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use nix::{
 	mount::{mount, MsFlags},
 	sys::stat::Mode,
-	unistd::{chroot, execve, mkdir},
+	unistd::{chdir, chroot, execve, mkdir},
 };
 use superblocks::Device;
 
@@ -44,7 +44,6 @@ impl SwitchrootCommand {
 			}
 		};
 
-		println!("Mounting {} to {}", self.new_root.display(), self.mount_path.display());
 		mount::<_, _, _, str>(
 			Some(&self.new_root),
 			&self.mount_path,
@@ -64,7 +63,7 @@ impl SwitchrootCommand {
 
 	/// Move the device filesystems (/dev, /proc, /sys, /run) into the new root filesystem.
 	fn move_devices(&self) -> Result<()> {
-		for mount_dev in ["/dev", "/proc", "/sys", "/run"] {
+		for mount_dev in ["/dev", "/proc", "/sys", "/run", "/tmp"] {
 			let mount_dev = PathBuf::from(mount_dev);
 			let target = self.mount_path.join(mount_dev.file_name().unwrap());
 
@@ -92,11 +91,22 @@ impl SwitchrootCommand {
 
 		self.mount()?;
 		self.move_devices()?;
-		chroot(&self.mount_path).with_context(|| format!("failed to change root to {}", &self.mount_path.display()))?;
 
-		let qinit = CString::new("/sbin/qinit")?;
-		let args = [&CString::new("qinit")?, &CString::new("init")?];
-		execve::<_, &CString>(&qinit, &args, &[]).with_context(|| "failed to execute /sbin/init")?;
+		chdir(&self.mount_path).with_context(|| "failed to change directory to new root")?;
+
+		// Move the new root filesystem to the root of the filesystem.
+		mount::<_, _, str, str>(Some(&self.mount_path), "/", None, MsFlags::MS_MOVE, None)
+			.with_context(|| "failed to move root filesystem")?;
+
+		chroot(".")?;
+		chdir("/")?;
+
+		execve::<_, &CString>(
+			&CString::new("/sbin/qinit")?,
+			&[&CString::new("qinit")?, &CString::new("init")?],
+			&[],
+		)
+		.with_context(|| "failed to execute /sbin/init")?;
 
 		Ok(())
 	}

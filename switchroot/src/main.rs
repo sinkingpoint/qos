@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs::create_dir_all, path::PathBuf};
 
 use clap::{Arg, Command};
 use nix::mount::{mount, MsFlags};
@@ -14,7 +14,7 @@ fn create_device_folders() {
 		("/tmp", "tmpfs"),
 	];
 	for (folder, devtype) in device_folders {
-		std::fs::create_dir_all(folder).unwrap();
+		create_dir_all(folder).unwrap();
 		mount::<_, _, _, str>(Some(folder), folder, Some(devtype), MsFlags::empty(), None).unwrap();
 	}
 }
