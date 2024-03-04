@@ -174,6 +174,9 @@ impl Process {
 		match status {
 			WaitStatus::Exited(_, code) => {
 				self.state = ProcessState::Terminated(ExitCode::Success(code));
+				if code == 127 {
+					eprintln!("qsh: {}: command not found", self.argv[0]);
+				}
 			}
 			WaitStatus::Signaled(_, signal, _) => {
 				self.state = ProcessState::Terminated(ExitCode::Err(Errno::from_i32(signal as i32)));
