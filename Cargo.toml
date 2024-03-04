@@ -8,14 +8,15 @@ members = [
     "cpio",
     "escapes",
     "escapes/escapes-derive",
+    "getty",
     "ls",
     "mount",
     "mkdir",
     "qinit",
     "qsh",
-    "superblocks", 
-    "tables",
+    "superblocks",
     "switchroot",
+    "tables",
 ]
 
 [workspace.dependencies]

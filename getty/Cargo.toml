@@ -1,0 +1,12 @@
+[package]
+name = "getty"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+nix = { workspace = true }
+anyhow = { workspace = true }
+slog = { workspace = true }
+slog-async = { workspace = true }
+slog-json = { workspace = true }

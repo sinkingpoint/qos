@@ -219,6 +219,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "getty"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "nix",
+ "slog",
+ "slog-async",
+ "slog-json",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -318,6 +330,9 @@ dependencies = [
 [[package]]
 name = "qinit"
 version = "0.1.0"
+dependencies = [
+ "nix",
+]
 
 [[package]]
 name = "qsh"
