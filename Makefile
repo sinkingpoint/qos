@@ -16,7 +16,8 @@ run: initramfs rootfs
 		-m 2G \
 		-kernel /boot/vmlinuz-6.7.6-200.fc39.x86_64 \
 		-initrd ./target/initramfs.cpio \
-		-display none \
-		-serial stdio -append "console=ttyS0 root=/dev/sda" \
+		-echr 2 \
+		-display curses \
+		-append "console=ttyS0 root=/dev/sda" \
 		-drive format=raw,file=./target/filesystem.ext4 \
 		--enable-kvm
