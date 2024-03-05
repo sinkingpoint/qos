@@ -1,0 +1,10 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slog = { workspace = true }
+slog-async = { workspace = true }
+slog-json = { workspace = true }
+nix = { workspace = true }

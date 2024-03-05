@@ -3,20 +3,23 @@ mod parser;
 mod process;
 mod shell;
 
-use std::os::fd::{AsFd, AsRawFd};
+use std::{
+	io::{stderr, stdin},
+	os::fd::{AsFd, AsRawFd},
+};
 
+use common::obs::assemble_logger;
 use nix::{
 	sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg},
 	unistd,
 };
 
 use shell::Shell;
-use slog::{error, o, Drain};
-use slog_json::Json;
+use slog::error;
 
 fn main() {
-	let logger = assemble_logger();
-	let reader = std::io::stdin();
+	let logger = assemble_logger(stderr());
+	let reader = stdin();
 
 	if !isatty(&reader) {
 		error!(logger, "stdin is not a tty");
@@ -47,11 +50,4 @@ fn main() {
 
 fn isatty<T: AsFd>(fd: T) -> bool {
 	unistd::isatty(fd.as_fd().as_raw_fd()).unwrap_or(false)
-}
-
-fn assemble_logger() -> slog::Logger {
-	let drain = slog_async::Async::new(Json::new(std::io::stderr()).add_default_keys().build().fuse())
-		.build()
-		.fuse();
-	slog::Logger::root(drain, o!())
 }

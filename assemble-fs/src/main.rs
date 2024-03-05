@@ -3,14 +3,14 @@ mod formats;
 use std::{
 	collections::HashMap,
 	fs::{self, File},
-	io,
+	io::{self, stdout},
 	path::{Path, PathBuf},
 };
 
 use clap::Parser;
 
-use slog::{info, o, Drain};
-use slog_json::Json;
+use common::obs::assemble_logger;
+use slog::info;
 use std::process::ExitCode;
 
 use serde::Deserialize;
@@ -62,7 +62,7 @@ struct Cli {
 fn main() -> ExitCode {
 	let cli = Cli::parse();
 
-	let logger = assemble_logger();
+	let logger = assemble_logger(stdout());
 
 	let config = match Config::load(&PathBuf::from(cli.config)) {
 		Ok(config) => config,
@@ -148,15 +148,6 @@ fn copy_all_to(logger: &slog::Logger, dest_dir: &Path, files: &[PathBuf]) -> io:
 	}
 
 	Ok(())
-}
-
-// Create a slog logger that writes JSON to stderr.
-// TODO: I assume that we'll move this to a separate module when we get more binaries.
-fn assemble_logger() -> slog::Logger {
-	let drain = slog_async::Async::new(Json::new(std::io::stderr()).add_default_keys().build().fuse())
-		.build()
-		.fuse();
-	slog::Logger::root(drain, o!())
 }
 
 // Generate a random path in /tmp/assemble-initramfsXXXXX where XXXXX is a random number.

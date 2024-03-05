@@ -4,6 +4,9 @@ use std::{
 	path::PathBuf,
 };
 
+use common::obs::assemble_logger;
+use slog::error;
+
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use nix::{
@@ -16,8 +19,6 @@ use nix::{
 	},
 	unistd::{close, dup2, execve},
 };
-use slog::{error, o, Drain};
-use slog_json::Json;
 
 fn ignore_signals() -> Result<()> {
 	// Ignore all signals.
@@ -28,13 +29,6 @@ fn ignore_signals() -> Result<()> {
 	}
 
 	Ok(())
-}
-
-fn assemble_logger() -> slog::Logger {
-	let drain = slog_async::Async::new(Json::new(stderr()).add_default_keys().build().fuse())
-		.build()
-		.fuse();
-	slog::Logger::root(drain, o!())
 }
 
 fn print_issue(tty: &str) -> Result<()> {
@@ -114,7 +108,7 @@ fn main() {
 		.arg(Arg::new("tty").help("The tty to open").required(true).index(1))
 		.get_matches();
 
-	let logger = assemble_logger();
+	let logger = assemble_logger(stderr());
 	let login_program: &String = matches.get_one("login-program").unwrap();
 	let tty: &String = matches.get_one("tty").unwrap();
 

@@ -8,5 +8,4 @@ clap = { workspace = true }
 nix = { workspace = true }
 anyhow = { workspace = true }
 slog = { workspace = true }
-slog-async = { workspace = true }
-slog-json = { workspace = true }
+common = { path = "../common" }

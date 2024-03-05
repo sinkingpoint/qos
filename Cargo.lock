@@ -61,6 +61,7 @@ name = "assemble-fs"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "common",
  "cpio",
  "rand",
  "serde",
@@ -139,6 +140,16 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
+
+[[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "nix",
+ "slog",
+ "slog-async",
+ "slog-json",
+]
 
 [[package]]
 name = "cpio"
@@ -224,10 +235,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "common",
  "nix",
  "slog",
- "slog-async",
- "slog-json",
 ]
 
 [[package]]
@@ -338,6 +348,7 @@ dependencies = [
 name = "qsh"
 version = "0.1.0"
 dependencies = [
+ "common",
  "escapes",
  "nix",
  "once_cell",

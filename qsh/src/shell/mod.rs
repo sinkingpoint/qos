@@ -1,3 +1,4 @@
+use common::io::IOTriple;
 use std::{collections::HashMap, io::Write};
 
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
 		consumers::{Command, Pipeline, QuotedOrUnquotedString},
 		types::Token,
 	},
-	process::{IOTriple, Process, ProcessPipeline, WaitError},
+	process::{Process, ProcessPipeline, WaitError},
 };
 
 pub struct Shell {

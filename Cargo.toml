@@ -5,6 +5,7 @@ members = [
     "assemble-fs",
     "bytestruct",
     "bytestruct/bytestruct-derive",
+    "common",
     "cpio",
     "escapes",
     "escapes/escapes-derive",
