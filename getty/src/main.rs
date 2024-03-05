@@ -1,10 +1,10 @@
 use std::{
 	ffi::{CStr, CString},
-	io::{stderr, stdin, stdout, Write},
+	io::stderr,
 	path::PathBuf,
 };
 
-use common::obs::assemble_logger;
+use common::{io::IOTriple, obs::assemble_logger};
 use slog::error;
 
 use anyhow::{Context, Result};
@@ -82,17 +82,6 @@ fn open_tty(tty: &str) -> Result<()> {
 	Ok(())
 }
 
-fn read_username(prompt: &str) -> Result<String> {
-	// Read a username from the TTY.
-	print!("{} ", prompt);
-	stdout().flush()?;
-
-	let mut username = String::new();
-	stdin().read_line(&mut username)?;
-
-	Ok(username)
-}
-
 fn main() {
 	let matches = Command::new("getty")
 		.author("Colin Douch")
@@ -131,7 +120,8 @@ fn main() {
 	// Manually drop it here so that the compiler can tell us off if we try to use it again.
 	drop(logger);
 
-	let username = match read_username("login:") {
+	let triple = IOTriple::default();
+	let username = match triple.prompt("login:") {
 		Ok(username) => username,
 		Err(e) => {
 			eprintln!("Failed to read username: {}", e);

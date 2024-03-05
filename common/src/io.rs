@@ -1,6 +1,6 @@
 use std::{
 	fs::File,
-	io::{Read, Write},
+	io::{self, BufRead, BufReader, Read, Write},
 	os::fd::FromRawFd,
 };
 
@@ -67,6 +67,14 @@ impl IOTriple {
 		};
 
 		Ok((read, write))
+	}
+
+	/// Prompts the user for input on the stdout fd, reads a line from the stdin fd, and returns the input.
+	pub fn prompt(&self, prompt: &str) -> io::Result<String> {
+		write!(self.stdout(), "{} ", prompt)?;
+		let mut input = String::new();
+		BufReader::new(self.stdin()).read_line(&mut input)?;
+		Ok(input)
 	}
 }
 
