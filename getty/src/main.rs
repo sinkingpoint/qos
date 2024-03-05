@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::{Arg, Command};
 use nix::{
-	fcntl::{open, OFlag},
+	fcntl::{fcntl, open, FcntlArg, OFlag},
 	libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO},
 	sys::{
 		signal::{signal, SigHandler, Signal},
@@ -74,10 +74,10 @@ fn open_tty(tty: &str) -> Result<()> {
 	}
 
 	// Make sure that stdin is opened in R/W mode.
-	// let options = fcntl(STDIN_FILENO, FcntlArg::F_GETFD).with_context(|| "failed to get file descriptor flags")?;
-	// if !OFlag::from_bits_retain(options).contains(OFlag::O_RDWR) {
-	// 	return Err(anyhow::anyhow!("stdin is not opened in R/W mode"));
-	// }
+	let options = fcntl(STDIN_FILENO, FcntlArg::F_GETFL).with_context(|| "failed to get file descriptor flags")?;
+	if !OFlag::from_bits_retain(options).contains(OFlag::O_RDWR) {
+		return Err(anyhow::anyhow!("stdin is not opened in R/W mode"));
+	}
 
 	// Close the existing stdout and stderr, and copy the new TTY to them.
 	close(STDOUT_FILENO).with_context(|| "failed to close stdout")?;
