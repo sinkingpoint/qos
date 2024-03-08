@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "assemble-fs",
+    "auth",
     "bytestruct",
     "bytestruct/bytestruct-derive",
     "common",
@@ -11,6 +12,7 @@ members = [
     "escapes/escapes-derive",
     "getty",
     "ls",
+    "login",
     "mount",
     "mkdir",
     "qinit",

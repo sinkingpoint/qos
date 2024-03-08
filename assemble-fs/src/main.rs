@@ -100,13 +100,16 @@ fn main() -> ExitCode {
 	}
 
 	for (dest, src) in config.files.iter() {
-		if dest.starts_with('/') {
-			slog::error!(logger, "Destination path cannot start with /"; "src"=>src.display(), "dest"=>dest);
-			return ExitCode::FAILURE;
+		let dest = base_dir.join(dest.trim_start_matches('/'));
+		if let Some(parent) = dest.parent() {
+			if let Err(e) = fs::create_dir_all(dest.parent().unwrap()) {
+				slog::error!(logger, "Failed to create parent directory"; "path"=>parent.display(), "error"=>e);
+				return ExitCode::FAILURE;
+			}
 		}
 
-		if let Err(e) = fs::copy(src, base_dir.join(dest)) {
-			slog::error!(logger, "Failed to copy file"; "src"=>src.display(), "dest"=>dest, "error"=>e);
+		if let Err(e) = fs::copy(src, &dest) {
+			slog::error!(logger, "Failed to copy file"; "src"=>src.display(), "dest"=>dest.display(), "error"=>e);
 			return ExitCode::FAILURE;
 		}
 	}

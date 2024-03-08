@@ -3,8 +3,11 @@ libraries:
 binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qsh
   - ./target/x86_64-unknown-linux-musl/debug/ls
+  - ./target/x86_64-unknown-linux-musl/debug/login
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/getty
 files:
+  etc/passwd: configs/passwd
+  etc/shadow: configs/shadow
 output_file: ./target/filesystem.ext4
