@@ -1,0 +1,12 @@
+[package]
+name = "login"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+anyhow = { workspace = true }
+nix = { workspace = true }
+common = { path = "../common" }
+slog = { workspace = true }
+auth = { path = "../auth" }

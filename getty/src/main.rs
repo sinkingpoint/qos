@@ -133,7 +133,7 @@ fn main() {
 	let command = CString::new(login_program.as_str()).expect("login program contains null bytes");
 	let args = [
 		command.as_c_str(),
-		&CString::new(username).expect("username contains null bytes"),
+		&CString::new(username.trim()).expect("username contains null bytes"),
 	];
 
 	if let Err(e) = execve::<_, &CStr>(&command, &args, &[]) {
