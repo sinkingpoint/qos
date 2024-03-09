@@ -10,9 +10,11 @@ use clap::{Arg, Command};
 use common::{io::IOTriple, obs::assemble_logger};
 use nix::{
 	sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg, Termios},
-	unistd::execvp,
+	unistd::{chdir, execvp, setgid, setuid, Gid, Uid},
 };
 use slog::error;
+
+const PASSWORD_ATTEMPTS: usize = 3;
 
 fn disable_echo() -> Result<Termios> {
 	let old_attrs = tcgetattr(stdin()).with_context(|| "failed to get terminal attributes")?;
@@ -48,25 +50,6 @@ fn main() -> ExitCode {
 		}
 	};
 
-	let triple = IOTriple::default();
-	let password = match triple.prompt("password:") {
-		Ok(pass) => pass,
-		Err(e) => {
-			error!(logger, "Failed to read password"; "error" => format!("{:?}", e));
-			return ExitCode::FAILURE;
-		}
-	};
-
-	let password = password.trim_end_matches('\n');
-
-	match tcsetattr(stdin(), SetArg::TCSANOW, &old_attrs) {
-		Ok(_) => (),
-		Err(e) => {
-			error!(logger, "Failed to restore terminal attributes"; "error" => format!("{:?}", e));
-			return ExitCode::FAILURE;
-		}
-	}
-
 	let user: User = match User::from_username(username) {
 		Ok(Some(user)) => user,
 		Ok(None) => {
@@ -91,17 +74,44 @@ fn main() -> ExitCode {
 		}
 	};
 
-	match shadow.verify_password(password) {
-		Ok(true) => (),
-		Ok(false) => {
-			error!(logger, "Invalid password"; "username" => username);
-			return ExitCode::FAILURE;
+	let mut successful = false;
+	for _ in 0..PASSWORD_ATTEMPTS {
+		let triple = IOTriple::default();
+		let password = match triple.prompt("password:") {
+			Ok(pass) => pass,
+			Err(e) => {
+				error!(logger, "Failed to read password"; "error" => format!("{:?}", e));
+				return ExitCode::FAILURE;
+			}
+		};
+
+		match tcsetattr(stdin(), SetArg::TCSANOW, &old_attrs) {
+			Ok(_) => (),
+			Err(e) => {
+				error!(logger, "Failed to restore terminal attributes"; "error" => format!("{:?}", e));
+				return ExitCode::FAILURE;
+			}
 		}
-		Err(e) => {
-			error!(logger, "Failed to verify password"; "username" => username, "error" => format!("{:?}", e));
-			return ExitCode::FAILURE;
-		}
-	};
+
+		match shadow.verify_password(&password) {
+			Ok(true) => {
+				successful = true;
+				break;
+			}
+			Ok(false) => {
+				error!(logger, "Invalid password"; "username" => username);
+			}
+			Err(e) => {
+				error!(logger, "Failed to verify password"; "username" => username, "error" => format!("{:?}", e));
+				return ExitCode::FAILURE;
+			}
+		};
+	}
+
+	if !successful {
+		error!(logger, "Failed to login"; "username" => username);
+		return ExitCode::FAILURE;
+	}
 
 	let shell = match CString::new(user.shell.to_string_lossy().into_owned()) {
 		Ok(shell) => shell,
@@ -112,6 +122,31 @@ fn main() -> ExitCode {
 	};
 
 	println!("\nWelcome to qos, {}!", username);
+
+	// Set the user's gid and uid. We have to `setgid` first, because once we drop
+	// out of root, we won't be able to setgid anymore.
+	match setgid(Gid::from_raw(user.gid)) {
+		Ok(_) => (),
+		Err(e) => {
+			error!(logger, "Failed to setgid"; "error" => format!("{:?}", e));
+			return ExitCode::FAILURE;
+		}
+	}
+
+	match setuid(Uid::from_raw(user.uid)) {
+		Ok(_) => (),
+		Err(e) => {
+			error!(logger, "Failed to setuid"; "error" => format!("{:?}", e));
+			return ExitCode::FAILURE;
+		}
+	}
+
+	match chdir(&user.home) {
+		Ok(_) => (),
+		Err(e) => {
+			error!(logger, "Failed to chdir to users home"; "error" => format!("{:?}", e));
+		}
+	}
 
 	match execvp::<&CStr>(&shell, &[]) {
 		Ok(_) => (),

@@ -74,7 +74,7 @@ impl IOTriple {
 		write!(self.stdout(), "{} ", prompt)?;
 		let mut input = String::new();
 		BufReader::new(self.stdin()).read_line(&mut input)?;
-		Ok(input)
+		Ok(input.trim_end().to_owned())
 	}
 }
 
