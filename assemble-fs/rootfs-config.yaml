@@ -10,4 +10,5 @@ secure_binaries:
 files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
+  etc/group: configs/group
 output_file: ./target/filesystem.ext4

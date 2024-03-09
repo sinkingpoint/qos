@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use auth::{Group, User};
 use clap::{Arg, ArgAction, Command};
 use tables::{RowTable, Table};
 
@@ -134,12 +135,22 @@ fn main() {
 		if long {
 			let mut table = Table::new();
 			for file in files {
+				let username = match User::from_uid(file.uid) {
+					Ok(Some(user)) => user.username,
+					_ => file.uid.to_string(),
+				};
+
+				let group = match Group::from_gid(file.gid) {
+					Ok(Some(group)) => group.name,
+					_ => file.gid.to_string(),
+				};
+
 				table
 					.add_row([
 						file.mode.to_string(),
 						file.nlink.to_string(),
-						file.uid.to_string(),
-						file.gid.to_string(),
+						username,
+						group,
 						file.size.to_string(),
 						file.mtime.to_string(),
 						file.name.to_string_lossy().to_string(),

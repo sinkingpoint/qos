@@ -7,3 +7,4 @@ edition = "2021"
 clap = { workspace = true }
 anyhow = { workspace = true }
 tables = { path = "../tables" }
+auth = { path = "../auth" }

@@ -9,6 +9,9 @@ const PASSWD_PATH: &str = "/etc/passwd";
 /// The path to the shadow file.
 const SHADOW_PATH: &str = "/etc/shadow";
 
+/// The path to the group file.
+const GROUP_PATH: &str = "/etc/group";
+
 // Passwd file lines are in the format `<username>:<password>:<uid>:<gid>:<group>:<home>:<shell>`
 // Here we define the indices of each field in the colon separated passwd file line for easy access.
 
@@ -211,6 +214,45 @@ impl HashedPassword {
 	}
 }
 
+/// A group on the system, that exists in the group file.
+pub struct Group {
+	/// The GID of the group.
+	pub gid: u32,
+
+	/// The name of the group.
+	pub name: String,
+}
+
+impl Group {
+	/// Parses a line from the group file into a `Group`.
+	fn from_group_line(line: &str) -> Result<Self, AuthError> {
+		let parts: Vec<&str> = line.split(':').collect();
+		if parts.len() != 4 {
+			return Err(AuthError::Malformed("malformed group entry".to_owned()));
+		}
+
+		let name = parts[0].to_string();
+		let gid = parts[2]
+			.parse()
+			.map_err(|_| AuthError::Malformed(format!("malformed gid: {}", parts[2])))?;
+
+		Ok(Self { gid, name })
+	}
+
+	/// Returns the group with the given GID, if it exists.
+	pub fn from_gid(gid: u32) -> Result<Option<Self>, AuthError> {
+		let group = read_to_string(GROUP_PATH)?;
+		for line in group.lines() {
+			let group = Self::from_group_line(line)?;
+			if group.gid == gid {
+				return Ok(Some(group));
+			}
+		}
+
+		Ok(None)
+	}
+}
+
 #[derive(Error, Debug)]
 pub enum AuthError {
 	#[error("I/O error: {0}")]
@@ -267,5 +309,14 @@ mod test {
 
 		let hash = HashedPassword::from_crypt_password("$6$6K5C/5JmLlz2u620$zdVIE6PI0EpEtinzxU8eo7NIncxRnMCTZgIltb9voa8.YktocGmjUQp2RdENvWj0LV/sGt1NnGMj9Xpjvga4e/").unwrap();
 		assert!(hash.verify("test").unwrap())
+	}
+
+	#[test]
+	fn test_group() {
+		let group = Group::from_group_line("root:x:0:").unwrap();
+		assert_eq!(group.gid, 0);
+		assert_eq!(group.name, "root");
+
+		assert!(Group::from_group_line("YY").is_err());
 	}
 }

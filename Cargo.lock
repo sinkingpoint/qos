@@ -306,6 +306,7 @@ name = "ls"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "auth",
  "clap",
  "tables",
 ]
