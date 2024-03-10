@@ -1,9 +1,20 @@
-use std::ffi::{CStr, CString};
+mod config;
 
-use nix::unistd::execve;
+use std::{io::stderr, path::PathBuf};
+
+use common::obs::assemble_logger;
+use config::load_config;
+use slog::error;
 
 fn main() {
-	let command = CString::new("/sbin/getty").unwrap();
-	let args = [command.as_c_str(), &CString::new("/dev/tty1").unwrap()];
-	execve::<_, &CStr>(&command, &args, &[]).unwrap();
+	let logger = assemble_logger(stderr());
+
+	let config_directories = ["./configs/services"].map(PathBuf::from);
+
+	let (config, errors) = load_config(config_directories);
+	if errors.is_error() {
+		error!(logger, "Error loading configuration"; "errors" => format!("{:?}", errors));
+	}
+
+	let errors = config.validate();
 }

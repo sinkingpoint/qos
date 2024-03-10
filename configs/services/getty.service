@@ -1,0 +1,10 @@
+name = "getty-${TTY}"
+description = "Getty on ${TTY}"
+
+[service]
+command = "/sbin/getty ${TTY}"
+
+[[arguments]]
+name = "TTY"
+description = "The tty to run getty on"
+required = true

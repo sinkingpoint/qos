@@ -29,13 +29,4 @@ TTY = "/dev/ttys0"
 
 When a sphere is started, it will start all the services defined in that sphere.
 
-## Commands
-
-Qinit will also have some commands. The first we'll implement will be `qinit switchroot [filesystem]` which will:
-
- - Mount the new file system
- - Create new /dev/ and /proc
- - Change the root to the new filesystem
- - Unmount the existing filesystem
- - Exec qinit in the new filesystem
 

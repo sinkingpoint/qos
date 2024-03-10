@@ -1,0 +1,4 @@
+description = "Getty on ${TTY}"
+
+[service]
+command = "/sbin/getty ${TTY}"
