@@ -66,6 +66,10 @@ impl RowTable {
 
 impl Display for RowTable {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		if self.values.is_empty() {
+			return Ok(());
+		}
+
 		let max_column_widths = self.max_column_widths_with_chunk_size(self.chunk_size);
 		for chunks in self.values.chunks(self.chunk_size) {
 			for (i, chunk) in chunks.iter().enumerate() {
