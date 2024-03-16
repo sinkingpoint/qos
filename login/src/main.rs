@@ -85,14 +85,6 @@ fn main() -> ExitCode {
 			}
 		};
 
-		match tcsetattr(stdin(), SetArg::TCSANOW, &old_attrs) {
-			Ok(_) => (),
-			Err(e) => {
-				error!(logger, "Failed to restore terminal attributes"; "error" => format!("{:?}", e));
-				return ExitCode::FAILURE;
-			}
-		}
-
 		match shadow.verify_password(&password) {
 			Ok(true) => {
 				successful = true;
@@ -106,6 +98,14 @@ fn main() -> ExitCode {
 				return ExitCode::FAILURE;
 			}
 		};
+	}
+
+	match tcsetattr(stdin(), SetArg::TCSANOW, &old_attrs) {
+		Ok(_) => (),
+		Err(e) => {
+			error!(logger, "Failed to restore terminal attributes"; "error" => format!("{:?}", e));
+			return ExitCode::FAILURE;
+		}
 	}
 
 	if !successful {
