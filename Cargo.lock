@@ -380,6 +380,7 @@ dependencies = [
  "nix",
  "serde",
  "slog",
+ "thiserror",
  "toml",
 ]
 

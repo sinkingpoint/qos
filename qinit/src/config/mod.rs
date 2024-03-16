@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::Context;
-use service::ServiceConfig;
+pub use service::ServiceConfig;
 
 use self::graph::Graph;
 
@@ -125,6 +125,10 @@ impl Config {
 	/// Loads all the services from .service files in the given directory
 	/// and adds them to the configuration.
 	fn load_services_from_directory(&mut self, path: &Path) -> ValidationResult {
+		if !path.exists() {
+			return ValidationResult::new();
+		}
+
 		let mut errors = ValidationResult::new();
 		let iter = match fs::read_dir(path) {
 			Ok(iter) => iter,
@@ -294,11 +298,11 @@ impl Config {
 	/// Resolves the given service to a set of services that need to be started, based on the dependencies between services.
 	pub fn resolve_to_service_set(
 		&self,
-		service_name: String,
+		service_name: &str,
 		args: HashMap<String, String>,
 	) -> anyhow::Result<Vec<(&ServiceConfig, HashMap<String, String>)>> {
 		let mut graph = Graph::empty();
-		let service = match self.services.get(&service_name) {
+		let service = match self.services.get(service_name) {
 			Some(service) => service,
 			None => return Err(anyhow::anyhow!("Service {} does not exist", service_name)),
 		};
