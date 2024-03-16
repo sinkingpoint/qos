@@ -29,4 +29,45 @@ TTY = "/dev/ttys0"
 
 When a sphere is started, it will start all the services defined in that sphere.
 
+## Dependency resolving
 
+Services are (needs, service) tuples. To start service a:
+
+ - Construct a directed graph of all the needs
+ - Walk that graph and flatten it into an array, ordered by the depth in the graph
+
+e.g.
+
+service (needs)
+
+a (b)
+b (c)
+c ()
+
+Graph: a -> b -> c , flattened: [c, b, a] (start c, then b, then a)
+
+a (b, c)
+b (d)
+c (d)
+d ()
+
+graph:
+  b
+ / \
+a   d
+ \ /
+  c
+
+flattened: [d, c, b, a], where c, and b are interchangable
+
+  b
+ /
+a 
+ \
+  c - d - e
+
+(b depends on d)
+
+flattened: [a, b, c, d]
+
+https://en.wikipedia.org/wiki/Topological_sorting

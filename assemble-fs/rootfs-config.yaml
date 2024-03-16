@@ -11,4 +11,5 @@ files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
   etc/group: configs/group
+  /etc/qinit/services: configs/services
 output_file: ./target/filesystem.ext4

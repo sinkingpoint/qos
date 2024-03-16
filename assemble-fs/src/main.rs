@@ -108,7 +108,30 @@ fn main() -> ExitCode {
 			}
 		}
 
-		if let Err(e) = fs::copy(src, &dest) {
+		// Handle directories
+		if src.is_dir() {
+			if let Err(e) = fs::create_dir_all(&dest) {
+				slog::error!(logger, "Failed to create directory"; "path"=>dest.display(), "error"=>e);
+				return ExitCode::FAILURE;
+			}
+
+			let files = match fs::read_dir(src) {
+				Ok(files) => files,
+				Err(e) => {
+					slog::error!(logger, "Failed to read directory"; "path"=>src.display(), "error"=>e);
+					return ExitCode::FAILURE;
+				}
+			}
+			.map(|entry| entry.unwrap().path())
+			.collect::<Vec<PathBuf>>();
+
+			println!("{:?}", files);
+
+			if let Err(e) = copy_all_to(&logger, &dest, &files) {
+				slog::error!(logger, "Failed to copy directory"; "src"=>src.display(), "dest"=>dest.display(), "error"=>e);
+				return ExitCode::FAILURE;
+			}
+		} else if let Err(e) = fs::copy(src, &dest) {
 			slog::error!(logger, "Failed to copy file"; "src"=>src.display(), "dest"=>dest.display(), "error"=>e);
 			return ExitCode::FAILURE;
 		}
@@ -144,7 +167,7 @@ fn main() -> ExitCode {
 }
 
 fn copy_all_to(logger: &slog::Logger, dest_dir: &Path, files: &[PathBuf]) -> io::Result<()> {
-	fs::create_dir(dest_dir)?;
+	fs::create_dir_all(dest_dir)?;
 	for file in files {
 		slog::info!(logger, "Copying file {} to {}", file.display(), dest_dir.display());
 		fs::copy(file, dest_dir.join(file.file_name().unwrap()))?;

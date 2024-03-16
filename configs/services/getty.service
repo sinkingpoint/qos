@@ -1,4 +1,4 @@
-name = "getty-${TTY}"
+name = "getty"
 description = "Getty on ${TTY}"
 
 [service]
