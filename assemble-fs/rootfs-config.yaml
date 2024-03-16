@@ -12,4 +12,5 @@ files:
   etc/shadow: configs/shadow
   etc/group: configs/group
   /etc/qinit/services: configs/services
+  /home/colin: configs/home
 output_file: ./target/filesystem.ext4
