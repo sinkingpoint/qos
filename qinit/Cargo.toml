@@ -11,3 +11,4 @@ anyhow = { workspace = true }
 common = { path = "../common" }
 slog = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
