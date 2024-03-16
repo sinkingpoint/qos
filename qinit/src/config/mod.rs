@@ -1,3 +1,4 @@
+mod graph;
 mod service;
 
 use std::{
@@ -9,10 +10,12 @@ use std::{
 };
 
 use anyhow::Context;
-use service::Service;
+use service::ServiceConfig;
+
+use self::graph::Graph;
 
 /// An error that occurred while validating a service definition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ValidationError {
 	/// The error message.
 	message: String,
@@ -53,7 +56,7 @@ impl Display for ValidationError {
 impl Error for ValidationError {}
 
 /// The result of validating a service definition.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ValidationResult {
 	errors: Vec<ValidationError>,
 }
@@ -108,7 +111,7 @@ impl Error for ValidationResult {}
 
 /// The configuration for qinit.
 pub struct Config {
-	services: HashMap<String, Service>,
+	services: HashMap<String, ServiceConfig>,
 }
 
 impl Config {
@@ -163,7 +166,10 @@ impl Config {
 		errors
 	}
 
-	fn add_service(&mut self, mut service: Service) -> ValidationResult {
+	/// Tries to add a service to the configuration, returning any errors or warnings
+	/// that we encountered while doing so. If the returned result `.is_fatal()`, then
+	/// the service was not added to the configuration.
+	fn add_service(&mut self, mut service: ServiceConfig) -> ValidationResult {
 		if self.services.contains_key(&service.name) {
 			let mut errors = ValidationResult::new();
 			errors.add_error(ValidationError::new_fatal(&format!(
@@ -181,6 +187,7 @@ impl Config {
 		result
 	}
 
+	/// Loads a service from a file and adds it to the configuration.
 	fn load_service_from_file(&mut self, path: &Path) -> ValidationResult {
 		let mut errors = ValidationResult::new();
 		let definition = match fs::read_to_string(path) {
@@ -195,7 +202,7 @@ impl Config {
 			}
 		};
 
-		let service: Service = match toml::from_str(&definition)
+		let service: ServiceConfig = match toml::from_str(&definition)
 			.with_context(|| format!("Failed to parse service definition from {}", path.display()))
 		{
 			Ok(service) => service,
@@ -254,7 +261,7 @@ impl Config {
 				}
 
 				let needed_service = self.services.get(&dependency.name).unwrap();
-				let mut missing_arguments = needed_service.service.arguments.clone().unwrap_or_default();
+				let mut missing_arguments = needed_service.service.arguments.clone();
 				for name in dependency.args.keys() {
 					if !needed_service.service.has_argument(name) {
 						errors.add_error(ValidationError::new_fatal(&format!(
@@ -282,6 +289,35 @@ impl Config {
 		}
 
 		errors
+	}
+
+	/// Resolves the given service to a set of services that need to be started, based on the dependencies between services.
+	pub fn resolve_to_service_set(
+		&self,
+		service_name: String,
+		args: HashMap<String, String>,
+	) -> anyhow::Result<Vec<(&ServiceConfig, HashMap<String, String>)>> {
+		let mut graph = Graph::empty();
+		let service = match self.services.get(&service_name) {
+			Some(service) => service,
+			None => return Err(anyhow::anyhow!("Service {} does not exist", service_name)),
+		};
+
+		let mut stack = vec![(service, args)];
+		while let Some((service, args)) = stack.pop() {
+			graph.add_vertex((service, args.clone()));
+			for dependency in service.needs.iter() {
+				let service = match self.services.get(&service.name) {
+					Some(service) => service,
+					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
+				};
+
+				stack.push((service, dependency.args.clone()));
+				graph.add_edge((service, dependency.args.clone()), (), (service, args.clone()));
+			}
+		}
+
+		Ok(graph.flatten()?)
 	}
 }
 
@@ -311,7 +347,7 @@ mod test {
       description = "Test service"
       service = { command = "echo" }
     "#;
-		let service: Service = toml::from_str(definition).unwrap();
+		let service: ServiceConfig = toml::from_str(definition).unwrap();
 		let errors = config.add_service(service);
 		assert!(!errors.is_error());
 		assert!(!errors.is_fatal());
@@ -327,7 +363,7 @@ mod test {
       description = "Test service"
       service = { command = "echo" }
     "#;
-		let service: Service = toml::from_str(definition).unwrap();
+		let service: ServiceConfig = toml::from_str(definition).unwrap();
 		let errors = config.add_service(service);
 		assert!(errors.is_error());
 		assert!(errors.is_fatal());
@@ -342,7 +378,7 @@ mod test {
       description = "Test service"
       service = { command = "echo" }
     "#;
-		let service: Service = toml::from_str(definition).unwrap();
+		let service: ServiceConfig = toml::from_str(definition).unwrap();
 		let errors = config.add_service(service.clone());
 		assert!(!errors.is_error());
 		assert!(!errors.is_fatal());
@@ -373,7 +409,7 @@ mod test {
 	fn test_config_argument_duplicate() {
 		let service = ServiceDefinition {
 			command: "echo".to_string(),
-			arguments: Some(vec![
+			arguments: vec![
 				Argument {
 					name: "test".to_string(),
 					description: None,
@@ -386,7 +422,7 @@ mod test {
 					required: false,
 					default: None,
 				},
-			]),
+			],
 		};
 
 		let errors = service.validate();
@@ -535,7 +571,7 @@ mod test {
 		);
 		assert_eq!(
 			config.services.get("getty-${TTY}").unwrap().service.arguments,
-			Some(vec![
+			vec![
 				Argument {
 					name: "TTY".to_string(),
 					description: Some("The tty to run getty on".to_string()),
@@ -548,7 +584,7 @@ mod test {
 					required: false,
 					default: Some("9600".to_string()),
 				}
-			])
+			]
 		);
 	}
 

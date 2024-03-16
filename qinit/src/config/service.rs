@@ -37,13 +37,14 @@ impl Argument {
 }
 
 /// The definition of a service.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct ServiceDefinition {
 	/// The command to run.
 	pub command: String,
 
 	/// The arguments to the command.
-	pub arguments: Option<Vec<Argument>>,
+	#[serde(default)]
+	pub arguments: Vec<Argument>,
 }
 
 impl ServiceDefinition {
@@ -53,33 +54,29 @@ impl ServiceDefinition {
 			result.add_error(ValidationError::new_fatal("Command cannot be empty"));
 		}
 
-		if let Some(arguments) = &self.arguments {
-			let mut existing_args = HashSet::new();
-			for argument in arguments {
-				result.merge(argument.validate().with_context(&format!("Argument {}", argument.name)));
-				if existing_args.contains(&argument.name) {
-					result.add_error(ValidationError::new_fatal(&format!(
-						"Duplicate argument name: {}",
-						argument.name
-					)));
-				}
-
-				existing_args.insert(&argument.name);
+		let mut existing_args = HashSet::new();
+		for argument in self.arguments.iter() {
+			result.merge(argument.validate().with_context(&format!("Argument {}", argument.name)));
+			if existing_args.contains(&argument.name) {
+				result.add_error(ValidationError::new_fatal(&format!(
+					"Duplicate argument name: {}",
+					argument.name
+				)));
 			}
+
+			existing_args.insert(&argument.name);
 		}
 
 		result
 	}
 
 	pub fn has_argument(&self, name: &str) -> bool {
-		self.arguments
-			.as_ref()
-			.map_or(false, |args| args.iter().any(|a| a.name == name))
+		self.arguments.iter().any(|a| a.name == name)
 	}
 }
 
 /// A service dependency.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Dependency {
 	/// The name of the service that this service depends on.
 	pub name: String,
@@ -90,8 +87,8 @@ pub struct Dependency {
 }
 
 /// A service definition.
-#[derive(Deserialize, Debug, Clone)]
-pub struct Service {
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct ServiceConfig {
 	/// The name of the service.
 	pub name: String,
 
@@ -126,7 +123,7 @@ pub struct Service {
 	pub errors: ValidationResult,
 }
 
-impl Service {
+impl ServiceConfig {
 	pub fn validate(&mut self) -> ValidationResult {
 		let mut result = ValidationResult::new();
 		if self.name.is_empty() {
