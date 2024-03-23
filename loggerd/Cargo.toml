@@ -1,0 +1,23 @@
+[package]
+name = "loggerd"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "loggerd"
+path = "src/lib/mod.rs"
+
+[[bin]]
+name = "loggerd"
+path = "src/bin/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+clap = { workspace = true }
+slog = { workspace = true }
+common = { path = "../common" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio-serde = "0.9"
+chrono = "0.4"
