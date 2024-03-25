@@ -1,9 +1,9 @@
-use bytestruct::{ByteArray, LittleEndianU16, LittleEndianU32, NullTerminatedString, U8};
+use bytestruct::NullTerminatedString;
 use bytestruct_derive::ByteStruct;
 
 use crate::types::Superblock;
 
-pub const EXT_MAGIC: LittleEndianU16 = LittleEndianU16(0xEF53);
+pub const EXT_MAGIC: u16 = 0xEF53;
 
 /// Sparse superblocks.
 pub const RO_COMPAT_SPARSE_SUPER: u32 = 0x0001;
@@ -90,49 +90,50 @@ pub const COMPAT_EXCLUDE_BITMAP: u32 = 0x0100;
 pub const COMPAT_SPARSE_SUPER2: u32 = 0x0200;
 
 #[derive(ByteStruct)]
+#[little_endian]
 pub struct ExtSuperBlock {
-	pub inode_count: LittleEndianU32,
-	pub blocks_count: LittleEndianU32,
-	pub reserved_blocks_count: LittleEndianU32,
-	pub free_blocks_count: LittleEndianU32,
-	pub free_inodes_count: LittleEndianU32,
-	pub first_data_block: LittleEndianU32,
-	pub log_block_size: LittleEndianU32,
-	pub log_cluster_size: LittleEndianU32,
-	pub blocks_per_group: LittleEndianU32,
-	pub clusters_per_group: LittleEndianU32,
-	pub inodes_per_group: LittleEndianU32,
-	pub mount_time: LittleEndianU32,
-	pub write_time: LittleEndianU32,
-	pub mount_count: LittleEndianU16,
-	pub max_mount_count: LittleEndianU16,
-	pub magic: LittleEndianU16,
-	pub state: LittleEndianU16,
-	pub errors: LittleEndianU16,
-	pub minor_rev_level: LittleEndianU16,
-	pub last_check: LittleEndianU32,
-	pub check_interval: LittleEndianU32,
-	pub creator_os: LittleEndianU32,
-	pub rev_level: LittleEndianU32,
-	pub default_resuid: LittleEndianU16,
-	pub default_resgid: LittleEndianU16,
-	pub first_inode: LittleEndianU32,
-	pub inode_size: LittleEndianU16,
-	pub block_group_number: LittleEndianU16,
-	pub feature_compat: LittleEndianU32,
-	pub feature_incompat: LittleEndianU32,
-	pub feature_ro_compat: LittleEndianU32,
-	pub uuid: ByteArray<16>,
+	pub inode_count: u32,
+	pub blocks_count: u32,
+	pub reserved_blocks_count: u32,
+	pub free_blocks_count: u32,
+	pub free_inodes_count: u32,
+	pub first_data_block: u32,
+	pub log_block_size: u32,
+	pub log_cluster_size: u32,
+	pub blocks_per_group: u32,
+	pub clusters_per_group: u32,
+	pub inodes_per_group: u32,
+	pub mount_time: u32,
+	pub write_time: u32,
+	pub mount_count: u16,
+	pub max_mount_count: u16,
+	pub magic: u16,
+	pub state: u16,
+	pub errors: u16,
+	pub minor_rev_level: u16,
+	pub last_check: u32,
+	pub check_interval: u32,
+	pub creator_os: u32,
+	pub rev_level: u32,
+	pub default_resuid: u16,
+	pub default_resgid: u16,
+	pub first_inode: u32,
+	pub inode_size: u16,
+	pub block_group_number: u16,
+	pub feature_compat: u32,
+	pub feature_incompat: u32,
+	pub feature_ro_compat: u32,
+	pub uuid: [u8; 16],
 	pub label: NullTerminatedString<16>,
 	pub last_mount_path: NullTerminatedString<64>,
-	pub algorithm_usage_bitmap: LittleEndianU32,
-	pub prealloc_blocks: U8,
-	pub prealloc_dir_blocks: U8,
-	_unused: LittleEndianU16,
-	pub journal_uuid: ByteArray<16>,
-	pub journal_inode: LittleEndianU32,
-	pub journal_dev: LittleEndianU32,
-	pub orphan_inode_head: LittleEndianU32,
+	pub algorithm_usage_bitmap: u32,
+	pub prealloc_blocks: u8,
+	pub prealloc_dir_blocks: u8,
+	_unused: u16,
+	pub journal_uuid: [u8; 16],
+	pub journal_inode: u32,
+	pub journal_dev: u32,
+	pub orphan_inode_head: u32,
 }
 
 impl Superblock for ExtSuperBlock {
@@ -197,11 +198,10 @@ impl ExtSuperBlock {
 		// Features that were introduced in ext3.
 		let ext3_compat_features = [COMPAT_DIR_INDEX, COMPAT_HAS_JOURNAL];
 
-		if has_any(self.feature_ro_compat.0, &ext4_ro_features)
-			|| has_any(self.feature_incompat.0, &ext4_incompat_features)
+		if has_any(self.feature_ro_compat, &ext4_ro_features) || has_any(self.feature_incompat, &ext4_incompat_features)
 		{
 			ExtType::Ext4
-		} else if has_any(self.feature_compat.0, &ext3_compat_features) {
+		} else if has_any(self.feature_compat, &ext3_compat_features) {
 			ExtType::Ext3
 		} else {
 			ExtType::Ext2
