@@ -109,19 +109,19 @@ impl ReadFromWithEndian for i64 {
 	}
 }
 
-impl<const SIZE: usize> ReadFromWithEndian for NullTerminatedString<SIZE> {
+impl<const MAX_SIZE: usize> ReadFromWithEndian for NullTerminatedString<MAX_SIZE> {
 	fn read_from_with_endian<T: Read>(source: &mut T, _: Endian) -> io::Result<Self> {
-		let mut buf = [0u8; SIZE];
+		let mut buf = [0u8; MAX_SIZE];
 		source.read_exact(&mut buf)?;
 		let mut len = 0;
-		for c in buf.iter().take(SIZE) {
+		for c in buf.iter().take(MAX_SIZE) {
 			if *c == 0 {
 				break;
 			}
 			len += 1;
 		}
 
-		if len == SIZE {
+		if len == MAX_SIZE {
 			return Err(io::Error::new(
 				io::ErrorKind::InvalidData,
 				"String is not null terminated",
@@ -144,6 +144,21 @@ impl<const SIZE: usize, T: ReadFromWithEndian> ReadFromWithEndian for [T; SIZE] 
 impl<const SIZE: usize, T: ReadFrom> ReadFrom for [T; SIZE] {
 	fn read_from<R: Read>(source: &mut R) -> io::Result<Self> {
 		array::try_from_fn(|_| T::read_from(source))
+	}
+}
+
+impl<I: ReadFromWithEndian> ReadFromWithEndian for Vec<I> {
+	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self>
+	where
+		Self: Sized,
+	{
+		let count = u64::read_from_with_endian(source, endian)?;
+		let mut vec = Vec::with_capacity(count as usize);
+		for _ in 0..count {
+			vec.push(I::read_from_with_endian(source, endian)?);
+		}
+
+		Ok(vec)
 	}
 }
 
