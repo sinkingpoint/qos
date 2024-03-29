@@ -158,11 +158,15 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 [[package]]
 name = "bytestruct"
 version = "0.2.0"
+dependencies = [
+ "chrono",
+]
 
 [[package]]
 name = "bytestruct-derive"
 version = "0.2.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
@@ -455,6 +459,8 @@ name = "loggerd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytestruct",
+ "bytestruct-derive",
  "chrono",
  "clap",
  "common",
@@ -596,10 +602,6 @@ dependencies = [
  "smallvec",
  "windows-targets 0.48.5",
 ]
-
-[[package]]
-name = "parquet"
-version = "0.1.0"
 
 [[package]]
 name = "pin-project"

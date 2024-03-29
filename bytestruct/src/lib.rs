@@ -146,3 +146,11 @@ impl<const SIZE: usize, T: ReadFrom> ReadFrom for [T; SIZE] {
 		array::try_from_fn(|_| T::read_from(source))
 	}
 }
+
+#[cfg(feature = "time")]
+impl ReadFromWithEndian for chrono::DateTime<chrono::Utc> {
+	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
+		let time = i64::read_from_with_endian(source, endian)?;
+		Ok(chrono::DateTime::from_timestamp_nanos(time))
+	}
+}
