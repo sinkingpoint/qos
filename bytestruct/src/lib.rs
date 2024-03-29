@@ -135,6 +135,27 @@ impl<const MAX_SIZE: usize> ReadFromWithEndian for NullTerminatedString<MAX_SIZE
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LengthPrefixedString<const MAX_SIZE: usize>(pub String);
+
+impl<const MAX_SIZE: usize> ReadFromWithEndian for LengthPrefixedString<MAX_SIZE> {
+	fn read_from_with_endian<T: Read>(source: &mut T, _: Endian) -> io::Result<Self> {
+		let len = match MAX_SIZE {
+			0..=0xFF => u8::read_from_with_endian(source, Endian::Big)? as usize,
+			256..=0xFFFF => u16::read_from_with_endian(source, Endian::Big)? as usize,
+			65536..=0xFFFFFFFF => u32::read_from_with_endian(source, Endian::Big)? as usize,
+			_ => u64::read_from_with_endian(source, Endian::Big)? as usize,
+		};
+
+		let mut buf = vec![0u8; len];
+		source.read_exact(&mut buf)?;
+		match std::str::from_utf8(&buf) {
+			Ok(s) => Ok(LengthPrefixedString(s.to_string())),
+			Err(_) => Err(io::Error::new(io::ErrorKind::InvalidData, "String is not valid utf8")),
+		}
+	}
+}
+
 impl<const SIZE: usize, T: ReadFromWithEndian> ReadFromWithEndian for [T; SIZE] {
 	fn read_from_with_endian<R: Read>(source: &mut R, endian: Endian) -> io::Result<Self> {
 		array::try_from_fn(|_| T::read_from_with_endian(source, endian))
