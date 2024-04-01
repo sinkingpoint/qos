@@ -278,3 +278,26 @@ impl Size for chrono::DateTime<chrono::Utc> {
 		8
 	}
 }
+
+/// Padding is a special type that pads a struct to a given alignment. Notably, you can put
+/// it in the middle of a struct, and it will pad only the fields that came before it.
+#[derive(Debug)]
+pub struct Padding<const ALIGN: usize> {
+	amt: usize,
+}
+
+impl<const ALIGN: usize> Padding<ALIGN> {
+	pub fn new<R: Read>(prev_size: usize, r: &mut R) -> io::Result<Self> {
+		let amt = ALIGN - (prev_size % ALIGN);
+		let mut buf = vec![0u8; amt];
+		r.read_exact(&mut buf)?;
+
+		Ok(Padding { amt })
+	}
+}
+
+impl<const ALIGN: usize> Size for Padding<ALIGN> {
+	fn size(&self) -> usize {
+		self.amt
+	}
+}

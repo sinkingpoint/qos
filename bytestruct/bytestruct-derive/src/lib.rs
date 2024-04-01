@@ -20,30 +20,51 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 	let name = input.ident;
 
 	if let Data::Struct(data) = &input.data {
-		let set_endian_fields = data.fields.iter().map(|field| {
+		let mut set_endian_fields = Vec::new();
+		let mut prev_fields = Vec::new();
+		for field in data.fields.iter() {
 			let name = field.ident.as_ref().unwrap();
 			let ty = &field.ty;
 
-			if little_endian {
+			let type_name = quote! { #ty }.to_string();
+
+			let field = if type_name.starts_with("Padding <") || type_name.starts_with("bytestruct::Padding <") {
+				let out = quote! {
+					let #name = ::bytestruct::Padding::new(0 #(+ #prev_fields)*, source)?;
+				};
+
+				prev_fields.clear();
+				out
+			} else if little_endian {
 				quote! {
-					#name: <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, ::bytestruct::Endian::Little)?
+					let #name = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, ::bytestruct::Endian::Little)?;
 				}
 			} else if big_endian {
 				quote! {
-					#name: <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, ::bytestruct::Endian::Big)?
+					let #name = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, ::bytestruct::Endian::Big)?;
 				}
 			} else {
 				quote! {
-					#name: <#ty as ::bytestruct::ReadFrom>::read_from(source)?
+					let #name = <#ty as ::bytestruct::ReadFrom>::read_from(source)?;
 				}
-			}
+			};
+
+			prev_fields.push(quote! {<#ty as ::bytestruct::Size>::size(&#name)});
+
+			set_endian_fields.push(field);
+		}
+
+		let names = data.fields.iter().map(|field| {
+			let name = field.ident.as_ref().unwrap();
+			quote! {#name}
 		});
 
 		let gen = quote! {
 			impl ::bytestruct::ReadFrom for #name {
 				fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
+					#(#set_endian_fields)*
 					Ok(Self {
-						#(#set_endian_fields),*
+						#(#names),*
 					})
 				}
 			}
