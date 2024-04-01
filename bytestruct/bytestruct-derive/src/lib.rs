@@ -21,6 +21,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
 	if let Data::Struct(data) = &input.data {
 		let mut set_endian_fields = Vec::new();
+		let mut write_fields = Vec::new();
 		let mut prev_fields = Vec::new();
 		for field in data.fields.iter() {
 			let name = field.ident.as_ref().unwrap();
@@ -28,9 +29,9 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
 			let type_name = quote! { #ty }.to_string();
 
-			let field = if type_name.starts_with("Padding <") || type_name.starts_with("bytestruct::Padding <") {
+			let read_field = if type_name.starts_with("Padding <") || type_name.starts_with("bytestruct::Padding <") {
 				let out = quote! {
-					let #name = ::bytestruct::Padding::new(0 #(+ #prev_fields)*, source)?;
+					let #name = ::bytestruct::Padding::read(0 #(+ #prev_fields)*, source)?;
 				};
 
 				prev_fields.clear();
@@ -49,9 +50,24 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 				}
 			};
 
+			let write_field = if little_endian {
+				quote! {
+					<#ty as ::bytestruct::WriteToWithEndian>::write_to_with_endian(&self.#name, writer, ::bytestruct::Endian::Little)?;
+				}
+			} else if big_endian {
+				quote! {
+					<#ty as ::bytestruct::WriteToWithEndian>::write_to_with_endian(&self.#name, writer, ::bytestruct::Endian::Big)?;
+				}
+			} else {
+				quote! {
+					<#ty as ::bytestruct::WriteTo>::write_to(&self.#name, writer)?;
+				}
+			};
+
 			prev_fields.push(quote! {<#ty as ::bytestruct::Size>::size(&#name)});
 
-			set_endian_fields.push(field);
+			set_endian_fields.push(read_field);
+			write_fields.push(write_field);
 		}
 
 		let names = data.fields.iter().map(|field| {
@@ -68,11 +84,19 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 					})
 				}
 			}
+
+			impl ::bytestruct::WriteTo for #name {
+				fn write_to<W: ::std::io::Write>(&self, writer: &mut W) -> ::std::io::Result<()> {
+					#(#write_fields)*
+					Ok(())
+				}
+			}
 		};
 
 		gen.into()
 	} else if let Data::Enum(data) = &input.data {
-		let mut matches = Vec::new();
+		let mut read_matches = Vec::new();
+		let mut write_matches = Vec::new();
 
 		let ty = get_repr(&input.attrs);
 
@@ -83,17 +107,21 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 				TokenStream::from_str(&i.to_string()).unwrap()
 			};
 
-			matches.push(quote! {
+			read_matches.push(quote! {
 				#discriminant => #name::#variant,
-			})
+			});
+
+			write_matches.push(quote! {
+				#name::#variant => #discriminant,
+			});
 		}
 
 		quote! {
-			impl ::bytestruct::ReadFrom for #name {
-				fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
-					let discriminant = <#ty as ::bytestruct::ReadFrom>::read_from(source)?;
+			impl ::bytestruct::ReadFromWithEndian for #name {
+				fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> where Self: Sized {
+					let discriminant = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, endian)?;
 					let variant = match discriminant {
-						#(#matches)*
+						#(#read_matches)*
 						_ => panic!("Invalid discriminant")
 					};
 
@@ -101,15 +129,13 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 				}
 			}
 
-			impl ::bytestruct::ReadFromWithEndian for #name {
-				fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> where Self: Sized {
-					let discriminant = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, endian)?;
-					let variant = match discriminant {
-						#(#matches)*
-						_ => panic!("Invalid discriminant")
+			impl ::bytestruct::WriteToWithEndian for #name {
+				fn write_to_with_endian<W: ::std::io::Write>(&self, target: &mut W, endian: ::bytestruct::Endian) -> ::std::io::Result<()> {
+					let discriminant = match self {
+						#(#write_matches)*
 					};
 
-					Ok(variant)
+					<#ty as ::bytestruct::WriteToWithEndian>::write_to_with_endian(&discriminant, target, endian)
 				}
 			}
 		}
