@@ -51,14 +51,9 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
 		gen.into()
 	} else if let Data::Enum(data) = &input.data {
-		let ty = match input.attrs.iter().find(|attr| attr.path().is_ident("ty")) {
-			Some(repr) => repr,
-			None => panic!("enums require a #[ty] field"),
-		};
-
-		let ty: Expr = ty.parse_args().unwrap();
-
 		let mut matches = Vec::new();
+
+		let ty = get_repr(&input.attrs);
 
 		for (i, variant) in data.variants.iter().enumerate() {
 			let discriminant = if let Some((_, v)) = &variant.discriminant {
@@ -100,5 +95,63 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 		.into()
 	} else {
 		panic!("Only structs are supported")
+	}
+}
+
+#[proc_macro_derive(Size)]
+pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	let input = parse_macro_input!(input as DeriveInput);
+
+	let name = input.ident;
+
+	if let Data::Struct(data) = &input.data {
+		let size = data.fields.iter().map(|field| {
+			let ty = &field.ty;
+			let name = field.ident.as_ref().unwrap();
+
+			quote! {
+				<#ty as ::bytestruct::Size>::size(&self.#name)
+			}
+		});
+
+		let gen = quote! {
+			impl ::bytestruct::Size for #name {
+				fn size(&self) -> usize {
+					0 #(+ #size)*
+				}
+			}
+		};
+
+		gen.into()
+	} else if let Data::Enum(_) = &input.data {
+		let repr = get_repr(&input.attrs);
+		let gen = quote! {
+			impl ::bytestruct::Size for #name {
+				fn size(&self) -> usize {
+					<#repr as ::bytestruct::Size>::size(&0)
+				}
+			}
+		};
+
+		gen.into()
+	} else {
+		panic!("Only structs are supported")
+	}
+}
+
+fn get_repr(attrs: &[syn::Attribute]) -> proc_macro2::Ident {
+	let ty = match attrs.iter().find(|attr| attr.path().is_ident("repr")) {
+		Some(repr) => repr,
+		None => panic!("enums require a #[repr] field"),
+	};
+
+	if let Ok(Expr::Path(path)) = ty.parse_args() {
+		if let Some(ident) = path.path.get_ident() {
+			ident.clone()
+		} else {
+			panic!("Only simple reprs are supported");
+		}
+	} else {
+		panic!("Only u8 is supported as repr for enums")
 	}
 }

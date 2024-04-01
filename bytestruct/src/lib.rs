@@ -4,27 +4,37 @@ use std::{
 	io::{self, Read},
 };
 
+/// A string that is null-terminated (C-style), with some maximum size.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NullTerminatedString<const SIZE: usize>(pub String);
 
+/// A UUID (Universally Unique Identifier).
 pub type UUID = [u8; 16];
 
+/// The endianness of the data.
 #[derive(Clone, Copy, Debug)]
 pub enum Endian {
 	Little,
 	Big,
 }
 
+/// A trait for reading data from a source with a specified endianness.
 pub trait ReadFromWithEndian {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self>
 	where
 		Self: Sized;
 }
 
+/// A trait for reading data from a source with an implied endianess.
 pub trait ReadFrom {
 	fn read_from<T: Read>(source: &mut T) -> io::Result<Self>
 	where
 		Self: Sized;
+}
+
+/// A trait for determining the size of the data as would be read from a source.
+pub trait Size {
+	fn size(&self) -> usize;
 }
 
 impl ReadFromWithEndian for u8 {
@@ -43,6 +53,12 @@ impl ReadFrom for u8 {
 	}
 }
 
+impl Size for u8 {
+	fn size(&self) -> usize {
+		1
+	}
+}
+
 impl ReadFromWithEndian for u16 {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let mut buf = [0u8; 2];
@@ -51,6 +67,12 @@ impl ReadFromWithEndian for u16 {
 			Endian::Big => u16::from_be_bytes(buf),
 			Endian::Little => u16::from_le_bytes(buf),
 		})
+	}
+}
+
+impl Size for u16 {
+	fn size(&self) -> usize {
+		2
 	}
 }
 
@@ -65,6 +87,12 @@ impl ReadFromWithEndian for u32 {
 	}
 }
 
+impl Size for u32 {
+	fn size(&self) -> usize {
+		4
+	}
+}
+
 impl ReadFromWithEndian for u64 {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let mut buf = [0u8; 8];
@@ -73,6 +101,12 @@ impl ReadFromWithEndian for u64 {
 			Endian::Big => u64::from_be_bytes(buf),
 			Endian::Little => u64::from_le_bytes(buf),
 		})
+	}
+}
+
+impl Size for u64 {
+	fn size(&self) -> usize {
+		8
 	}
 }
 
@@ -87,6 +121,12 @@ impl ReadFromWithEndian for i16 {
 	}
 }
 
+impl Size for i16 {
+	fn size(&self) -> usize {
+		2
+	}
+}
+
 impl ReadFromWithEndian for i32 {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let mut buf = [0u8; 4];
@@ -98,6 +138,12 @@ impl ReadFromWithEndian for i32 {
 	}
 }
 
+impl Size for i32 {
+	fn size(&self) -> usize {
+		4
+	}
+}
+
 impl ReadFromWithEndian for i64 {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let mut buf = [0u8; 8];
@@ -106,6 +152,12 @@ impl ReadFromWithEndian for i64 {
 			Endian::Big => i64::from_be_bytes(buf),
 			Endian::Little => i64::from_le_bytes(buf),
 		})
+	}
+}
+
+impl Size for i64 {
+	fn size(&self) -> usize {
+		8
 	}
 }
 
@@ -135,6 +187,12 @@ impl<const MAX_SIZE: usize> ReadFromWithEndian for NullTerminatedString<MAX_SIZE
 	}
 }
 
+impl<const MAX_SIZE: usize> Size for NullTerminatedString<MAX_SIZE> {
+	fn size(&self) -> usize {
+		self.0.len() + 1
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LengthPrefixedString<const MAX_SIZE: usize>(pub String);
 
@@ -156,6 +214,18 @@ impl<const MAX_SIZE: usize> ReadFromWithEndian for LengthPrefixedString<MAX_SIZE
 	}
 }
 
+impl<const MAX_SIZE: usize> Size for LengthPrefixedString<MAX_SIZE> {
+	fn size(&self) -> usize {
+		self.0.len()
+			+ match MAX_SIZE {
+				0..=0xFF => 1,
+				256..=0xFFFF => 2,
+				65536..=0xFFFFFFFF => 4,
+				_ => 8,
+			}
+	}
+}
+
 impl<const SIZE: usize, T: ReadFromWithEndian> ReadFromWithEndian for [T; SIZE] {
 	fn read_from_with_endian<R: Read>(source: &mut R, endian: Endian) -> io::Result<Self> {
 		array::try_from_fn(|_| T::read_from_with_endian(source, endian))
@@ -165,6 +235,12 @@ impl<const SIZE: usize, T: ReadFromWithEndian> ReadFromWithEndian for [T; SIZE] 
 impl<const SIZE: usize, T: ReadFrom> ReadFrom for [T; SIZE] {
 	fn read_from<R: Read>(source: &mut R) -> io::Result<Self> {
 		array::try_from_fn(|_| T::read_from(source))
+	}
+}
+
+impl<const SIZE: usize, T: Size> Size for [T; SIZE] {
+	fn size(&self) -> usize {
+		self.iter().map(Size::size).sum()
 	}
 }
 
@@ -183,10 +259,22 @@ impl<I: ReadFromWithEndian> ReadFromWithEndian for Vec<I> {
 	}
 }
 
+impl<T: Size> Size for Vec<T> {
+	fn size(&self) -> usize {
+		self.iter().map(Size::size).sum()
+	}
+}
+
 #[cfg(feature = "time")]
 impl ReadFromWithEndian for chrono::DateTime<chrono::Utc> {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let time = i64::read_from_with_endian(source, endian)?;
 		Ok(chrono::DateTime::from_timestamp_nanos(time))
+	}
+}
+
+impl Size for chrono::DateTime<chrono::Utc> {
+	fn size(&self) -> usize {
+		8
 	}
 }
