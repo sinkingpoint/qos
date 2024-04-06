@@ -348,9 +348,12 @@ impl<const SIZE: usize, T: WriteTo> WriteTo for [T; SIZE] {
 	}
 }
 
-impl<const SIZE: usize, T: WriteTo> WriteToWithEndian for [T; SIZE] {
-	fn write_to_with_endian<W: Write>(&self, target: &mut W, _endianness: Endian) -> io::Result<()> {
-		self.write_to(target)
+impl<const SIZE: usize, T: WriteToWithEndian> WriteToWithEndian for [T; SIZE] {
+	fn write_to_with_endian<W: Write>(&self, target: &mut W, endian: Endian) -> io::Result<()> {
+		for item in self.iter() {
+			item.write_to_with_endian(target, endian)?;
+		}
+		Ok(())
 	}
 }
 
@@ -420,6 +423,11 @@ pub struct Padding<const ALIGN: usize> {
 }
 
 impl<const ALIGN: usize> Padding<ALIGN> {
+	pub fn new(prev_size: usize) -> Self {
+		let amt = ALIGN - (prev_size % ALIGN);
+		Padding { amt }
+	}
+
 	pub fn read<R: Read>(prev_size: usize, r: &mut R) -> io::Result<Self> {
 		let amt = ALIGN - (prev_size % ALIGN);
 		let mut buf = vec![0u8; amt];

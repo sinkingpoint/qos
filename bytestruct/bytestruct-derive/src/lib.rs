@@ -46,7 +46,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 				}
 			} else {
 				quote! {
-					let #name = <#ty as ::bytestruct::ReadFrom>::read_from(source)?;
+					let #name = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, endian)?;
 				}
 			};
 
@@ -60,7 +60,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 				}
 			} else {
 				quote! {
-					<#ty as ::bytestruct::WriteTo>::write_to(&self.#name, writer)?;
+					<#ty as ::bytestruct::WriteToWithEndian>::write_to_with_endian(&self.#name, writer, endian)?;
 				}
 			};
 
@@ -75,20 +75,40 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 			quote! {#name}
 		});
 
-		let gen = quote! {
-			impl ::bytestruct::ReadFrom for #name {
-				fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
-					#(#set_endian_fields)*
-					Ok(Self {
-						#(#names),*
-					})
+		let gen = if little_endian || big_endian {
+			quote! {
+				impl ::bytestruct::ReadFrom for #name {
+					fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
+						#(#set_endian_fields)*
+						Ok(Self {
+							#(#names),*
+						})
+					}
+				}
+
+				impl ::bytestruct::WriteTo for #name {
+					fn write_to<W: ::std::io::Write>(&self, writer: &mut W) -> ::std::io::Result<()> {
+						#(#write_fields)*
+						Ok(())
+					}
 				}
 			}
+		} else {
+			quote! {
+				impl ::bytestruct::ReadFromWithEndian for #name {
+					fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> where Self: Sized {
+						#(#set_endian_fields)*
+						Ok(Self {
+							#(#names),*
+						})
+					}
+				}
 
-			impl ::bytestruct::WriteTo for #name {
-				fn write_to<W: ::std::io::Write>(&self, writer: &mut W) -> ::std::io::Result<()> {
-					#(#write_fields)*
-					Ok(())
+				impl ::bytestruct::WriteToWithEndian for #name {
+					fn write_to_with_endian<W: ::std::io::Write>(&self, writer: &mut W, endian: ::bytestruct::Endian) -> ::std::io::Result<()> {
+						#(#write_fields)*
+						Ok(())
+					}
 				}
 			}
 		};
