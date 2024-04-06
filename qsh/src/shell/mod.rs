@@ -1,14 +1,15 @@
 use common::io::IOTriple;
 use std::{collections::HashMap, io::Write};
+use thiserror::Error;
 
 use crate::{
 	buffer::Buffer,
 	parser::{
 		self,
 		consumers::{Command, Pipeline, QuotedOrUnquotedString},
-		types::Token,
+		types::{ParserError, Token},
 	},
-	process::{Process, ProcessPipeline, WaitError},
+	process::{ExitCode, Process, ProcessPipeline, WaitError},
 };
 
 pub struct Shell {
@@ -40,36 +41,48 @@ impl Shell {
 				}
 			};
 
-			match self.evaluate(&line) {
-				Ok(()) => {}
-				Err(e) => {
+			let pipeline = match self.evaluate(&line) {
+				Ok(pipeline) => pipeline,
+				Err(PipelineError::ParserError(e)) => {
 					writeln!(err, "Error evaluating input: {}", e).unwrap();
+					continue;
 				}
-			}
+				Err(PipelineError::WaitError(e)) => {
+					writeln!(err, "Error waiting for process: {}", e).unwrap();
+					continue;
+				}
+				Err(PipelineError::NoPipeline) => continue,
+			};
+
+			match pipeline.get_exit_code() {
+				Some(ExitCode::Success(code)) => self.environment.insert("?".to_owned(), code.to_string()),
+				Some(ExitCode::Err(code)) => self.environment.insert("?".to_owned(), code.to_string()),
+				None => panic!("BUG: pipeline has terminated, but no exit code found"),
+			};
 		}
 	}
 
 	/// Evaluate the input as a shell expression.
-	pub fn evaluate(&mut self, input: &str) -> Result<(), WaitError> {
+	pub fn evaluate(&mut self, input: &str) -> Result<ProcessPipeline, PipelineError> {
 		let mut err = self.triple.stderr();
 
 		let raw_pipe = match parser::try_parse::<Pipeline>(input) {
 			Ok(Some(expr)) => expr,
-			Ok(None) => return Ok(()),
+			Ok(None) => return Err(PipelineError::NoPipeline),
 			Err(e) => {
 				writeln!(err, "Error parsing input: {}", e).unwrap();
-				return Ok(());
+				return Err(PipelineError::ParserError(e));
 			}
 		};
 
 		if raw_pipe.token.commands.is_empty() {
-			return Ok(());
+			return Err(PipelineError::NoPipeline);
 		}
 
-		self.execute(raw_pipe, self.triple)
+		Ok(self.execute(raw_pipe, self.triple)?)
 	}
 
-	fn execute(&mut self, raw_pipe: Token<Pipeline>, triple: IOTriple) -> Result<(), WaitError> {
+	fn execute(&mut self, raw_pipe: Token<Pipeline>, triple: IOTriple) -> Result<ProcessPipeline, WaitError> {
 		let commands = raw_pipe
 			.token
 			.commands
@@ -83,7 +96,9 @@ impl Shell {
 		let mut pipeline = ProcessPipeline::new(commands);
 		pipeline.execute(triple)?;
 
-		pipeline.wait()
+		pipeline.wait()?;
+
+		Ok(pipeline)
 	}
 
 	/// Construct the concrete expression from the token.
@@ -105,6 +120,18 @@ impl Shell {
 
 		args
 	}
+}
+
+#[derive(Debug, Error)]
+pub enum PipelineError {
+	#[error("Error waiting for process: {0}")]
+	WaitError(#[from] WaitError),
+
+	#[error("Error parsing input: {0}")]
+	ParserError(#[from] ParserError),
+
+	#[error("No pipeline found")]
+	NoPipeline,
 }
 
 fn default_environment_vars() -> HashMap<String, String> {

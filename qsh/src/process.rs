@@ -227,6 +227,21 @@ impl ProcessPipeline {
 		})
 	}
 
+	pub fn get_exit_code(&self) -> Option<ExitCode> {
+		if let PipelineState::Terminated = self.status {
+			if let Some(process) = self.processes.last() {
+				match process.state {
+					ProcessState::Terminated(code) => return Some(code),
+					_ => {
+						panic!("BUG: the process is terminated, but the processes are not");
+					}
+				}
+			}
+		}
+
+		None
+	}
+
 	pub fn wait(&mut self) -> Result<(), WaitError> {
 		let pgid = match self.status {
 			PipelineState::Running(pgid) => pgid,
