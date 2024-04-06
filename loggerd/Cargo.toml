@@ -20,6 +20,6 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio-serde = "0.9"
-bytestruct = { path = "../bytestruct" }
+bytestruct = { path = "../bytestruct", features=["time"]  }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
-chrono = { workspace = true, features=["time"] }
+chrono = { workspace = true }
