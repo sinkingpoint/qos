@@ -20,7 +20,7 @@ members = [
     "qsh",
     "superblocks",
     "switchroot",
-    "tables", 
+    "tables", "control", 
 ]
 
 [workspace.dependencies]

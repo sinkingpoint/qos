@@ -1,3 +1,4 @@
+pub mod control;
 mod disk;
 
 use std::{

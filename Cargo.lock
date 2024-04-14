@@ -254,6 +254,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "control"
+version = "0.1.0"
+dependencies = [
+ "bytestruct",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -464,6 +473,7 @@ dependencies = [
  "chrono",
  "clap",
  "common",
+ "control",
  "serde",
  "serde_json",
  "slog",

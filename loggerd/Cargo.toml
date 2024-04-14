@@ -23,3 +23,4 @@ tokio-serde = "0.9"
 bytestruct = { path = "../bytestruct", features=["time"]  }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 chrono = { workspace = true }
+control = { path = "../control" }

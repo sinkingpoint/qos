@@ -1,14 +1,14 @@
-use std::{io::stderr, path::PathBuf, sync::Arc};
+use std::{io::stderr, sync::Arc};
 
 use anyhow::Result;
 use clap::{Arg, Command};
 use common::obs::assemble_logger;
-use loggerd::{LogMessage, OpenLogFile};
+use control::listen::{Action, ActionFactory, ControlSocket};
+use loggerd::{control::START_STREAM_ACTION, LogMessage, OpenLogFile};
 use slog::{error, info};
 use tokio::{
-	fs::remove_file,
 	io::{AsyncBufReadExt, BufReader},
-	net::{UnixListener, UnixStream},
+	net::UnixStream,
 	sync::{mpsc, Mutex},
 };
 
@@ -33,17 +33,16 @@ async fn main() {
 	info!(logger, "Listening on {}", listen_path);
 
 	let api = Arc::new(Api::new());
-	let listener = Listener::new(listen_path, api.clone());
+
+	let control = ControlSocket::open(listen_path, Controller::new(api.clone())).unwrap();
 
 	tokio::select! {
 		_ = tokio::signal::ctrl_c() => {
 			info!(logger, "Shutting down");
 		}
-		err = listener.run() => {
-			if let Err(e) = err {
-				error!(logger, "Failed to run listener: {}", e);
-			}
-		}
+		_ = control.listen() => {
+			error!(logger, "Control socket failed");
+		},
 		err = api.run() => {
 			if let Err(e) = err {
 				error!(logger, "Failed to run api: {}", e);
@@ -52,49 +51,58 @@ async fn main() {
 	}
 }
 
-struct Listener {
-	listen_path: PathBuf,
+enum ControlError {
+	UnknownAction,
+}
+
+#[derive(Clone)]
+struct Controller {
 	api: Arc<Api>,
 }
 
-impl Listener {
-	fn new(listen_path: &str, api: Arc<Api>) -> Self {
-		Self {
-			listen_path: PathBuf::from(listen_path),
-			api,
-		}
+impl Controller {
+	fn new(api: Arc<Api>) -> Self {
+		Self { api }
 	}
+}
 
-	async fn run(&self) -> Result<()> {
-		if self.listen_path.exists() {
-			remove_file(&self.listen_path).await?;
-		}
+impl ActionFactory for Controller {
+	type Action = ControlAction;
 
-		let socket = UnixListener::bind(&self.listen_path)?;
-
-		loop {
-			let (stream, _) = socket.accept().await?;
-			let handler = Handler::new(stream, self.api.clone());
-			tokio::spawn(async move {
-				if let Err(e) = handler.run().await {
-					eprintln!("Error: {}", e);
-				}
-			});
+	fn build(&self, action: &str, _args: &[(&str, &str)]) -> Result<Self::Action, <Self::Action as Action>::Error> {
+		match action {
+			_ if action == START_STREAM_ACTION => Ok(ControlAction::StartStream(self.api.clone())),
+			_ => Err(ControlError::UnknownAction),
 		}
 	}
 }
 
-struct Handler {
+enum ControlAction {
+	StartStream(Arc<Api>),
+}
+
+impl Action for ControlAction {
+	type Error = ControlError;
+
+	fn run(self, reader: BufReader<UnixStream>) -> Result<(), Self::Error> {
+		match self {
+			ControlAction::StartStream(api) => {
+				let handler = WriteStreamHandler::new(reader, api);
+				tokio::spawn(handler.run());
+				Ok(())
+			}
+		}
+	}
+}
+
+struct WriteStreamHandler {
 	stream: BufReader<UnixStream>,
 	api: Arc<Api>,
 }
 
-impl Handler {
-	fn new(stream: UnixStream, api: Arc<Api>) -> Self {
-		Self {
-			stream: BufReader::new(stream),
-			api,
-		}
+impl WriteStreamHandler {
+	fn new(stream: BufReader<UnixStream>, api: Arc<Api>) -> Self {
+		Self { stream, api }
 	}
 
 	async fn logstream(mut self) -> Result<()> {

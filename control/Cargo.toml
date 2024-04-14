@@ -1,0 +1,9 @@
+[package]
+name = "control"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+slog = { workspace = true}
+bytestruct = { path = "../bytestruct" }
