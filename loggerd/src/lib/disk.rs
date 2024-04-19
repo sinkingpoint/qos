@@ -88,10 +88,18 @@ impl HeaderBlock {
 	}
 }
 
+#[derive(Debug, ByteStruct, Size)]
+struct BlockHeader {
+	block_type: BlockType,
+	block_size: u64,
+}
+
 /// A block containing a hash of the log entries that occur before this block.
 #[derive(Debug, ByteStruct, Size)]
 #[little_endian]
 pub struct CheckpointBlock {
+	header: BlockHeader,
+
 	/// The SHA-256 hash of the log entries that occured between the previous checkpoint block and this one.
 	pub hash: u64,
 
@@ -116,7 +124,9 @@ pub struct EntryBlockHeader {
 #[derive(Debug, ByteStruct, Size)]
 #[little_endian]
 pub struct EntryBlock {
-	pub header: EntryBlockHeader,
+	header: BlockHeader,
+
+	pub entry_header: EntryBlockHeader,
 
 	/// An array of offsets to the fields in the block.
 	pub field_offsets: Vec<u64>,
@@ -124,13 +134,21 @@ pub struct EntryBlock {
 
 impl EntryBlock {
 	pub fn new(time: DateTime<Utc>, field_offsets: Vec<u64>) -> Self {
-		Self {
-			header: EntryBlockHeader {
+		let mut new = Self {
+			header: BlockHeader {
+				block_type: BlockType::Entry,
+				block_size: 0,
+			},
+			entry_header: EntryBlockHeader {
 				time,
 				next_entry_block_offset: 0,
 			},
 			field_offsets,
-		}
+		};
+
+		new.header.block_size = new.size() as u64;
+
+		new
 	}
 }
 
@@ -138,6 +156,8 @@ impl EntryBlock {
 #[derive(Debug, ByteStruct, Size)]
 #[little_endian]
 pub struct FieldBlock {
+	header: BlockHeader,
+
 	/// The key of the field.
 	key: LengthPrefixedString<MAX_FIELD_SIZE>,
 
@@ -153,6 +173,10 @@ impl FieldBlock {
 		let value = LengthPrefixedString(value);
 		let padding = Padding::new(key.size() + value.size());
 		Self {
+			header: BlockHeader {
+				block_type: BlockType::Field,
+				block_size: key.size() as u64 + value.size() as u64 + padding.size() as u64,
+			},
 			key,
 			value,
 			_unused: padding,

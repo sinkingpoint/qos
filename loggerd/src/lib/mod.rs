@@ -4,6 +4,7 @@ mod disk;
 use std::{
 	fs::File,
 	io::{self, Seek, SeekFrom},
+	path::{Path, PathBuf},
 };
 
 use bytestruct::{ReadFrom, WriteTo};
@@ -32,11 +33,11 @@ pub struct LogMessage {
 
 /// A log file that is open for writing.
 pub struct OpenLogFile {
-	pub path: String,
+	pub path: PathBuf,
 	pub file: File,
 
 	/// The header block of the log file.
-	header: disk::HeaderBlock,
+	pub header: disk::HeaderBlock,
 
 	/// The offset and contents of the last entry block in the file.
 	last_entry_block: Option<(u64, EntryBlock)>,
@@ -44,10 +45,10 @@ pub struct OpenLogFile {
 
 impl OpenLogFile {
 	/// Creates a new log file at the given path.
-	pub async fn new(path: &str) -> io::Result<Self> {
+	pub async fn new(path: &Path) -> io::Result<Self> {
 		let file = File::create_new(path)?;
 		let mut file = OpenLogFile {
-			path: path.to_string(),
+			path: path.to_owned(),
 			file,
 			header: disk::HeaderBlock::default(),
 			last_entry_block: None,
@@ -59,7 +60,7 @@ impl OpenLogFile {
 	}
 
 	/// Open an existing log file at the given path.
-	pub async fn open(path: &str) -> io::Result<Self> {
+	pub async fn open(path: &Path) -> io::Result<Self> {
 		let mut file = File::open(path)?;
 		let header = disk::HeaderBlock::read_from(&mut file)?;
 
@@ -73,11 +74,11 @@ impl OpenLogFile {
 			file.seek(SeekFrom::Start(offset))?;
 			let block = EntryBlock::read_from(&mut file)?;
 
-			if block.header.next_entry_block_offset == 0 {
+			if block.entry_header.next_entry_block_offset == 0 {
 				break;
 			}
 
-			offset = block.header.next_entry_block_offset;
+			offset = block.entry_header.next_entry_block_offset;
 		}
 
 		// Read the last entry block.
@@ -91,7 +92,7 @@ impl OpenLogFile {
 		file.seek(SeekFrom::End(0))?;
 
 		Ok(OpenLogFile {
-			path: path.to_string(),
+			path: path.to_owned(),
 			file,
 			header,
 			last_entry_block: block,
@@ -125,7 +126,7 @@ impl OpenLogFile {
 
 			self.write_header().await?;
 		} else if let Some((offset, mut block)) = self.last_entry_block.take() {
-			block.header.next_entry_block_offset = next_offset;
+			block.entry_header.next_entry_block_offset = next_offset;
 			self.file.seek(SeekFrom::Start(offset))?;
 			block.write_to(&mut self.file)?;
 		} else {
@@ -145,26 +146,25 @@ impl OpenLogFile {
 		time_min: Option<chrono::DateTime<Utc>>,
 		time_max: Option<chrono::DateTime<Utc>>,
 	) {
-		println!("{:?}", self.header);
-		if let Some(time_min) = time_min {
-			if time_min > self.header.time_max {
-				return;
-			}
-		}
-
-		if let Some(time_max) = time_max {
-			if time_max < self.header.time_min {
-				return;
-			}
-		}
-
 		let mut offset = self.header.first_entry_block_offset;
 		while offset != 0 {
 			self.file.seek(SeekFrom::Start(offset)).unwrap();
 			let block = EntryBlock::read_from(&mut self.file).unwrap();
-			println!("{} {:?}", offset, block);
 
-			offset = block.header.next_entry_block_offset;
+			if let Some(time_min) = time_min {
+				if block.entry_header.time < time_min {
+					offset = block.entry_header.next_entry_block_offset;
+					continue;
+				}
+			}
+
+			if let Some(time_max) = time_max {
+				if block.entry_header.time > time_max {
+					break;
+				}
+			}
+
+			offset = block.entry_header.next_entry_block_offset;
 		}
 	}
 
