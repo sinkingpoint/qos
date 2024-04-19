@@ -9,7 +9,7 @@ path = "src/lib/mod.rs"
 
 [[bin]]
 name = "loggerd"
-path = "src/bin/main.rs"
+path = "src/bin/loggerd/main.rs"
 
 [dependencies]
 tokio = { workspace = true }
@@ -24,3 +24,4 @@ bytestruct = { path = "../bytestruct", features=["time"]  }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 chrono = { workspace = true }
 control = { path = "../control" }
+rand = { workspace = true }
