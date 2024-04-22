@@ -11,6 +11,10 @@ path = "src/lib/mod.rs"
 name = "loggerd"
 path = "src/bin/loggerd/main.rs"
 
+[[bin]]
+name = "logctl"
+path = "src/bin/logctl/main.rs"
+
 [dependencies]
 tokio = { workspace = true }
 clap = { workspace = true }

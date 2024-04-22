@@ -1,3 +1,5 @@
+use std::{fs, path::Path};
+
 use tokio::{
 	io::{self, AsyncBufReadExt, BufReader},
 	net::{UnixListener, UnixStream},
@@ -35,7 +37,12 @@ pub struct ControlSocket<F: ActionFactory> {
 
 impl<F: ActionFactory + Send + 'static> ControlSocket<F> {
 	/// Opens a new control socket at the given path with the given action factory.
-	pub fn open(path: &str, factory: F) -> io::Result<Self> {
+	pub fn open(path: &Path, factory: F) -> io::Result<Self> {
+		if path.exists() {
+			// TODO: Check if the socket is actually a socket and not a file before removing it.
+			fs::remove_file(path)?;
+		}
+
 		Ok(Self {
 			socket: UnixListener::bind(path)?,
 			factory,

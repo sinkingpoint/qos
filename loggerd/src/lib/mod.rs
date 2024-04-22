@@ -12,6 +12,9 @@ use chrono::{DateTime, Utc};
 use disk::{BlockType, EntryBlock};
 use serde::{Deserialize, Serialize};
 
+/// The default path to the control socket.
+pub const DEFAULT_CONTROL_SOCKET_PATH: &str = "/run/loggerd/loggerd.sock";
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum ConnectionHeader {

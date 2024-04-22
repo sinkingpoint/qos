@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use loggerd::{LogMessage, OpenLogFile};
 use slog::error;
 use tokio::{
@@ -54,12 +54,20 @@ impl Api {
 	}
 
 	pub async fn run(&self) -> Result<()> {
+		if !self.data_dir.exists() {
+			fs::create_dir_all(&self.data_dir)
+				.await
+				.with_context(|| format!("failed to create data dir: {}", self.data_dir.display()))?;
+		}
+
 		self.load_log_files().await?;
 		let mut log_files = self.log_files.lock().await;
 		let last_log_file = match log_files.last_mut() {
 			Some(file) => file,
 			None => {
-				let new_log_file = OpenLogFile::new(&new_random_log_file_name()).await?;
+				let new_log_file = OpenLogFile::new(&new_random_log_file_name())
+					.await
+					.with_context(|| "failed to open new log file")?;
 				log_files.push(new_log_file);
 				log_files.last_mut().unwrap()
 			}
@@ -68,6 +76,7 @@ impl Api {
 		let mut log_stream = self.log_stream_read.lock().await;
 		loop {
 			let message = log_stream.recv().await.unwrap();
+			println!("Received log message: {:?}", message);
 			last_log_file.write_log(message).await?;
 		}
 	}

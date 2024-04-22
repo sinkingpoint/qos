@@ -3,6 +3,7 @@ mod control;
 
 use ::control::listen::ControlSocket;
 use api::Api;
+use loggerd::DEFAULT_CONTROL_SOCKET_PATH;
 use std::{io::stderr, path::PathBuf, sync::Arc};
 
 use clap::{Arg, Command};
@@ -19,7 +20,7 @@ async fn main() {
 		.about("A simple logging daemon")
 		.arg(
 			Arg::new("listen-path")
-				.default_value("/run/loggerd/loggerd.sock")
+				.default_value(DEFAULT_CONTROL_SOCKET_PATH)
 				.long("listen-path")
 				.short('l')
 				.num_args(1)
@@ -37,12 +38,14 @@ async fn main() {
 
 	let logger = assemble_logger(stderr());
 	let listen_path: &String = matches.get_one("listen-path").unwrap();
-	let data_dir: &PathBuf = matches.get_one("data-dir").unwrap();
-	info!(logger, "Listening on {}", listen_path);
+	let listen_path = PathBuf::from(listen_path);
+	let data_dir: &String = matches.get_one("data-dir").unwrap();
+	let data_dir = PathBuf::from(data_dir);
+	info!(logger, "Listening on {}", listen_path.display());
 
-	let api = Arc::new(Api::new(data_dir, logger.clone()));
+	let api = Arc::new(Api::new(&data_dir, logger.clone()));
 
-	let control = ControlSocket::open(listen_path, Controller::new(api.clone())).unwrap();
+	let control = ControlSocket::open(&listen_path, Controller::new(api.clone())).unwrap();
 
 	tokio::select! {
 		_ = tokio::signal::ctrl_c() => {
