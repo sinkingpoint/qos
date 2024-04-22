@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::{Arg, Command};
-use loggerd::{DEFAULT_CONTROL_SOCKET_PATH, KV};
+use loggerd::{control::ReadStreamOpts, DEFAULT_CONTROL_SOCKET_PATH, KV};
 use slog::{error, Logger};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -25,10 +25,27 @@ async fn main() {
 					.help("Key-value pairs to include in the log"),
 			),
 		)
+		.subcommand(
+			Command::new("read")
+				.arg(
+					Arg::new("min_time")
+						.long("since")
+						.num_args(1)
+						.help("The time to start reading from"),
+				)
+				.arg(
+					Arg::new("max_time")
+						.long("until")
+						.num_args(1)
+						.help("The time to finish reading at"),
+				),
+		)
 		.subcommand_required(true)
 		.get_matches();
 
 	let logger = common::obs::assemble_logger(stderr());
+	let socket_path: &String = matches.get_one("control-socket").expect("expected control-socket");
+	let socket_path = PathBuf::from(socket_path);
 
 	match matches.subcommand() {
 		Some(("write", write_matches)) => {
@@ -45,9 +62,28 @@ async fn main() {
 				}
 			};
 
-			let socket_path: &String = matches.get_one("control-socket").expect("expected control-socket");
-			let socket_path = PathBuf::from(socket_path);
 			start_write_stream(logger, &socket_path, fields).await;
+		}
+		Some(("read", read_matches)) => {
+			let mut opts = ReadStreamOpts::new();
+
+			if let Some(min_time) = read_matches.get_one::<String>("min_time") {
+				let min_time = chrono::DateTime::parse_from_rfc3339(min_time)
+					.map_err(|e| format!("Failed to parse min_time: {}", e))
+					.unwrap()
+					.into();
+				opts = opts.with_min_time(min_time);
+			}
+
+			if let Some(max_time) = read_matches.get_one::<String>("max_time") {
+				let max_time = chrono::DateTime::parse_from_rfc3339(max_time)
+					.map_err(|e| format!("Failed to parse max_time: {}", e))
+					.unwrap()
+					.into();
+				opts = opts.with_max_time(max_time);
+			}
+
+			start_read_stream(logger, &socket_path, opts).await;
 		}
 		_ => {
 			unreachable!("Subcommand is required")
@@ -102,5 +138,31 @@ async fn start_write_stream(logger: Logger, socket_path: &Path, kvs: Vec<KV>) {
 				break;
 			}
 		}
+	}
+}
+
+async fn start_read_stream(logger: Logger, socket_path: &Path, opts: ReadStreamOpts) {
+	let socket = match loggerd::control::start_read_stream(socket_path, opts).await {
+		Ok(socket) => socket,
+		Err(e) => {
+			error!(logger, "Failed to start read stream: {}", e);
+			return;
+		}
+	};
+
+	let reader = BufReader::new(socket);
+	let mut lines = reader.lines();
+
+	loop {
+		let line = match lines.next_line().await {
+			Ok(Some(line)) => line,
+			Ok(None) => break,
+			Err(e) => {
+				error!(logger, "Failed to read from socket: {}", e);
+				break;
+			}
+		};
+
+		println!("{}", line);
 	}
 }

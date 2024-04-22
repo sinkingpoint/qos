@@ -2,17 +2,23 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use control::listen::{Action, ActionFactory};
-use loggerd::{control::START_WRITE_STREAM_ACTION, LogMessage};
-use tokio::{
-	io::{AsyncBufReadExt, BufReader},
-	net::UnixStream,
+use loggerd::{
+	control::{ReadStreamOpts, ReadStreamOptsParseError, START_READ_STREAM_ACTION, START_WRITE_STREAM_ACTION},
+	LogMessage,
 };
+use thiserror::Error;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::api::Api;
 
 /// Errors that can occur when running a control action.
+#[derive(Debug, Clone, Error)]
 pub enum ControlError {
+	#[error("unknown action")]
 	UnknownAction,
+
+	#[error("failed to read log stream: {0}")]
+	InvalidReadOpts(#[from] ReadStreamOptsParseError),
 }
 
 /// A controller for handling control actions.
@@ -30,9 +36,13 @@ impl Controller {
 impl ActionFactory for Controller {
 	type Action = ControlAction;
 
-	fn build(&self, action: &str, _args: &[(&str, &str)]) -> Result<Self::Action, <Self::Action as Action>::Error> {
+	fn build(&self, action: &str, args: &[(&str, &str)]) -> Result<Self::Action, <Self::Action as Action>::Error> {
 		match action {
 			_ if action == START_WRITE_STREAM_ACTION => Ok(ControlAction::StartWriteStream(self.api.clone())),
+			_ if action == START_READ_STREAM_ACTION => {
+				let opts = ReadStreamOpts::from_kvs(args)?;
+				Ok(ControlAction::StartReadStream(self.api.clone(), opts))
+			}
 			_ => Err(ControlError::UnknownAction),
 		}
 	}
@@ -41,34 +51,43 @@ impl ActionFactory for Controller {
 /// A control action that can be run by the controller.
 pub enum ControlAction {
 	StartWriteStream(Arc<Api>),
+	StartReadStream(Arc<Api>, ReadStreamOpts),
 }
 
 impl Action for ControlAction {
 	type Error = ControlError;
 
-	fn run(self, reader: BufReader<UnixStream>) -> Result<(), Self::Error> {
+	fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
+		self,
+		reader: R,
+		writer: W,
+	) -> Result<(), Self::Error> {
 		match self {
 			ControlAction::StartWriteStream(api) => {
 				let handler = WriteStreamHandler::new(reader, api);
 				tokio::spawn(handler.run());
-				Ok(())
 			}
-		}
+			ControlAction::StartReadStream(api, opts) => {
+				let handler = ReadStreamHandler::new(writer, api, opts);
+				tokio::spawn(handler.run());
+			}
+		};
+		Ok(())
 	}
 }
 
 /// A handler for streaming logs into a log file.
-struct WriteStreamHandler {
-	stream: BufReader<UnixStream>,
+struct WriteStreamHandler<R: AsyncBufRead> {
+	stream: R,
 	api: Arc<Api>,
 }
 
-impl WriteStreamHandler {
-	fn new(stream: BufReader<UnixStream>, api: Arc<Api>) -> Self {
+impl<R: AsyncBufRead + Unpin + Send> WriteStreamHandler<R> {
+	fn new(stream: R, api: Arc<Api>) -> Self {
 		Self { stream, api }
 	}
 
-	async fn logstream(mut self) -> Result<()> {
+	async fn run(mut self) -> Result<()> {
 		let log_stream = self.api.write_log_stream().await;
 
 		loop {
@@ -88,8 +107,32 @@ impl WriteStreamHandler {
 		}
 		Ok(())
 	}
+}
 
-	async fn run(self) -> Result<()> {
-		self.logstream().await
+struct ReadStreamHandler<W: AsyncWrite> {
+	stream: W,
+	api: Arc<Api>,
+	opts: ReadStreamOpts,
+}
+
+impl<W: AsyncWrite + Unpin + Send + 'static> ReadStreamHandler<W> {
+	fn new(stream: W, api: Arc<Api>, opts: ReadStreamOpts) -> Self {
+		Self { stream, api, opts }
+	}
+
+	async fn run(mut self) -> Result<()> {
+		let iter = match self.api.read_logs(self.opts.clone()).await {
+			Ok(iter) => iter,
+			Err(e) => {
+				eprintln!("Failed to read logs: {}", e);
+				return Err(e);
+			}
+		};
+
+		for log in iter {
+			self.stream.write_all(self.opts.format_log(&log).as_bytes()).await?;
+		}
+
+		Ok(())
 	}
 }

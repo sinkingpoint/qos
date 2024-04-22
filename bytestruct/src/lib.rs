@@ -417,7 +417,7 @@ impl WriteToWithEndian for chrono::DateTime<chrono::Utc> {
 
 /// Padding is a special type that pads a struct to a given alignment. Notably, you can put
 /// it in the middle of a struct, and it will pad only the fields that came before it.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Padding<const ALIGN: usize> {
 	amt: usize,
 }

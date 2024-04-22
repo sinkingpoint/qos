@@ -19,13 +19,15 @@ path = "src/bin/logctl/main.rs"
 tokio = { workspace = true }
 clap = { workspace = true }
 slog = { workspace = true }
-common = { path = "../common" }
+rand = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio-serde = "0.9"
+chrono = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+common = { path = "../common" }
 bytestruct = { path = "../bytestruct", features=["time"]  }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
-chrono = { workspace = true }
 control = { path = "../control" }
-rand = { workspace = true }
+tokio-serde = "0.9"

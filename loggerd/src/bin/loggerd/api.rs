@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use loggerd::{LogMessage, OpenLogFile};
+use futures::future::join_all;
+use loggerd::{control, LogMessage, OpenLogFile};
 use slog::error;
 use tokio::{
 	fs, io,
@@ -17,8 +18,6 @@ pub struct Api {
 	log_stream_write: mpsc::Sender<LogMessage>,
 
 	data_dir: PathBuf,
-
-	log_files: Mutex<Vec<OpenLogFile>>,
 }
 
 impl Api {
@@ -29,18 +28,18 @@ impl Api {
 			log_stream_read: Mutex::new(receiver),
 			log_stream_write: sender,
 			data_dir: data_dir.to_path_buf(),
-			log_files: Mutex::new(vec![]),
 		}
 	}
 
 	/// Load all the log files in the data directory.
-	async fn load_log_files(&self) -> io::Result<()> {
-		let mut log_files = fs::read_dir(&self.data_dir).await?;
-		while let Ok(Some(entry)) = log_files.next_entry().await {
+	async fn load_log_files(&self) -> io::Result<Vec<OpenLogFile>> {
+		let mut open_log_files = Vec::new();
+		let mut log_file_files = fs::read_dir(&self.data_dir).await?;
+		while let Ok(Some(entry)) = log_file_files.next_entry().await {
 			let file_type = entry.file_type().await?;
 			if file_type.is_file() {
 				match OpenLogFile::open(&entry.path()).await {
-					Ok(file) => self.log_files.lock().await.push(file),
+					Ok(file) => open_log_files.push(file),
 					Err(e) => {
 						error!(self.logger, "Failed to open log file: {}", e);
 					}
@@ -48,9 +47,9 @@ impl Api {
 			}
 		}
 
-		self.log_files.lock().await.sort_by_key(|f| f.header.time_min);
+		open_log_files.sort_by_key(|f| f.header.time_min);
 
-		Ok(())
+		Ok(open_log_files)
 	}
 
 	pub async fn run(&self) -> Result<()> {
@@ -60,12 +59,12 @@ impl Api {
 				.with_context(|| format!("failed to create data dir: {}", self.data_dir.display()))?;
 		}
 
-		self.load_log_files().await?;
-		let mut log_files = self.log_files.lock().await;
+		let mut log_files = self.load_log_files().await?;
 		let last_log_file = match log_files.last_mut() {
 			Some(file) => file,
 			None => {
-				let new_log_file = OpenLogFile::new(&new_random_log_file_name())
+				let log_file_path = self.data_dir.join(new_random_log_file_name());
+				let new_log_file = OpenLogFile::new(&log_file_path)
 					.await
 					.with_context(|| "failed to open new log file")?;
 				log_files.push(new_log_file);
@@ -83,6 +82,14 @@ impl Api {
 
 	pub async fn write_log_stream(&self) -> mpsc::Sender<LogMessage> {
 		self.log_stream_write.clone()
+	}
+
+	/// Read logs from the log files, returning an iterator over the logs that .
+	pub async fn read_logs(&self, opts: control::ReadStreamOpts) -> Result<impl Iterator<Item = LogMessage>> {
+		let log_files = self.load_log_files().await?;
+		println!("Found {} log files", log_files.len());
+		let future = join_all(log_files.into_iter().map(|f| f.read_log_stream(opts.clone()))).await;
+		Ok(future.into_iter().flatten())
 	}
 }
 

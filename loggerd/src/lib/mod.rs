@@ -9,6 +9,7 @@ use std::{
 
 use bytestruct::{ReadFrom, WriteTo};
 use chrono::{DateTime, Utc};
+use control::ReadStreamOpts;
 use disk::{BlockType, EntryBlock};
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +22,7 @@ pub enum ConnectionHeader {
 	LogStream { fields: Vec<KV> },
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KV {
 	pub key: String,
 	pub value: String,
@@ -35,6 +36,7 @@ pub struct LogMessage {
 }
 
 /// A log file that is open for writing.
+#[derive(Debug)]
 pub struct OpenLogFile {
 	pub path: PathBuf,
 	pub file: File,
@@ -144,31 +146,9 @@ impl OpenLogFile {
 		Ok(())
 	}
 
-	pub async fn read_log_stream(
-		&mut self,
-		time_min: Option<chrono::DateTime<Utc>>,
-		time_max: Option<chrono::DateTime<Utc>>,
-	) {
-		let mut offset = self.header.first_entry_block_offset;
-		while offset != 0 {
-			self.file.seek(SeekFrom::Start(offset)).unwrap();
-			let block = EntryBlock::read_from(&mut self.file).unwrap();
-
-			if let Some(time_min) = time_min {
-				if block.entry_header.time < time_min {
-					offset = block.entry_header.next_entry_block_offset;
-					continue;
-				}
-			}
-
-			if let Some(time_max) = time_max {
-				if block.entry_header.time > time_max {
-					break;
-				}
-			}
-
-			offset = block.entry_header.next_entry_block_offset;
-		}
+	/// Reads the log stream from the log file.
+	pub async fn read_log_stream(self, opts: ReadStreamOpts) -> impl Iterator<Item = LogMessage> {
+		ReadIter { file: self, opts }
 	}
 
 	/// Writes the header block to the start of the file.
@@ -177,5 +157,18 @@ impl OpenLogFile {
 		self.header.write_to(&mut self.file)?;
 		self.file.seek(SeekFrom::End(0))?;
 		Ok(())
+	}
+}
+
+struct ReadIter {
+	file: OpenLogFile,
+	opts: ReadStreamOpts,
+}
+
+impl Iterator for ReadIter {
+	type Item = LogMessage;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		unimplemented!()
 	}
 }
