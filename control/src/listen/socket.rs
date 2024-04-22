@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use tokio::{
-	io::{self, AsyncBufReadExt, BufReader},
+	io::{self, AsyncBufRead, AsyncBufReadExt, AsyncWrite, BufReader},
 	net::{UnixListener, UnixStream},
 };
 
@@ -23,7 +23,11 @@ pub trait Action {
 	type Error: Sync + Send;
 
 	/// Runs the action with the given reader.
-	fn run(self, reader: BufReader<UnixStream>) -> Result<(), Self::Error>;
+	fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
+		self,
+		reader: R,
+		writer: W,
+	) -> Result<(), Self::Error>;
 }
 
 /// A control socket that listens for messages and runs actions in response.
@@ -61,7 +65,8 @@ impl<F: ActionFactory + Send + 'static> ControlSocket<F> {
 
 /// Handles a single incoming connection.
 async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) -> Result<(), <F::Action as Action>::Error> {
-	let mut reader = BufReader::new(stream);
+	let (read, write) = stream.into_split();
+	let mut reader = BufReader::new(read);
 
 	// Read the first line, which will be a whitespace seperated list of k=v pairs that
 	// are arguments to the control socket, indicating what the connection wants to do.
@@ -80,5 +85,5 @@ async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) -> Result<(),
 		}
 	}
 
-	factory.build(action.unwrap_or(""), &args)?.run(reader)
+	factory.build(action.unwrap_or(""), &args)?.run(reader, write)
 }
