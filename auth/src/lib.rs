@@ -52,6 +52,13 @@ pub struct User {
 }
 
 impl User {
+	pub fn get(selector: Selector) -> Result<Option<Self>, AuthError> {
+		match selector {
+			Selector::Name(name) => Self::from_username(&name),
+			Selector::ID(id) => Self::from_uid(id),
+		}
+	}
+
 	/// Returns the user with the given UID, if it exists.
 	pub fn from_uid(uid: u32) -> Result<Option<Self>, AuthError> {
 		let passwd = read_to_string(PASSWD_PATH)?;
@@ -224,19 +231,11 @@ pub struct Group {
 }
 
 impl Group {
-	/// Parses a line from the group file into a `Group`.
-	fn from_group_line(line: &str) -> Result<Self, AuthError> {
-		let parts: Vec<&str> = line.split(':').collect();
-		if parts.len() != 4 {
-			return Err(AuthError::Malformed("malformed group entry".to_owned()));
+	pub fn get(selector: Selector) -> Result<Option<Self>, AuthError> {
+		match selector {
+			Selector::Name(name) => Self::from_groupname(&name),
+			Selector::ID(id) => Self::from_gid(id),
 		}
-
-		let name = parts[0].to_string();
-		let gid = parts[2]
-			.parse()
-			.map_err(|_| AuthError::Malformed(format!("malformed gid: {}", parts[2])))?;
-
-		Ok(Self { gid, name })
 	}
 
 	/// Returns the group with the given GID, if it exists.
@@ -251,6 +250,43 @@ impl Group {
 
 		Ok(None)
 	}
+
+	/// Returns the group with the given name, if it exists.
+	pub fn from_groupname(name: &str) -> Result<Option<Self>, AuthError> {
+		let group = read_to_string(GROUP_PATH)?;
+		for line in group.lines() {
+			let group = Self::from_group_line(line)?;
+			if group.name == name {
+				return Ok(Some(group));
+			}
+		}
+
+		Ok(None)
+	}
+
+	/// Parses a line from the group file into a `Group`.
+	fn from_group_line(line: &str) -> Result<Self, AuthError> {
+		let parts: Vec<&str> = line.split(':').collect();
+		if parts.len() != 4 {
+			return Err(AuthError::Malformed("malformed group entry".to_owned()));
+		}
+
+		let name = parts[0].to_string();
+		let gid = parts[2]
+			.parse()
+			.map_err(|_| AuthError::Malformed(format!("malformed gid: {}", parts[2])))?;
+
+		Ok(Self { gid, name })
+	}
+}
+
+/// The target of an authentication request.
+pub enum Selector {
+	/// Selects a user/group by its name.
+	Name(String),
+
+	/// Selects a user/group by its UID/GID.
+	ID(u32),
 }
 
 #[derive(Error, Debug)]
