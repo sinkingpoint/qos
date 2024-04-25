@@ -279,12 +279,12 @@ impl<const MAX_SIZE: usize> WriteToWithEndian for NullTerminatedString<MAX_SIZE>
 pub struct LengthPrefixedString<const MAX_SIZE: usize>(pub String);
 
 impl<const MAX_SIZE: usize> ReadFromWithEndian for LengthPrefixedString<MAX_SIZE> {
-	fn read_from_with_endian<T: Read>(source: &mut T, _: Endian) -> io::Result<Self> {
+	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let len = match MAX_SIZE {
-			0..=0xFF => u8::read_from_with_endian(source, Endian::Big)? as usize,
-			256..=0xFFFF => u16::read_from_with_endian(source, Endian::Big)? as usize,
-			65536..=0xFFFFFFFF => u32::read_from_with_endian(source, Endian::Big)? as usize,
-			_ => u64::read_from_with_endian(source, Endian::Big)? as usize,
+			0..=0xFF => u8::read_from_with_endian(source, endian)? as usize,
+			256..=0xFFFF => u16::read_from_with_endian(source, endian)? as usize,
+			65536..=0xFFFFFFFF => u32::read_from_with_endian(source, endian)? as usize,
+			_ => u64::read_from_with_endian(source, endian)? as usize,
 		};
 
 		let mut buf = vec![0u8; len];
