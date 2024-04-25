@@ -59,7 +59,10 @@ impl Api {
 				.with_context(|| format!("failed to create data dir: {}", self.data_dir.display()))?;
 		}
 
-		let mut log_files = self.load_log_files().await?;
+		let mut log_files = self
+			.load_log_files()
+			.await
+			.with_context(|| "failed to load existing log files")?;
 		let last_log_file = match log_files.last_mut() {
 			Some(file) => file,
 			None => {
@@ -85,9 +88,11 @@ impl Api {
 	}
 
 	/// Read logs from the log files, returning an iterator over the logs that .
-	pub async fn read_logs(&self, opts: control::ReadStreamOpts) -> Result<impl Iterator<Item = LogMessage>> {
+	pub async fn read_logs(
+		&self,
+		opts: control::ReadStreamOpts,
+	) -> Result<impl Iterator<Item = io::Result<LogMessage>>> {
 		let log_files = self.load_log_files().await?;
-		println!("Found {} log files", log_files.len());
 		let future = join_all(log_files.into_iter().map(|f| f.read_log_stream(opts.clone()))).await;
 		Ok(future.into_iter().flatten())
 	}

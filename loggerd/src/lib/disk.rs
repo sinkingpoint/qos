@@ -89,7 +89,7 @@ impl HeaderBlock {
 }
 
 #[derive(Debug, ByteStruct, Size)]
-struct BlockHeader {
+pub struct BlockHeader {
 	block_type: BlockType,
 	block_size: u64,
 }
@@ -159,10 +159,10 @@ pub struct FieldBlock {
 	header: BlockHeader,
 
 	/// The key of the field.
-	key: LengthPrefixedString<MAX_FIELD_SIZE>,
+	pub key: LengthPrefixedString<MAX_FIELD_SIZE>,
 
 	/// The value of the field.
-	value: LengthPrefixedString<MAX_FIELD_SIZE>,
+	pub value: LengthPrefixedString<MAX_FIELD_SIZE>,
 
 	_unused: Padding<64>,
 }

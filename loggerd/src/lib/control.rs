@@ -37,7 +37,6 @@ pub async fn start_write_stream(socket_path: &Path, fields: Vec<KV>) -> io::Resu
 pub async fn start_read_stream(socket_path: &Path, opts: ReadStreamOpts) -> io::Result<UnixStream> {
 	let mut conn = UnixSocket::new_stream()?.connect(socket_path).await?;
 	let header_string = format!("ACTION={} {}\n", START_READ_STREAM_ACTION, opts.to_header_string());
-	println!("header_string: {}", header_string);
 	conn.write_all(header_string.as_bytes()).await?;
 
 	Ok(conn)
@@ -127,7 +126,32 @@ impl ReadStreamOpts {
 			.map(|kv| format!("{}={}", kv.key, kv.value))
 			.collect::<Vec<_>>()
 			.join(" ");
-		format!("{} {} {}", timestamp, fields, log.message)
+		format!("{} {} {}\n", timestamp, fields, log.message)
+	}
+
+	pub fn matches(&self, log: &LogMessage) -> bool {
+		if let Some(min_time) = self.min_time {
+			if log.timestamp < min_time {
+				return false;
+			}
+		}
+
+		if let Some(max_time) = self.max_time {
+			if log.timestamp > max_time {
+				return false;
+			}
+		}
+
+		if let Some(filters) = &self.filters {
+			for filter in filters {
+				if let Some(kv) = log.fields.iter().find(|f| f.key == filter.key) {
+					if kv.value != filter.value {
+						return false;
+					}
+				}
+			}
+		}
+		true
 	}
 
 	pub fn to_header_string(&self) -> String {

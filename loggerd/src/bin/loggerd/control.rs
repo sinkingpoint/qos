@@ -130,6 +130,13 @@ impl<W: AsyncWrite + Unpin + Send + 'static> ReadStreamHandler<W> {
 		};
 
 		for log in iter {
+			let log = match log {
+				Ok(log) => log,
+				Err(e) => {
+					eprintln!("Failed to read log: {}", e);
+					break;
+				}
+			};
 			self.stream.write_all(self.opts.format_log(&log).as_bytes()).await?;
 		}
 

@@ -10,7 +10,7 @@ use std::{
 use bytestruct::{ReadFrom, WriteTo};
 use chrono::{DateTime, Utc};
 use control::ReadStreamOpts;
-use disk::{BlockType, EntryBlock};
+use disk::{BlockType, EntryBlock, FieldBlock};
 use serde::{Deserialize, Serialize};
 
 /// The default path to the control socket.
@@ -33,6 +33,16 @@ pub struct LogMessage {
 	pub timestamp: DateTime<Utc>,
 	pub fields: Vec<KV>,
 	pub message: String,
+}
+
+impl LogMessage {
+	pub fn new(timestamp: DateTime<Utc>, fields: Vec<KV>, message: String) -> Self {
+		LogMessage {
+			timestamp,
+			fields,
+			message,
+		}
+	}
 }
 
 /// A log file that is open for writing.
@@ -64,9 +74,39 @@ impl OpenLogFile {
 		Ok(file)
 	}
 
+	pub fn read_entry_at(&mut self, offset: u64) -> io::Result<(LogMessage, u64)> {
+		let current_offset = self.file.stream_position()?;
+		self.file.seek(SeekFrom::Start(offset))?;
+		let res = EntryBlock::read_from(&mut self.file)?;
+		let mut message = None;
+		let mut fields = Vec::new();
+		for offset in res.field_offsets {
+			self.file.seek(SeekFrom::Start(offset))?;
+			let field = FieldBlock::read_from(&mut self.file)?;
+
+			if field.key.0 == "message" && !field.value.0.is_empty() {
+				message = Some(field.value.0);
+				continue;
+			}
+
+			fields.push(KV {
+				key: field.key.0,
+				value: field.value.0,
+			});
+		}
+
+		self.file.seek(SeekFrom::Start(current_offset))?;
+		let message = message.unwrap_or(String::from("<no message>"));
+
+		Ok((
+			LogMessage::new(res.entry_header.time, fields, message),
+			res.entry_header.next_entry_block_offset,
+		))
+	}
+
 	/// Open an existing log file at the given path.
 	pub async fn open(path: &Path) -> io::Result<Self> {
-		let mut file = File::open(path)?;
+		let mut file = File::options().read(true).write(true).open(path)?;
 		let header = disk::HeaderBlock::read_from(&mut file)?;
 
 		if let Err(e) = header.validate() {
@@ -147,8 +187,8 @@ impl OpenLogFile {
 	}
 
 	/// Reads the log stream from the log file.
-	pub async fn read_log_stream(self, opts: ReadStreamOpts) -> impl Iterator<Item = LogMessage> {
-		ReadIter { file: self, opts }
+	pub async fn read_log_stream(self, opts: ReadStreamOpts) -> impl Iterator<Item = io::Result<LogMessage>> {
+		ReadIter::new(self, opts)
 	}
 
 	/// Writes the header block to the start of the file.
@@ -163,12 +203,38 @@ impl OpenLogFile {
 struct ReadIter {
 	file: OpenLogFile,
 	opts: ReadStreamOpts,
+	offset: u64,
+}
+
+impl ReadIter {
+	fn new(file: OpenLogFile, opts: ReadStreamOpts) -> Self {
+		let offset = file.header.first_entry_block_offset;
+		ReadIter { file, opts, offset }
+	}
 }
 
 impl Iterator for ReadIter {
-	type Item = LogMessage;
+	type Item = io::Result<LogMessage>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		unimplemented!()
+		if self.offset == 0 {
+			return None;
+		}
+
+		while self.offset != 0 {
+			let (message, next_offset) = match self.file.read_entry_at(self.offset) {
+				Ok(message) => message,
+				Err(e) => return Some(Err(e)),
+			};
+
+			if self.opts.matches(&message) {
+				self.offset = next_offset;
+				return Some(Ok(message));
+			}
+
+			self.offset = next_offset;
+		}
+
+		None
 	}
 }
