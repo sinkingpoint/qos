@@ -105,6 +105,7 @@ dependencies = [
 name = "auth"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "common",
  "ring",
  "thiserror",
@@ -751,6 +752,7 @@ name = "qinit"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "auth",
  "common",
  "nix",
  "serde",

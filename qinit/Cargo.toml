@@ -12,3 +12,4 @@ common = { path = "../common" }
 slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+auth = { path = "../auth" }

@@ -6,19 +6,21 @@ use std::{
 	task::{Context, Poll},
 };
 
+use auth::{Group, User};
 use slog::error;
 use tokio::sync::{oneshot, Mutex, Notify};
 
-use anyhow::Result;
+use anyhow::{anyhow, Context as _, Result};
 use nix::{
 	errno::Errno,
 	sys::{
 		signal::Signal,
 		wait::{waitpid, WaitPidFlag, WaitStatus},
 	},
-	unistd::{execve, fork, ForkResult, Pid},
+	unistd::{execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
 };
 
+use crate::config::Permissions;
 use crate::config::ServiceConfig;
 
 #[derive(Debug)]
@@ -35,6 +37,8 @@ pub struct Service {
 	args: HashMap<String, String>,
 	command: String,
 	state: ServiceState,
+
+	permissions: Permissions,
 }
 
 impl Service {
@@ -44,6 +48,7 @@ impl Service {
 			args,
 			command: config.service.command.clone(),
 			state: ServiceState::Stopped,
+			permissions: config.permissions.clone(),
 		}
 	}
 
@@ -71,6 +76,33 @@ impl Service {
 		command
 	}
 
+	/// Sets the user and group for the service.
+	fn set_user_group(&self) -> Result<()> {
+		let user = match User::from_username(&self.permissions.user)? {
+			Some(user) => user,
+			None if self.permissions.create => User::create(
+				&self.permissions.user,
+				None,
+				None,
+				"",
+				&format!("/run/{}", self.permissions.user),
+				None,
+			)?,
+			None => return Err(anyhow!(format!("User not found: {}", self.permissions.user))),
+		};
+
+		let group = match Group::from_groupname(&self.permissions.group)? {
+			Some(group) => group,
+			None if self.permissions.create => Group::create(&self.permissions.group, None)?,
+			None => return Err(anyhow!(format!("Group not found: {}", self.permissions.group))),
+		};
+
+		setgid(Gid::from_raw(group.gid))?;
+		setuid(Uid::from_raw(user.uid))?;
+
+		Ok(())
+	}
+
 	/// Starts the service, forking and executing the command.
 	pub fn start(&mut self) -> Result<()> {
 		let args = self.split_args()?.unwrap();
@@ -79,6 +111,11 @@ impl Service {
 				self.state = ServiceState::Running(child);
 			}
 			ForkResult::Child => {
+				// Setup all the pre-execution stuff. `unwrap` is fine here because we absolutely shouldn't return
+				// in the child process.
+
+				// Set the user and group. This should be last as it may drop permissions and we wont be root anymore.
+				self.set_user_group().with_context(|| "Failed to set user and group")?;
 				execve::<_, &CStr>(&args[0], &args, &[]).unwrap();
 			}
 		};

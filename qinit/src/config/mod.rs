@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::Context;
+pub use service::Permissions;
 pub use service::ServiceConfig;
 
 use self::graph::Graph;

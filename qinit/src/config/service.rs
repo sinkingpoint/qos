@@ -86,6 +86,53 @@ pub struct Dependency {
 	pub args: HashMap<String, String>,
 }
 
+/// The default user/group to run a service as.
+fn default_root() -> String {
+	"root".to_string()
+}
+
+/// The users and group to start the service with.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct Permissions {
+	/// The user to start the service as.
+	#[serde(default = "default_root")]
+	pub user: String,
+
+	/// The group to start the service as.
+	#[serde(default = "default_root")]
+	pub group: String,
+
+	/// Whether or not to _create_ the service / group if it exists. If false,
+	/// and the user / group doesn't exist, the service fails.
+	#[serde(default)]
+	pub create: bool,
+}
+
+impl Permissions {
+	fn validate(&self) -> ValidationResult {
+		let mut result = ValidationResult::new();
+		if self.user.is_empty() {
+			result.add_error(ValidationError::new_fatal("User cannot be empty"));
+		}
+
+		if self.group.is_empty() {
+			result.add_error(ValidationError::new_fatal("Group cannot be empty"));
+		}
+
+		result
+	}
+}
+
+impl Default for Permissions {
+	fn default() -> Self {
+		Permissions {
+			user: default_root(),
+			group: default_root(),
+			create: false,
+		}
+	}
+}
+
 /// A service definition.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct ServiceConfig {
@@ -118,6 +165,10 @@ pub struct ServiceConfig {
 	#[serde(default)]
 	pub needs: Vec<Dependency>,
 
+	/// The permissions that the service will get when it is started.
+	#[serde(default)]
+	pub permissions: Permissions,
+
 	/// The result of validating this service.
 	#[serde(skip)]
 	pub errors: ValidationResult,
@@ -131,6 +182,7 @@ impl ServiceConfig {
 		}
 
 		result.merge(self.service.validate());
+		result.merge(self.permissions.validate());
 
 		self.errors = result.clone();
 

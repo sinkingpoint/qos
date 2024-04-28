@@ -1,0 +1,13 @@
+name = "loggerd"
+description = "A logging daemon"
+
+[service]
+command = "/sbin/loggerd"
+
+[permissions]
+user = "loggerd"
+group = "loggerd"
+create = true
+
+[[wants]]
+name = "loggerd"
