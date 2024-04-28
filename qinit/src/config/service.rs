@@ -169,6 +169,9 @@ pub struct ServiceConfig {
 	#[serde(default)]
 	pub permissions: Permissions,
 
+	/// The runtime directory for the service. This is the directory that the service will be started in.
+	pub runtime_directory: Option<String>,
+
 	/// The result of validating this service.
 	#[serde(skip)]
 	pub errors: ValidationResult,

@@ -1,10 +1,6 @@
 name = "loggerd"
 description = "A logging daemon"
+runtime_directory = "/run/loggerd"
 
 [service]
 command = "/sbin/loggerd"
-
-[permissions]
-user = "loggerd"
-group = "loggerd"
-create = true

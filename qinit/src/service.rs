@@ -1,6 +1,8 @@
 use std::{
 	collections::HashMap,
+	env::set_current_dir,
 	ffi::{CStr, CString},
+	fs::create_dir_all,
 	future::Future,
 	pin::Pin,
 	task::{Context, Poll},
@@ -17,7 +19,7 @@ use nix::{
 		signal::Signal,
 		wait::{waitpid, WaitPidFlag, WaitStatus},
 	},
-	unistd::{execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
+	unistd::{chown, execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
 };
 
 use crate::config::Permissions;
@@ -39,6 +41,7 @@ pub struct Service {
 	state: ServiceState,
 
 	permissions: Permissions,
+	runtime_directory: Option<String>,
 }
 
 impl Service {
@@ -49,6 +52,7 @@ impl Service {
 			command: config.service.command.clone(),
 			state: ServiceState::Stopped,
 			permissions: config.permissions.clone(),
+			runtime_directory: config.runtime_directory.clone(),
 		}
 	}
 
@@ -97,8 +101,28 @@ impl Service {
 			None => return Err(anyhow!(format!("Group not found: {}", self.permissions.group))),
 		};
 
-		setgid(Gid::from_raw(group.gid))?;
-		setuid(Uid::from_raw(user.uid))?;
+		let uid = Uid::from_raw(user.uid);
+		let gid = Gid::from_raw(group.gid);
+
+		// Change the ownership of the runtime directory.
+		if let Some(runtime_dir) = &self.runtime_directory {
+			chown(runtime_dir.as_str(), Some(uid), Some(gid))?;
+		}
+
+		setgid(gid)?;
+		setuid(uid)?;
+
+		Ok(())
+	}
+
+	fn set_runtime_directory(&self) -> Result<()> {
+		if let Some(ref directory) = self.runtime_directory {
+			// Create the directory if it doesn't exist.
+			create_dir_all(directory).with_context(|| format!("failed to create runtime directory: {}", directory))?;
+
+			// Change the working directory.
+			set_current_dir(directory).with_context(|| format!("failed to set runtime directory: {}", directory))?;
+		}
 
 		Ok(())
 	}
@@ -113,6 +137,15 @@ impl Service {
 			ForkResult::Child => {
 				// Setup all the pre-execution stuff. `unwrap` is fine here because we absolutely shouldn't return
 				// in the child process.
+
+				self.set_runtime_directory()
+					.with_context(|| {
+						format!(
+							"failed to start service name: {}, args: {:?}: failed to set runtime directory",
+							self.name, self.args
+						)
+					})
+					.unwrap();
 
 				// Set the user and group. This should be last as it may drop permissions and we wont be root anymore.
 				self.set_user_group()
