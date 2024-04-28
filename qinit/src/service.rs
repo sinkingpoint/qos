@@ -115,8 +115,18 @@ impl Service {
 				// in the child process.
 
 				// Set the user and group. This should be last as it may drop permissions and we wont be root anymore.
-				self.set_user_group().with_context(|| "Failed to set user and group")?;
-				execve::<_, &CStr>(&args[0], &args, &[]).unwrap();
+				self.set_user_group()
+					.with_context(|| {
+						format!(
+							"failed to start service name: {}, args: {:?}: failed to set user and group",
+							self.name, self.args
+						)
+					})
+					.unwrap();
+
+				execve::<_, &CStr>(&args[0], &args, &[])
+					.with_context(|| format!("failed to start service name: {}, args: {:?}", self.name, self.args))
+					.unwrap();
 			}
 		};
 
@@ -142,6 +152,28 @@ impl ServiceManager {
 			new_service_notify: Notify::new(),
 			logger,
 		}
+	}
+
+	/// Checks if there is a service running that satisfies the given service.
+	pub async fn satisfies(&self, wants: &Service) -> anyhow::Result<()> {
+		let services = self.services.lock().await;
+		for s in services.iter() {
+			if s.name != wants.name {
+				continue;
+			}
+
+			for (key, value) in &wants.args {
+				if s.args.get(key) != Some(value) {
+					return Err(anyhow!("Missing {} = {} in service {}", key, value, s.name));
+				}
+			}
+
+			if !matches!(s.state, ServiceState::Running(_)) {
+				return Err(anyhow!("Service {} is not running", s.name));
+			}
+		}
+
+		Ok(())
 	}
 
 	/// Starts a new service.

@@ -506,7 +506,7 @@ fn next_gid(acceptable_range: Range<u32>) -> Result<Option<u32>, AuthError> {
 /// Returns the first value in the range that doesn't exist in the given values.
 fn find_non_overlapping_value(range: Range<u32>, values: &[u32]) -> Option<u32> {
 	for (i, value) in range.enumerate() {
-		if values[i] != value {
+		if i >= values.len() || values[i] != value {
 			return Some(value);
 		}
 	}

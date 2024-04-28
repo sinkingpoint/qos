@@ -110,6 +110,8 @@ impl Display for ValidationResult {
 
 impl Error for ValidationResult {}
 
+pub type ServiceSkeleton<'a> = (&'a ServiceConfig, HashMap<String, String>);
+
 /// The configuration for qinit.
 pub struct Config {
 	services: HashMap<String, ServiceConfig>,
@@ -301,12 +303,14 @@ impl Config {
 		&self,
 		service_name: &str,
 		args: HashMap<String, String>,
-	) -> anyhow::Result<Vec<(&ServiceConfig, HashMap<String, String>)>> {
+	) -> anyhow::Result<(Vec<ServiceSkeleton<'_>>, Vec<ServiceSkeleton<'_>>)> {
 		let mut graph = Graph::empty();
 		let service = match self.services.get(service_name) {
 			Some(service) => service,
 			None => return Err(anyhow::anyhow!("Service {} does not exist", service_name)),
 		};
+
+		let mut wants = Vec::new();
 
 		let mut stack = vec![(service, args)];
 		while let Some((service, args)) = stack.pop() {
@@ -320,9 +324,18 @@ impl Config {
 				stack.push((service, dependency.args.clone()));
 				graph.add_edge((service, dependency.args.clone()), (), (service, args.clone()));
 			}
+
+			for dependency in service.wants.iter() {
+				let service = match self.services.get(&service.name) {
+					Some(service) => service,
+					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
+				};
+
+				wants.push((service, dependency.args.clone()));
+			}
 		}
 
-		Ok(graph.flatten()?)
+		Ok((graph.flatten()?, wants))
 	}
 }
 

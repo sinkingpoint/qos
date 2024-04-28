@@ -8,6 +8,3 @@ command = "/sbin/loggerd"
 user = "loggerd"
 group = "loggerd"
 create = true
-
-[[wants]]
-name = "loggerd"

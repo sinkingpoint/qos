@@ -8,3 +8,6 @@ command = "/sbin/getty ${TTY}"
 name = "TTY"
 description = "The tty to run getty on"
 required = true
+
+[[wants]]
+name = "loggerd"
