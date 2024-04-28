@@ -7,3 +7,4 @@ edition = "2021"
 thiserror = { workspace = true }
 common = { path = "../common" }
 ring = "0.17.0"
+chrono = { workspace = true }
