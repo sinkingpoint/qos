@@ -42,8 +42,14 @@ impl Shell {
 		let mut buffer = Buffer::new(input, output);
 
 		loop {
-			let prompt = self.environment.get("PS1").unwrap();
-			let line = match buffer.read(prompt) {
+			self.update_working_directory();
+			let prompt = format!(
+				"{} {}",
+				self.environment.get("PWD").unwrap(),
+				self.environment.get("PS1").unwrap()
+			);
+
+			let line = match buffer.read(&prompt) {
 				Ok(line) => line,
 				Err(e) => {
 					writeln!(err, "Error reading input: {}", e).unwrap();
@@ -71,6 +77,13 @@ impl Shell {
 
 			self.environment.insert("?".to_owned(), exit_code.to_string());
 		}
+	}
+
+	/// Update the working directory in the environment.
+	fn update_working_directory(&mut self) {
+		let path = std::env::current_dir().unwrap();
+		self.environment
+			.insert("PWD".to_owned(), path.to_string_lossy().to_string());
 	}
 
 	/// Evaluate the input as a shell expression.

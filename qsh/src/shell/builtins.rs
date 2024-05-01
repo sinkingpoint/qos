@@ -45,8 +45,6 @@ impl Builtin for Cd {
 			return Ok(1);
 		}
 
-		println!("cd: changed directory to {}", path);
-
 		Ok(0)
 	}
 }
