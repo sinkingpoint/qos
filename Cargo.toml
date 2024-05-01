@@ -6,7 +6,10 @@ members = [
     "auth",
     "bytestruct",
     "bytestruct/bytestruct-derive",
+    "cat",
+    "clear",
     "common",
+    "control",
     "cpio",
     "escapes",
     "escapes/escapes-derive",
@@ -20,7 +23,7 @@ members = [
     "qsh",
     "superblocks",
     "switchroot",
-    "tables", "control", "cat", "clear", 
+    "tables",
 ]
 
 [workspace.dependencies]
