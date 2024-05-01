@@ -5,6 +5,7 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/ls
   - ./target/x86_64-unknown-linux-musl/debug/login
   - ./target/x86_64-unknown-linux-musl/debug/cat
+  - ./target/x86_64-unknown-linux-musl/debug/clear
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd
