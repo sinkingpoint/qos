@@ -28,3 +28,25 @@ impl Builtin for Clear {
 		Ok(0)
 	}
 }
+
+/// The `cd` builtin, which changes the current working directory.
+pub struct Cd;
+
+impl Builtin for Cd {
+	fn run(&self, args: &[String], _triple: IOTriple, _shell: &Shell) -> Result<i32, WaitError> {
+		if args.len() != 2 {
+			eprintln!("cd: expected 1 argument, got {}", args.len() - 1);
+			return Ok(1);
+		}
+
+		let path = &args[1];
+		if let Err(e) = std::env::set_current_dir(path) {
+			eprintln!("cd: {}: {}", path, e);
+			return Ok(1);
+		}
+
+		println!("cd: changed directory to {}", path);
+
+		Ok(0)
+	}
+}

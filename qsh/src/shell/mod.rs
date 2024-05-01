@@ -126,7 +126,7 @@ impl Shell {
 		let argv = &process.argv;
 
 		if let Some(builtin) = self.builtins.get(&argv[0]) {
-			let code = builtin.run(&argv[1..], triple, self)?;
+			let code = builtin.run(argv, triple, self)?;
 			return Ok(Some(Executable::Builtin(code)));
 		}
 
@@ -179,6 +179,7 @@ fn default_builtins() -> HashMap<String, Box<dyn builtins::Builtin>> {
 		"clear".to_string(),
 		Box::new(builtins::Clear) as Box<dyn builtins::Builtin>,
 	);
+	builtins.insert("cd".to_string(), Box::new(builtins::Cd) as Box<dyn builtins::Builtin>);
 	builtins
 }
 
