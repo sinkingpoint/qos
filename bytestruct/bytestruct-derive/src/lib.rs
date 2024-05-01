@@ -75,10 +75,32 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 			quote! {#name}
 		});
 
+		let generics = input
+			.generics
+			.params
+			.iter()
+			.map(|param| {
+				quote! {#param}
+			})
+			.collect::<Vec<_>>();
+
+		let generic_names = input
+			.generics
+			.params
+			.iter()
+			.map(|param| {
+				let param = match param {
+					syn::GenericParam::Type(ty) => &ty.ident,
+					_ => panic!("Only type parameters are supported"),
+				};
+				quote! {#param}
+			})
+			.collect::<Vec<_>>();
+
 		let gen = if little_endian || big_endian {
 			quote! {
-				impl ::bytestruct::ReadFrom for #name {
-					fn read_from<T: ::std::io::Read>(source: &mut T) -> ::std::io::Result<Self> where Self: Sized {
+				impl<#(#generics)*> ::bytestruct::ReadFrom for #name<#(#generic_names)*> {
+					fn read_from<R: ::std::io::Read>(source: &mut R) -> ::std::io::Result<Self> where Self: Sized {
 						#(#set_endian_fields)*
 						Ok(Self {
 							#(#names),*
@@ -86,7 +108,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 					}
 				}
 
-				impl ::bytestruct::WriteTo for #name {
+				impl<#(#generics)*> ::bytestruct::WriteTo for #name<#(#generic_names)*> {
 					fn write_to<W: ::std::io::Write>(&self, writer: &mut W) -> ::std::io::Result<()> {
 						#(#write_fields)*
 						Ok(())
@@ -95,8 +117,8 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 			}
 		} else {
 			quote! {
-				impl ::bytestruct::ReadFromWithEndian for #name {
-					fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> where Self: Sized {
+				impl<#(#generics)*> ::bytestruct::ReadFromWithEndian for #name<#(#generic_names)*> {
+					fn read_from_with_endian<R: ::std::io::Read>(source: &mut R, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> where Self: Sized {
 						#(#set_endian_fields)*
 						Ok(Self {
 							#(#names),*
@@ -104,7 +126,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 					}
 				}
 
-				impl ::bytestruct::WriteToWithEndian for #name {
+				impl<#(#generics)*> ::bytestruct::WriteToWithEndian for #name<#(#generic_names)*> {
 					fn write_to_with_endian<W: ::std::io::Write>(&self, writer: &mut W, endian: ::bytestruct::Endian) -> ::std::io::Result<()> {
 						#(#write_fields)*
 						Ok(())
