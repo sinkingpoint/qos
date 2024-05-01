@@ -1,3 +1,5 @@
+mod builtins;
+
 use common::io::IOTriple;
 use std::{collections::HashMap, io::Write};
 use thiserror::Error;
@@ -15,6 +17,13 @@ use crate::{
 pub struct Shell {
 	environment: HashMap<String, String>,
 	pub triple: IOTriple,
+
+	builtins: HashMap<String, Box<dyn builtins::Builtin>>,
+}
+
+enum Executable {
+	Builtin(i32),
+	Pipeline(ProcessPipeline),
 }
 
 impl Shell {
@@ -22,6 +31,7 @@ impl Shell {
 		Shell {
 			environment: default_environment_vars(),
 			triple: IOTriple::default(),
+			builtins: default_builtins(),
 		}
 	}
 
@@ -41,8 +51,13 @@ impl Shell {
 				}
 			};
 
-			let pipeline = match self.evaluate(&line) {
-				Ok(pipeline) => pipeline,
+			let exit_code = match self.evaluate(&line) {
+				Ok(Executable::Pipeline(pipeline)) => match pipeline.get_exit_code() {
+					Some(ExitCode::Success(code)) => code,
+					Some(ExitCode::Err(code)) => code as i32,
+					None => panic!("BUG: pipeline has terminated, but no exit code found"),
+				},
+				Ok(Executable::Builtin(code)) => code,
 				Err(PipelineError::ParserError(e)) => {
 					writeln!(err, "Error evaluating input: {}", e).unwrap();
 					continue;
@@ -54,16 +69,12 @@ impl Shell {
 				Err(PipelineError::NoPipeline) => continue,
 			};
 
-			match pipeline.get_exit_code() {
-				Some(ExitCode::Success(code)) => self.environment.insert("?".to_owned(), code.to_string()),
-				Some(ExitCode::Err(code)) => self.environment.insert("?".to_owned(), code.to_string()),
-				None => panic!("BUG: pipeline has terminated, but no exit code found"),
-			};
+			self.environment.insert("?".to_owned(), exit_code.to_string());
 		}
 	}
 
 	/// Evaluate the input as a shell expression.
-	pub fn evaluate(&mut self, input: &str) -> Result<ProcessPipeline, PipelineError> {
+	fn evaluate(&mut self, input: &str) -> Result<Executable, PipelineError> {
 		let mut err = self.triple.stderr();
 
 		let raw_pipe = match parser::try_parse::<Pipeline>(input) {
@@ -82,8 +93,8 @@ impl Shell {
 		Ok(self.execute(raw_pipe, self.triple)?)
 	}
 
-	fn execute(&mut self, raw_pipe: Token<Pipeline>, triple: IOTriple) -> Result<ProcessPipeline, WaitError> {
-		let commands = raw_pipe
+	fn execute(&mut self, raw_pipe: Token<Pipeline>, triple: IOTriple) -> Result<Executable, WaitError> {
+		let commands: Vec<Process> = raw_pipe
 			.token
 			.commands
 			.iter()
@@ -93,12 +104,33 @@ impl Shell {
 			})
 			.collect();
 
+		// If there's only one command, try to execute it as a builtin.
+		if commands.len() == 1 {
+			match self.try_execute_as_builtin(triple, &commands[0]) {
+				Ok(Some(exec)) => return Ok(exec),
+				Ok(None) => (),
+				Err(e) => return Err(e),
+			}
+		}
+
 		let mut pipeline = ProcessPipeline::new(commands);
 		pipeline.execute(triple)?;
 
 		pipeline.wait()?;
 
-		Ok(pipeline)
+		Ok(Executable::Pipeline(pipeline))
+	}
+
+	/// Try to execute the command as a builtin, returning the exit code if it was able to be run.
+	fn try_execute_as_builtin(&mut self, triple: IOTriple, process: &Process) -> Result<Option<Executable>, WaitError> {
+		let argv = &process.argv;
+
+		if let Some(builtin) = self.builtins.get(&argv[0]) {
+			let code = builtin.run(&argv[1..], triple, self)?;
+			return Ok(Some(Executable::Builtin(code)));
+		}
+
+		Ok(None)
 	}
 
 	/// Construct the concrete expression from the token.
@@ -139,6 +171,15 @@ fn default_environment_vars() -> HashMap<String, String> {
 	env.insert("PATH".to_string(), "/bin:/usr/bin".to_string());
 	env.insert("PS1".to_string(), "$ ".to_string());
 	env
+}
+
+fn default_builtins() -> HashMap<String, Box<dyn builtins::Builtin>> {
+	let mut builtins = HashMap::new();
+	builtins.insert(
+		"clear".to_string(),
+		Box::new(builtins::Clear) as Box<dyn builtins::Builtin>,
+	);
+	builtins
 }
 
 #[cfg(test)]

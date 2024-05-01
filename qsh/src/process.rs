@@ -143,6 +143,9 @@ pub enum WaitError {
 
 	#[error("Nix error: {0}")]
 	Nix(#[from] nix::Error),
+
+	#[error("IO error: {0}")]
+	IO(#[from] io::Error),
 }
 
 /// The state of a pipeline of processes.
