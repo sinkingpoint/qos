@@ -1,0 +1,10 @@
+[package]
+name = "netlink"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
+bitflags = "2.5"
+nix = { workspace = true, features = ["socket"]}
