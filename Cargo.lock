@@ -658,6 +658,7 @@ dependencies = [
  "bytestruct",
  "bytestruct-derive",
  "nix",
+ "tokio",
 ]
 
 [[package]]
@@ -1206,6 +1207,7 @@ dependencies = [
  "common",
  "netlink",
  "slog",
+ "tokio",
 ]
 
 [[package]]

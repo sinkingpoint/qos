@@ -1,0 +1,10 @@
+[package]
+name = "udevd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+netlink = { path = "../netlink" }
+slog = { workspace = true }
+tokio = { workspace = true }

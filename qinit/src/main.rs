@@ -44,6 +44,10 @@ async fn main() -> ExitCode {
 	.await
 	.unwrap();
 
+	start(&logger, manager.clone(), &config, "udevd", HashMap::new())
+		.await
+		.unwrap();
+
 	manager.reaper().await;
 	ExitCode::SUCCESS
 }

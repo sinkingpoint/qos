@@ -1,0 +1,5 @@
+name = "udevd"
+description = "A udev daemon"
+
+[service]
+command = "/sbin/udevd"

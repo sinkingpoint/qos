@@ -10,6 +10,7 @@ secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd
   - ./target/x86_64-unknown-linux-musl/debug/getty
+  - ./target/x86_64-unknown-linux-musl/debug/udevd
 files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
