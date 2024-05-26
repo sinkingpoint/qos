@@ -1,3 +1,8 @@
+#[cfg(feature = "async")]
+mod async_socket;
+#[cfg(feature = "async")]
+pub use async_socket::*;
+
 use std::{
 	io::{self, Read, Write},
 	marker::PhantomData,
@@ -38,21 +43,35 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 			_phantom: PhantomData,
 		})
 	}
+
+	fn recv(&self, buf: &mut [u8], flags: MsgFlags) -> io::Result<usize> {
+		recv(self.socket_fd.as_raw_fd(), buf, flags).map_err(io::Error::from)
+	}
+
+	fn send(&self, buf: &[u8], flags: MsgFlags) -> io::Result<usize> {
+		send(self.socket_fd.as_raw_fd(), buf, flags).map_err(io::Error::from)
+	}
 }
 
 impl<T: NetlinkSockType> Read for NetlinkSocket<T> {
-	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-		recv(self.socket_fd.as_raw_fd(), buf, MsgFlags::empty()).map_err(io::Error::from)
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		self.recv(buf, MsgFlags::empty())
 	}
 }
 
 impl<T: NetlinkSockType> Write for NetlinkSocket<T> {
 	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-		send(self.socket_fd.as_raw_fd(), buf, MsgFlags::empty()).map_err(io::Error::from)
+		self.send(buf, MsgFlags::empty())
 	}
 
 	fn flush(&mut self) -> std::io::Result<()> {
 		Ok(())
+	}
+}
+
+impl<T: NetlinkSockType> AsRawFd for NetlinkSocket<T> {
+	fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
+		self.socket_fd.as_raw_fd()
 	}
 }
 

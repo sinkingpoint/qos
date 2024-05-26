@@ -8,3 +8,8 @@ bytestruct = { path = "../bytestruct" }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 bitflags = "2.5"
 nix = { workspace = true, features = ["socket"]}
+tokio = { workspace = true, optional = true }
+
+[features]
+default = ["async"]
+async = ["dep:tokio"]
