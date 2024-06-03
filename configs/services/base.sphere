@@ -1,0 +1,10 @@
+name = "base"
+description = "Base services for all other services"
+
+[[services]]
+name = "loggerd"
+
+[[services]]
+name = "getty"
+[services.arguments]
+TTY = "/dev/tty1"

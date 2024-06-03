@@ -12,8 +12,12 @@ use std::{
 use anyhow::Context;
 pub use service::Permissions;
 pub use service::ServiceConfig;
+use service::SphereDefinition;
 
 use self::graph::Graph;
+
+const SERVICE_FILE_EXTENSION: &str = "service";
+const SPHERE_FILE_EXTENSION: &str = "sphere";
 
 /// An error that occurred while validating a service definition.
 #[derive(Debug, Clone, PartialEq)]
@@ -115,6 +119,8 @@ pub type ServiceSkeleton<'a> = (&'a ServiceConfig, HashMap<String, String>);
 /// The configuration for qinit.
 pub struct Config {
 	services: HashMap<String, ServiceConfig>,
+
+	spheres: HashMap<String, SphereDefinition>,
 }
 
 impl Config {
@@ -122,6 +128,7 @@ impl Config {
 	fn empty() -> Config {
 		Config {
 			services: HashMap::new(),
+			spheres: HashMap::new(),
 		}
 	}
 
@@ -164,8 +171,15 @@ impl Config {
 			}
 
 			if let Some(ext) = path.extension() {
-				if ext == "service" {
+				if ext == SERVICE_FILE_EXTENSION {
 					errors.merge(self.load_service_from_file(&path));
+				} else if ext == SPHERE_FILE_EXTENSION {
+					errors.merge(self.load_sphere_from_file(&path));
+				} else {
+					errors.add_error(ValidationError::new(&format!(
+						"Unknown file extension: {}",
+						path.display()
+					)));
 				}
 			}
 		}
@@ -209,9 +223,7 @@ impl Config {
 			}
 		};
 
-		let service: ServiceConfig = match toml::from_str(&definition)
-			.with_context(|| format!("Failed to parse service definition from {}", path.display()))
-		{
+		let service: ServiceConfig = match toml::from_str(&definition) {
 			Ok(service) => service,
 			Err(e) => {
 				errors.add_error(ValidationError::new_fatal(&format!(
@@ -224,6 +236,47 @@ impl Config {
 		};
 
 		self.add_service(service)
+	}
+
+	/// Loads a sphere from a file and adds it to the configuration.
+	fn load_sphere_from_file(&mut self, path: &Path) -> ValidationResult {
+		let mut errors = ValidationResult::new();
+		let definition = match fs::read_to_string(path) {
+			Ok(definition) => definition,
+			Err(e) => {
+				errors.add_error(ValidationError::new_fatal(&format!(
+					"Failed to read sphere definition from {}: {}",
+					path.display(),
+					e
+				)));
+				return errors;
+			}
+		};
+
+		let sphere: SphereDefinition = match toml::from_str(&definition)
+			.with_context(|| format!("Failed to parse sphere definition from {}", path.display()))
+		{
+			Ok(sphere) => sphere,
+			Err(e) => {
+				errors.add_error(ValidationError::new_fatal(&format!(
+					"Failed to parse sphere definition from {}: {}",
+					path.display(),
+					e
+				)));
+				return errors;
+			}
+		};
+
+		if self.spheres.contains_key(&sphere.name) {
+			errors.add_error(ValidationError::new_fatal(&format!(
+				"Sphere with name {} already exists",
+				sphere.name
+			)));
+			return errors;
+		}
+
+		self.spheres.insert(sphere.name.clone(), sphere);
+		errors
 	}
 
 	/// Validates the configuration.
@@ -246,7 +299,7 @@ impl Config {
 
 				// Make sure the wanted service has the required arguments.
 				let wanted_service = self.services.get(&dependency.name).unwrap();
-				for name in dependency.args.keys() {
+				for name in dependency.arguments.keys() {
 					if !wanted_service.service.has_argument(name) {
 						errors.add_error(ValidationError::new_fatal(&format!(
 							"Service {} wants service {} with non-existent argument {}",
@@ -269,7 +322,7 @@ impl Config {
 
 				let needed_service = self.services.get(&dependency.name).unwrap();
 				let mut missing_arguments = needed_service.service.arguments.clone();
-				for name in dependency.args.keys() {
+				for name in dependency.arguments.keys() {
 					if !needed_service.service.has_argument(name) {
 						errors.add_error(ValidationError::new_fatal(&format!(
 							"Service {} needs service {} with non-existent argument {}",
@@ -299,6 +352,8 @@ impl Config {
 	}
 
 	/// Resolves the given service to a set of services that need to be started, based on the dependencies between services.
+	/// Returns a tuple of the services that need to be started, and the services that are wanted by the given service, which
+	/// should be started already.
 	pub fn resolve_to_service_set(
 		&self,
 		service_name: &str,
@@ -321,8 +376,8 @@ impl Config {
 					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
 				};
 
-				stack.push((service, dependency.args.clone()));
-				graph.add_edge((service, dependency.args.clone()), (), (service, args.clone()));
+				stack.push((service, dependency.arguments.clone()));
+				graph.add_edge((service, dependency.arguments.clone()), (), (service, args.clone()));
 			}
 
 			for dependency in service.wants.iter() {
@@ -331,7 +386,68 @@ impl Config {
 					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
 				};
 
-				wants.push((service, dependency.args.clone()));
+				wants.push((service, dependency.arguments.clone()));
+			}
+		}
+
+		Ok((graph.flatten()?, wants))
+	}
+
+	/// Resolves the given sphere to a set of services that need to be started, based on the dependencies between services.
+	pub fn resolve_sphere_to_service_set(
+		&self,
+		sphere_name: &str,
+	) -> anyhow::Result<(Vec<ServiceSkeleton<'_>>, Vec<ServiceSkeleton<'_>>)> {
+		let sphere = match self.spheres.get(sphere_name) {
+			Some(sphere) => sphere,
+			None => return Err(anyhow::anyhow!("Sphere {} does not exist", sphere_name)),
+		};
+
+		let mut graph = Graph::empty();
+		let mut wants = Vec::new();
+		for dependency in sphere.services.iter() {
+			let service = match self.services.get(&dependency.name) {
+				Some(service) => service,
+				None => return Err(anyhow::anyhow!("Service {} does not exist", dependency.name)),
+			};
+
+			for (k, _) in dependency.arguments.iter() {
+				if !service.service.has_argument(k) {
+					return Err(anyhow::anyhow!(
+						"Service {} does not have argument {} (Possible arguments: {:?})",
+						dependency.name,
+						k,
+						service
+							.service
+							.arguments
+							.iter()
+							.map(|a| a.name.as_str())
+							.collect::<Vec<_>>()
+					));
+				}
+			}
+
+			graph.add_vertex((service, dependency.arguments.clone()));
+			for dep in service.needs.iter() {
+				let service = match self.services.get(&service.name) {
+					Some(service) => service,
+					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
+				};
+
+				graph.add_edge(
+					(service, dep.arguments.clone()),
+					(),
+					(service, dependency.arguments.clone()),
+				);
+			}
+
+			for dep in service.wants.iter() {
+				let service = match self.services.get(&service.name) {
+					Some(service) => service,
+					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
+				};
+
+				wants.push((service, dep.arguments.clone()));
 			}
 		}
 

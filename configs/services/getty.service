@@ -4,7 +4,7 @@ description = "Getty on ${TTY}"
 [service]
 command = "/sbin/getty ${TTY}"
 
-[[arguments]]
+[[service.arguments]]
 name = "TTY"
 description = "The tty to run getty on"
 required = true

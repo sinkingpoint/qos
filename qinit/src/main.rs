@@ -30,30 +30,14 @@ async fn main() -> ExitCode {
 
 	let manager = Arc::new(ServiceManager::new(logger.clone()));
 
-	start(&logger, manager.clone(), &config, "loggerd", HashMap::new())
-		.await
-		.unwrap();
-
-	start(
-		&logger,
-		manager.clone(),
-		&config,
-		"getty",
-		HashMap::from([("TTY".to_owned(), "/dev/tty0".to_owned())]),
-	)
-	.await
-	.unwrap();
-
-	start(&logger, manager.clone(), &config, "udevd", HashMap::new())
-		.await
-		.unwrap();
+	start_sphere(&logger, manager.clone(), &config, "base").await.unwrap();
 
 	manager.reaper().await;
 	ExitCode::SUCCESS
 }
 
 /// Starts a service and its dependencies, returning an error if the service can't be started due to dependency issues.
-async fn start(
+async fn start_service(
 	logger: &slog::Logger,
 	manager: Arc<ServiceManager>,
 	config: &config::Config,
@@ -76,6 +60,37 @@ async fn start(
 	}
 
 	for (config, args) in to_start {
+		let service = Service::new(config, args);
+		manager.start(service).await?;
+	}
+
+	Ok(())
+}
+
+/// Starts a sphere and its dependencies, returning an error if the sphere can't be started due to dependency issues.
+async fn start_sphere(
+	logger: &slog::Logger,
+	manager: Arc<ServiceManager>,
+	config: &config::Config,
+	sphere_name: &str,
+) -> anyhow::Result<()> {
+	let (to_start, wants) = match config.resolve_sphere_to_service_set(sphere_name) {
+		Ok(sphere) => sphere,
+		Err(errors) => {
+			error!(logger, "Error resolving sphere"; "errors" => format!("{:?}", errors));
+			return Err(anyhow::anyhow!("Error resolving sphere"));
+		}
+	};
+
+	for (config, args) in wants {
+		manager
+			.satisfies(&Service::new(config, args))
+			.await
+			.with_context(|| format!("Sphere {} wants {}", sphere_name, config.name))?;
+	}
+
+	for (config, args) in to_start {
+		println!("Starting service: {:?} with arguments {:?}", config.name, args);
 		let service = Service::new(config, args);
 		manager.start(service).await?;
 	}

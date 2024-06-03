@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 /// An argument to a service.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Argument {
 	/// The name of the argument which is used for templating.
 	pub name: String,
@@ -83,7 +84,7 @@ pub struct Dependency {
 
 	/// The arguments to the service.
 	#[serde(default)]
-	pub args: HashMap<String, String>,
+	pub arguments: HashMap<String, String>,
 }
 
 /// The default user/group to run a service as.
@@ -93,6 +94,7 @@ fn default_root() -> String {
 
 /// The users and group to start the service with.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Permissions {
 	/// The user to start the service as.
 	#[serde(default = "default_root")]
@@ -135,6 +137,7 @@ impl Default for Permissions {
 
 /// A service definition.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ServiceConfig {
 	/// The name of the service.
 	pub name: String,
@@ -191,4 +194,19 @@ impl ServiceConfig {
 
 		result.with_context(&format!("Service {}", self.name))
 	}
+}
+
+/// The definition of a sphere; a group of services that should be started at the same time.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SphereDefinition {
+	/// The name of the sphere.
+	pub name: String,
+
+	/// A description of the sphere.
+	#[serde(default)]
+	pub description: String,
+
+	/// The services in the sphere.
+	pub services: Vec<Dependency>,
 }
