@@ -57,7 +57,7 @@ pub enum ControlAction {
 impl Action for ControlAction {
 	type Error = ControlError;
 
-	fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
+	async fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
 		self,
 		reader: R,
 		writer: W,

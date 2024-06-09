@@ -64,7 +64,7 @@ impl<F: ActionFactory + Send + 'static> ControlSocket<F> {
 }
 
 /// Handles a single incoming connection.
-async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) -> Result<(), <F::Action as Action>::Error> {
+async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) {
 	let (read, write) = stream.into_split();
 	let mut reader = BufReader::new(read);
 
@@ -85,5 +85,15 @@ async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) -> Result<(),
 		}
 	}
 
-	factory.build(action.unwrap_or(""), &args)?.run(reader, write).await
+	let action = match factory.build(action.unwrap_or(""), &args) {
+		Ok(action) => action,
+		Err(e) => {
+			eprintln!("Failed to build action: {:?}", e);
+			return;
+		}
+	};
+
+	if let Err(e) = action.run(reader, write).await {
+		eprintln!("Failed to run action: {:?}", e);
+	}
 }

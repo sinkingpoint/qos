@@ -1,0 +1,24 @@
+[package]
+name = "bus"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "busd"
+path = "busd/main.rs"
+
+[[bin]]
+name = "busctl"
+path = "busctl/main.rs"
+
+[lib]
+name = "bus"
+path = "lib/lib.rs"
+
+[dependencies]
+control = { path = "../control" }
+tokio = { version = "1", features = ["full"] }
+slog = { workspace = true }
+common = { path = "../common" }
+clap = { workspace = true }
+thiserror = { workspace = true }

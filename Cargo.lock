@@ -151,6 +151,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
+name = "bus"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "control",
+ "slog",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "bytes"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
