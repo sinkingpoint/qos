@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fmt::Debug, fs, future::Future, path::Path};
 
 use tokio::{
 	io::{self, AsyncBufRead, AsyncBufReadExt, AsyncWrite, BufReader},
@@ -18,16 +18,16 @@ pub trait ActionFactory: Clone {
 }
 
 /// An action that can be run in response to a control socket message.
-pub trait Action {
+pub trait Action: Send {
 	/// The type of error that this action can produce.
-	type Error: Sync + Send;
+	type Error: Sync + Send + Debug;
 
 	/// Runs the action with the given reader.
 	fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
 		self,
 		reader: R,
 		writer: W,
-	) -> Result<(), Self::Error>;
+	) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
 /// A control socket that listens for messages and runs actions in response.
@@ -85,5 +85,5 @@ async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) -> Result<(),
 		}
 	}
 
-	factory.build(action.unwrap_or(""), &args)?.run(reader, write)
+	factory.build(action.unwrap_or(""), &args)?.run(reader, write).await
 }
