@@ -51,31 +51,29 @@ impl<E: PartialEq + Clone + Debug, V: PartialEq + Clone + Debug> Graph<E, V> {
 	/// Uses [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
 	pub fn flatten(&self) -> Result<Vec<V>, GraphError> {
 		let mut visited = Vec::new();
-		let mut stack = Vec::new();
-		for vertex in &self.vertices {
-			if !self.edges.iter().any(|(from, _, _)| from == vertex) {
-				stack.push(vertex.clone());
-			}
-		}
 
 		let mut edges = self.edges.clone();
+		let mut stack: Vec<V> = self
+			.vertices
+			.iter()
+			.filter(|&v| !edges.iter().any(|(_, to, _)| to == v))
+			.cloned()
+			.collect();
 
 		while let Some(vertex) = stack.pop() {
 			visited.push(vertex.clone());
 			let mut target_nodes = Vec::new();
 			edges.retain(|(from, to, _)| {
-				if to != &vertex {
-					return true;
+				let retain = from != &vertex;
+				if !retain {
+					target_nodes.push(to.clone());
 				}
 
-				target_nodes.push(from.clone());
-				false
+				retain
 			});
 
-			for target in target_nodes {
-				if !edges.iter().any(|(from, _, _)| from == &target) {
-					stack.push(target);
-				}
+			for v in target_nodes.iter().filter(|&v| !edges.iter().any(|(_, to, _)| to == v)) {
+				stack.push(v.clone());
 			}
 		}
 
@@ -99,7 +97,7 @@ mod test {
 		graph.add_edge("a", (), "b");
 		graph.add_edge("b", (), "c");
 
-		assert_eq!(graph.flatten().unwrap(), vec!["c", "b", "a"]);
+		assert_eq!(graph.flatten().unwrap(), vec!["a", "b", "c"]);
 	}
 
 	#[test]
@@ -114,7 +112,7 @@ mod test {
 		graph.add_edge("b", (), "d");
 		graph.add_edge("c", (), "d");
 
-		assert_eq!(graph.flatten().unwrap(), vec!["d", "c", "b", "a"]);
+		assert_eq!(graph.flatten().unwrap(), vec!["a", "c", "b", "d"]);
 	}
 
 	#[test]

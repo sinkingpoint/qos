@@ -371,13 +371,17 @@ impl Config {
 		while let Some((service, args)) = stack.pop() {
 			graph.add_vertex((service, args.clone()));
 			for dependency in service.needs.iter() {
-				let service = match self.services.get(&service.name) {
+				let dependency_service = match self.services.get(&dependency.name) {
 					Some(service) => service,
 					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
 				};
 
 				stack.push((service, dependency.arguments.clone()));
-				graph.add_edge((service, dependency.arguments.clone()), (), (service, args.clone()));
+				graph.add_edge(
+					(dependency_service, dependency.arguments.clone()),
+					(),
+					(service, args.clone()),
+				);
 			}
 
 			for dependency in service.wants.iter() {
@@ -405,17 +409,17 @@ impl Config {
 
 		let mut graph = Graph::empty();
 		let mut wants = Vec::new();
-		for dependency in sphere.services.iter() {
-			let service = match self.services.get(&dependency.name) {
+		for sphere_needs in sphere.services.iter() {
+			let service = match self.services.get(&sphere_needs.name) {
 				Some(service) => service,
-				None => return Err(anyhow::anyhow!("Service {} does not exist", dependency.name)),
+				None => return Err(anyhow::anyhow!("Service {} does not exist", sphere_needs.name)),
 			};
 
-			for (k, _) in dependency.arguments.iter() {
+			for (k, _) in sphere_needs.arguments.iter() {
 				if !service.service.has_argument(k) {
 					return Err(anyhow::anyhow!(
 						"Service {} does not have argument {} (Possible arguments: {:?})",
-						dependency.name,
+						sphere_needs.name,
 						k,
 						service
 							.service
@@ -427,17 +431,19 @@ impl Config {
 				}
 			}
 
-			graph.add_vertex((service, dependency.arguments.clone()));
+			graph.add_vertex((service, sphere_needs.arguments.clone()));
 			for dep in service.needs.iter() {
-				let service = match self.services.get(&service.name) {
+				let dependency_service = match self.services.get(&dep.name) {
 					Some(service) => service,
 					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
 				};
 
+				// Add an edge from the dependency to the service, to mark that the service depends on the dependency
+				// The direction of the edge here is important - edges _from_ will be started _before_ edges _to_
 				graph.add_edge(
-					(service, dep.arguments.clone()),
+					(dependency_service, dep.arguments.clone()),
 					(),
-					(service, dependency.arguments.clone()),
+					(service, sphere_needs.arguments.clone()),
 				);
 			}
 
