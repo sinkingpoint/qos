@@ -1,4 +1,6 @@
-use bus::{BusAPI, BusAction, BusActionType};
+mod api;
+use api::{BusAPI, BusAction, BusActionType};
+use bus::DEFAULT_BUSD_SOCKET;
 use clap::{Arg, Command};
 use common::obs::assemble_logger;
 use control::listen::{Action, ActionFactory, ControlSocket};
@@ -14,7 +16,7 @@ async fn main() {
 			Arg::new("socket")
 				.long("socket")
 				.num_args(1)
-				.default_value("/run/busd/control.sock")
+				.default_value(DEFAULT_BUSD_SOCKET)
 				.help("The path to the control socket"),
 		)
 		.get_matches();
