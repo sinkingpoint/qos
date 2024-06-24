@@ -3,3 +3,6 @@ description = "A udev daemon"
 
 [service]
 command = "/sbin/udevd"
+
+[[needs]]
+name = "busd"

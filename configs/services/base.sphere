@@ -11,3 +11,6 @@ TTY = "/dev/tty1"
 
 [[services]]
 name = "busd"
+
+[[services]]
+name = "udevd"
