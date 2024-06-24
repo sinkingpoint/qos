@@ -1,9 +1,6 @@
-use bus::{BusActionType, PUBLISH_ACTION, SUBSCRIBE_ACTION};
+use bus::{BusClient, DEFAULT_BUSD_SOCKET};
 use clap::{Arg, Command};
-use tokio::{
-	io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
-	net::UnixStream,
-};
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::main]
 async fn main() {
@@ -14,7 +11,7 @@ async fn main() {
 			Arg::new("socket")
 				.long("socket")
 				.num_args(1)
-				.default_value("/run/busd/control.sock")
+				.default_value(DEFAULT_BUSD_SOCKET)
 				.help("The path to the control socket"),
 		)
 		.arg(
@@ -35,22 +32,12 @@ async fn main() {
 	let socket_path: &String = app.get_one("socket").unwrap();
 	let topic: &String = app.get_one("topic").unwrap();
 	let action: &String = app.get_one("action").unwrap();
-	let action = if action == SUBSCRIBE_ACTION {
-		BusActionType::Subscribe
-	} else if action == PUBLISH_ACTION {
-		BusActionType::Publish
-	} else {
-		panic!("Unknown action: {}", action);
-	};
 
-	let header = format!("ACTION={} topic={}\n", action, topic);
+	let client = BusClient::new_from_path(socket_path).await.unwrap();
 
-	let mut stream = UnixStream::connect(socket_path).await.unwrap();
-	stream.write_all(header.as_bytes()).await.unwrap();
-
-	match action {
-		BusActionType::Subscribe => {
-			let mut reader = BufReader::new(stream);
+	match action.as_str() {
+		"subscribe" => {
+			let mut reader = client.subscribe(topic).await.unwrap();
 			let mut line = String::new();
 			while reader.read_line(&mut line).await.unwrap() > 0 {
 				line.pop(); // Remove the newline
@@ -58,8 +45,8 @@ async fn main() {
 				line.clear();
 			}
 		}
-		BusActionType::Publish => {
-			let mut writer = BufWriter::new(stream);
+		"publish" => {
+			let mut writer = client.publish(topic).await.unwrap();
 			let mut reader = BufReader::new(io::stdin());
 
 			let mut line = String::new();
@@ -68,6 +55,9 @@ async fn main() {
 				writer.flush().await.unwrap();
 				line.clear();
 			}
+		}
+		_ => {
+			eprintln!("Unknown action: {}", action);
 		}
 	}
 }
