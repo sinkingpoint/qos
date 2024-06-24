@@ -1,0 +1,9 @@
+name = "busd"
+description = "A Message Bus Daemon"
+runtime_directory = "/run/busd"
+
+[service]
+command = "/sbin/busd --socket /run/busd/control.sock"
+
+[[wants]]
+name = "loggerd"

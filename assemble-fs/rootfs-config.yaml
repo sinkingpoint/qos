@@ -6,11 +6,13 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/login
   - ./target/x86_64-unknown-linux-musl/debug/cat
   - ./target/x86_64-unknown-linux-musl/debug/clear
+  - ./target/x86_64-unknown-linux-musl/debug/busctl
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd
   - ./target/x86_64-unknown-linux-musl/debug/getty
   - ./target/x86_64-unknown-linux-musl/debug/udevd
+  - ./target/x86_64-unknown-linux-musl/debug/busd
 files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow

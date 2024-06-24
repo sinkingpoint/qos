@@ -8,3 +8,6 @@ name = "loggerd"
 name = "getty"
 [services.arguments]
 TTY = "/dev/tty1"
+
+[[services]]
+name = "busd"
