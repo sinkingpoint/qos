@@ -2,7 +2,7 @@ use std::{fmt::Debug, fs, future::Future, path::Path};
 
 use tokio::{
 	io::{self, AsyncBufRead, AsyncBufReadExt, AsyncWrite, BufReader},
-	net::{UnixListener, UnixStream},
+	net::{unix::UCred, UnixListener, UnixStream},
 };
 
 /// The key that is used to indicate the action to be run in a control socket message.
@@ -25,6 +25,7 @@ pub trait Action: Send {
 	/// Runs the action with the given reader.
 	fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
 		self,
+		peer: UCred,
 		reader: R,
 		writer: W,
 	) -> impl Future<Output = Result<(), Self::Error>> + Send;
@@ -65,6 +66,7 @@ impl<F: ActionFactory + Send + 'static> ControlSocket<F> {
 
 /// Handles a single incoming connection.
 async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) {
+	let peer = stream.peer_cred().unwrap();
 	let (read, write) = stream.into_split();
 	let mut reader = BufReader::new(read);
 
@@ -93,7 +95,7 @@ async fn handler<F: ActionFactory>(factory: F, stream: UnixStream) {
 		}
 	};
 
-	if let Err(e) = action.run(reader, write).await {
+	if let Err(e) = action.run(peer, reader, write).await {
 		eprintln!("Failed to run action: {:?}", e);
 	}
 }

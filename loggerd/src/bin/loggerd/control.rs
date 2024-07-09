@@ -7,7 +7,10 @@ use loggerd::{
 	LogMessage,
 };
 use thiserror::Error;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::{
+	io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt},
+	net::unix::UCred,
+};
 
 use crate::api::Api;
 
@@ -59,6 +62,7 @@ impl Action for ControlAction {
 
 	async fn run<R: AsyncBufRead + Unpin + Send + 'static, W: AsyncWrite + Unpin + Send + 'static>(
 		self,
+		_peer: UCred,
 		reader: R,
 		writer: W,
 	) -> Result<(), Self::Error> {

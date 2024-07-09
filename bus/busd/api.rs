@@ -6,6 +6,7 @@ use slog::{info, o};
 use std::fmt;
 use tokio::{
 	io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
+	net::unix::UCred,
 	sync::{mpsc, Mutex},
 };
 
@@ -66,6 +67,7 @@ impl Action for BusAction {
 		W: tokio::io::AsyncWrite + Unpin + Send + 'static,
 	>(
 		self,
+		_peer: UCred,
 		reader: R,
 		writer: W,
 	) -> Result<(), Self::Error> {

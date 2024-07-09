@@ -805,6 +805,7 @@ dependencies = [
  "anyhow",
  "auth",
  "common",
+ "control",
  "nix",
  "serde",
  "slog",
