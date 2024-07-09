@@ -300,7 +300,7 @@ impl ServiceManager {
 	}
 
 	/// Marks the given service as running, notifying any pending services.
-	async fn mark_service_running(&self, pid: Pid) {
+	pub async fn mark_service_running(&self, pid: Pid) {
 		let mut services = self.services.lock().await;
 		let service = services.iter_mut().find(|s| match s.state {
 			ServiceState::Running(p) | ServiceState::Started(p) => p == pid,

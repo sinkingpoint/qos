@@ -101,12 +101,8 @@ impl SwitchrootCommand {
 		chroot(".")?;
 		chdir("/")?;
 
-		execve::<_, &CString>(
-			&CString::new("/sbin/qinit")?,
-			&[&CString::new("qinit")?, &CString::new("init")?],
-			&[],
-		)
-		.with_context(|| "failed to execute /sbin/init")?;
+		execve::<_, &CString>(&CString::new("/sbin/qinit")?, &[&CString::new("qinit")?], &[])
+			.with_context(|| "failed to execute /sbin/init")?;
 
 		Ok(())
 	}

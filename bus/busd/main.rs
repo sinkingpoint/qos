@@ -2,7 +2,7 @@ mod api;
 use api::{BusAPI, BusAction, BusActionType};
 use bus::DEFAULT_BUSD_SOCKET;
 use clap::{Arg, Command};
-use common::obs::assemble_logger;
+use common::{obs::assemble_logger, qinit::mark_running};
 use control::listen::{Action, ActionFactory, ControlSocket};
 use std::{io::stderr, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::Mutex;
@@ -26,6 +26,8 @@ async fn main() {
 	let socket_path: &String = app.get_one("socket").unwrap();
 
 	let socket = ControlSocket::open(&PathBuf::from_str(socket_path).unwrap(), factory).unwrap();
+
+	mark_running().unwrap();
 
 	socket.listen().await;
 }

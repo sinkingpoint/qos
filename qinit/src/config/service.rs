@@ -6,6 +6,7 @@ use serde::Deserialize;
 /// The StartMode of a service, that defines what must happen for the
 /// service to be considered "started".
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum StartMode {
 	/// The service is considered started immediately once itsbeen exec'd.
 	Run,

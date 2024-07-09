@@ -1,6 +1,7 @@
 name = "busd"
 description = "A Message Bus Daemon"
 runtime_directory = "/run/busd"
+start_mode = "notify"
 
 [service]
 command = "/sbin/busd --socket /run/busd/control.sock"

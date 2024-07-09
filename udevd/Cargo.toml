@@ -8,3 +8,4 @@ common = { path = "../common" }
 netlink = { path = "../netlink" }
 slog = { workspace = true }
 tokio = { workspace = true }
+bus = { path = "../bus" }

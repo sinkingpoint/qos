@@ -13,3 +13,5 @@ slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 auth = { path = "../auth" }
+control = { path = "../control" }
+clap = { workspace = true }

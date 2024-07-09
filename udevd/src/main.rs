@@ -4,21 +4,26 @@ use std::{
 	path::Path,
 };
 
+use bus::BusClient;
 use netlink::{AsyncNetlinkSocket, NetlinkKObjectUEvent};
 use slog::{error, info};
 use tokio::{
 	fs::{read_dir, OpenOptions},
-	io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+	io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader},
 };
+
+const BUSD_TOPIC: &str = "udev_events";
 
 #[tokio::main]
 async fn main() {
 	let logger = common::obs::assemble_logger(stderr());
 	let socket = AsyncNetlinkSocket::<NetlinkKObjectUEvent>::new(1).unwrap();
 
+	let bus_socket = BusClient::new().await.unwrap().publish(BUSD_TOPIC).await.unwrap();
+
 	let el_logger = logger.clone();
 	let hook = tokio::spawn(async move {
-		if let Err(e) = event_loop(&el_logger, socket).await {
+		if let Err(e) = event_loop(&el_logger, socket, bus_socket).await {
 			error!(el_logger, "Error in event loop"; "error" => e.to_string());
 		}
 	});
@@ -39,7 +44,11 @@ async fn main() {
 	info!(logger, "Exiting udevd");
 }
 
-async fn event_loop(logger: &slog::Logger, socket: AsyncNetlinkSocket<NetlinkKObjectUEvent>) -> io::Result<()> {
+async fn event_loop<T: AsyncWrite + Unpin>(
+	logger: &slog::Logger,
+	socket: AsyncNetlinkSocket<NetlinkKObjectUEvent>,
+	mut output: T,
+) -> io::Result<()> {
 	let reader = BufReader::new(socket);
 	let mut segments = reader.split(b'\0');
 
@@ -57,7 +66,7 @@ async fn event_loop(logger: &slog::Logger, socket: AsyncNetlinkSocket<NetlinkKOb
 			}
 		};
 
-		info!(logger, "Received netlink message"; "message" => line);
+		output.write_all(line.as_bytes()).await?;
 	}
 
 	Ok(())
