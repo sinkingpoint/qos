@@ -1,4 +1,3 @@
-mod graph;
 mod service;
 
 use std::{
@@ -10,11 +9,8 @@ use std::{
 };
 
 use anyhow::Context;
-pub use service::Permissions;
-pub use service::ServiceConfig;
 use service::SphereDefinition;
-
-use self::graph::Graph;
+pub use service::{Permissions, ServiceConfig, StartMode};
 
 const SERVICE_FILE_EXTENSION: &str = "service";
 const SPHERE_FILE_EXTENSION: &str = "sphere";
@@ -114,8 +110,6 @@ impl Display for ValidationResult {
 
 impl Error for ValidationResult {}
 
-pub type ServiceSkeleton<'a> = (&'a ServiceConfig, HashMap<String, String>);
-
 /// The configuration for qinit.
 pub struct Config {
 	services: HashMap<String, ServiceConfig>,
@@ -130,6 +124,14 @@ impl Config {
 			services: HashMap::new(),
 			spheres: HashMap::new(),
 		}
+	}
+
+	pub fn get_service_config(&self, name: &str) -> Option<&ServiceConfig> {
+		self.services.get(name)
+	}
+
+	pub fn get_sphere(&self, name: &str) -> Option<&SphereDefinition> {
+		self.spheres.get(name)
 	}
 
 	/// Loads all the services from .service files in the given directory
@@ -349,115 +351,6 @@ impl Config {
 		}
 
 		errors
-	}
-
-	/// Resolves the given service to a set of services that need to be started, based on the dependencies between services.
-	/// Returns a tuple of the services that need to be started, and the services that are wanted by the given service, which
-	/// should be started already.
-	pub fn resolve_to_service_set(
-		&self,
-		service_name: &str,
-		args: HashMap<String, String>,
-	) -> anyhow::Result<(Vec<ServiceSkeleton<'_>>, Vec<ServiceSkeleton<'_>>)> {
-		let mut graph = Graph::empty();
-		let service = match self.services.get(service_name) {
-			Some(service) => service,
-			None => return Err(anyhow::anyhow!("Service {} does not exist", service_name)),
-		};
-
-		let mut wants = Vec::new();
-
-		let mut stack = vec![(service, args)];
-		while let Some((service, args)) = stack.pop() {
-			graph.add_vertex((service, args.clone()));
-			for dependency in service.needs.iter() {
-				let dependency_service = match self.services.get(&dependency.name) {
-					Some(service) => service,
-					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
-				};
-
-				stack.push((service, dependency.arguments.clone()));
-				graph.add_edge(
-					(dependency_service, dependency.arguments.clone()),
-					(),
-					(service, args.clone()),
-				);
-			}
-
-			for dependency in service.wants.iter() {
-				let service = match self.services.get(&service.name) {
-					Some(service) => service,
-					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
-				};
-
-				wants.push((service, dependency.arguments.clone()));
-			}
-		}
-
-		Ok((graph.flatten()?, wants))
-	}
-
-	/// Resolves the given sphere to a set of services that need to be started, based on the dependencies between services.
-	pub fn resolve_sphere_to_service_set(
-		&self,
-		sphere_name: &str,
-	) -> anyhow::Result<(Vec<ServiceSkeleton<'_>>, Vec<ServiceSkeleton<'_>>)> {
-		let sphere = match self.spheres.get(sphere_name) {
-			Some(sphere) => sphere,
-			None => return Err(anyhow::anyhow!("Sphere {} does not exist", sphere_name)),
-		};
-
-		let mut graph = Graph::empty();
-		let mut wants = Vec::new();
-		for sphere_needs in sphere.services.iter() {
-			let service = match self.services.get(&sphere_needs.name) {
-				Some(service) => service,
-				None => return Err(anyhow::anyhow!("Service {} does not exist", sphere_needs.name)),
-			};
-
-			for (k, _) in sphere_needs.arguments.iter() {
-				if !service.service.has_argument(k) {
-					return Err(anyhow::anyhow!(
-						"Service {} does not have argument {} (Possible arguments: {:?})",
-						sphere_needs.name,
-						k,
-						service
-							.service
-							.arguments
-							.iter()
-							.map(|a| a.name.as_str())
-							.collect::<Vec<_>>()
-					));
-				}
-			}
-
-			graph.add_vertex((service, sphere_needs.arguments.clone()));
-			for dep in service.needs.iter() {
-				let dependency_service = match self.services.get(&dep.name) {
-					Some(service) => service,
-					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
-				};
-
-				// Add an edge from the dependency to the service, to mark that the service depends on the dependency
-				// The direction of the edge here is important - edges _from_ will be started _before_ edges _to_
-				graph.add_edge(
-					(dependency_service, dep.arguments.clone()),
-					(),
-					(service, sphere_needs.arguments.clone()),
-				);
-			}
-
-			for dep in service.wants.iter() {
-				let service = match self.services.get(&service.name) {
-					Some(service) => service,
-					None => return Err(anyhow::anyhow!("Service {} does not exist", service.name)),
-				};
-
-				wants.push((service, dep.arguments.clone()));
-			}
-		}
-
-		Ok((graph.flatten()?, wants))
 	}
 }
 

@@ -3,6 +3,23 @@ use std::collections::{HashMap, HashSet};
 use super::{ValidationError, ValidationResult};
 use serde::Deserialize;
 
+/// The StartMode of a service, that defines what must happen for the
+/// service to be considered "started".
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum StartMode {
+	/// The service is considered started immediately once itsbeen exec'd.
+	Run,
+
+	/// The service must manually notify the control socket that it has started.
+	Notify,
+}
+
+impl Default for StartMode {
+	fn default() -> Self {
+		Self::Run
+	}
+}
+
 /// An argument to a service.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -174,6 +191,11 @@ pub struct ServiceConfig {
 
 	/// The runtime directory for the service. This is the directory that the service will be started in.
 	pub runtime_directory: Option<String>,
+
+	/// The "Start Mode" of the service. When a child is exec'd, sometimes it needs to perform some sort
+	/// of startup before it's actually considered "ready". The Start Mode defines how that is determined.
+	#[serde(default)]
+	pub start_mode: StartMode,
 
 	/// The result of validating this service.
 	#[serde(skip)]

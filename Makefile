@@ -14,7 +14,7 @@ rootfs: build
 run: initramfs rootfs
 	qemu-system-x86_64 \
 		-m 2G \
-		-kernel /boot/vmlinuz-6.8.6-200.fc39.x86_64 \
+		-kernel /boot/vmlinuz-6.9.7-200.fc40.x86_64 \
 		-initrd ./target/initramfs.cpio \
 		-echr 2 \
 		-display curses \
