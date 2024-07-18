@@ -320,6 +320,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "elf"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "bytestruct",
+ "bytestruct-derive",
+ "clap",
+]
+
+[[package]]
 name = "enum_dispatch"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

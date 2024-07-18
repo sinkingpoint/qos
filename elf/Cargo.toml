@@ -1,0 +1,18 @@
+[package]
+name = "elf"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "elf"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "readelf"
+path = "src/bin/readelf/main.rs"
+
+[dependencies]
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
+clap = { workspace = true }
+bitflags = "2.6"

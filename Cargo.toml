@@ -23,7 +23,7 @@ members = [
     "qsh",
     "superblocks",
     "switchroot",
-    "tables", "netlink", "udevd", "bus",
+    "tables", "netlink", "udevd", "bus", "elf",
 ]
 
 [workspace.dependencies]
