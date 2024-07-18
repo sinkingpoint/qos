@@ -143,6 +143,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 		let ty = get_repr(&input.attrs);
 
 		for (i, variant) in data.variants.iter().enumerate() {
+			let ident = &variant.ident;
 			let discriminant = if let Some((_, v)) = &variant.discriminant {
 				quote! {#v}
 			} else {
@@ -150,11 +151,11 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 			};
 
 			read_matches.push(quote! {
-				#discriminant => #name::#variant,
+				#discriminant => #name::#ident,
 			});
 
 			write_matches.push(quote! {
-				#name::#variant => #discriminant,
+				#name::#ident => #discriminant,
 			});
 		}
 
