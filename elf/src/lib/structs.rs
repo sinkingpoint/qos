@@ -1,8 +1,8 @@
 use std::fmt::Debug;
-use std::io::{self, ErrorKind};
+use std::io::{self, ErrorKind, Read, Seek};
 
 use bitflags::bitflags;
-use bytestruct::{Endian, ReadFrom, ReadFromWithEndian, WriteTo, WriteToWithEndian};
+use bytestruct::{Endian, ReadFrom, ReadFromWithEndian};
 use bytestruct_derive::ByteStruct;
 
 const ELF_VERSION: u8 = 1;
@@ -18,12 +18,6 @@ pub enum Class {
 impl ReadFrom for Class {
 	fn read_from<T: io::Read>(source: &mut T) -> io::Result<Self> {
 		Self::read_from_with_endian(source, Endian::Little)
-	}
-}
-
-impl WriteTo for Class {
-	fn write_to<T: io::Write>(&self, target: &mut T) -> io::Result<()> {
-		self.write_to_with_endian(target, Endian::Little)
 	}
 }
 
@@ -91,21 +85,6 @@ impl ReadFromWithEndian for ElfType {
 				format!("invalid ELF class: {}", val),
 			)),
 		}
-	}
-}
-
-impl WriteToWithEndian for ElfType {
-	fn write_to_with_endian<T: io::Write>(&self, target: &mut T, endian: bytestruct::Endian) -> io::Result<()> {
-		let n = match self {
-			Self::OSSpecific(n) | Self::ProcessorSpecific(n) => *n,
-			Self::None => 0,
-			Self::RelocatableFile => 1,
-			Self::ExecutableFile => 2,
-			Self::SharedObject => 3,
-			Self::CoreFile => 4,
-		};
-
-		n.write_to_with_endian(target, endian)
 	}
 }
 
@@ -441,13 +420,24 @@ impl SectionHeaderFlags {
 	}
 }
 
+/// The header of a section in an ELF file.
 #[derive(Debug)]
 pub struct SectionHeader {
+	/// The offset in the special section names section that contains the name of this section.
 	pub name_offset: u32,
+
+	/// The underlying type of this section.
 	pub ty: SectionHeaderType,
+
 	pub flags: SectionHeaderFlags,
+
+	/// The address to place this section in memory.
 	pub address: u64,
+
+	/// The offset of this section in the ELF file.
 	pub offset: u64,
+
+	/// The size of this section in bytes.
 	pub size: u64,
 	pub link: u32,
 	pub info: u32,
@@ -480,5 +470,56 @@ impl SectionHeader {
 			alignment,
 			entry_size,
 		})
+	}
+
+	/// Attempt to read this section as a String Table, returning None if `ty` is not SectionHeaderType::StringTable.
+	pub fn read_string_table_section<T: Read + Seek>(&self, reader: &mut T) -> Option<io::Result<StringTableSection>> {
+		if !matches!(self.ty, SectionHeaderType::StringTable) {
+			return None;
+		}
+
+		let mut bytes = vec![0; self.size as usize];
+		if let Err(e) = reader.read_exact(&mut bytes) {
+			return Some(Err(e));
+		}
+
+		Some(StringTableSection::read(&bytes))
+	}
+}
+
+/// A string table section, with strings and their offsets in the section.
+pub struct StringTableSection(Vec<(u64, String)>);
+
+impl StringTableSection {
+	fn read(bytes: &[u8]) -> io::Result<Self> {
+		let mut start = 0;
+		let mut build = String::new();
+		let mut strings = Vec::new();
+
+		for (i, byte) in bytes.iter().enumerate() {
+			if *byte == 0 {
+				if !build.is_empty() {
+					strings.push((start as u64, build.clone()));
+				}
+
+				start = i + 1;
+			} else {
+				build.push(*byte as char);
+			}
+		}
+
+		if !build.is_empty() {
+			return Err(io::Error::new(
+				ErrorKind::InvalidData,
+				format!("found non null terminated string in string table: `{}`", build),
+			));
+		}
+
+		Ok(Self(strings))
+	}
+
+	/// Try get the string at the given offset, returning None if it doesn't exist.
+	pub fn get_string_at_offset(&self, offset: u64) -> Option<&String> {
+		return self.0.iter().find(|(o, _)| *o == offset).map(|(_, s)| s);
 	}
 }
