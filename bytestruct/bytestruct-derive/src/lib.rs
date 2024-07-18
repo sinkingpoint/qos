@@ -164,7 +164,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 					let discriminant = <#ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(source, endian)?;
 					let variant = match discriminant {
 						#(#read_matches)*
-						_ => panic!("Invalid discriminant")
+						_ => return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, format!("invalid discriminant for {}: {}", ::std::any::type_name::<#name>(), discriminant)))
 					};
 
 					Ok(variant)
