@@ -18,7 +18,13 @@ fn main() -> ExitCode {
 		}
 	};
 
-	println!("{:?}", elffile);
+	for section in elffile.section_headers() {
+		let section = section.unwrap();
+		println!("Reading name at: {:?}", section);
+		let name = elffile.section_header_name(&section).unwrap();
+
+		println!("Got section: {}", name);
+	}
 
 	ExitCode::SUCCESS
 }

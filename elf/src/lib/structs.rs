@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::{self, ErrorKind, Read, Seek};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 
 use bitflags::bitflags;
 use bytestruct::{Endian, ReadFrom, ReadFromWithEndian};
@@ -478,6 +478,7 @@ impl SectionHeader {
 			return None;
 		}
 
+		reader.seek(SeekFrom::Start(self.offset)).ok()?;
 		let mut bytes = vec![0; self.size as usize];
 		if let Err(e) = reader.read_exact(&mut bytes) {
 			return Some(Err(e));
@@ -488,6 +489,7 @@ impl SectionHeader {
 }
 
 /// A string table section, with strings and their offsets in the section.
+#[derive(Debug)]
 pub struct StringTableSection(Vec<(u64, String)>);
 
 impl StringTableSection {
@@ -498,9 +500,8 @@ impl StringTableSection {
 
 		for (i, byte) in bytes.iter().enumerate() {
 			if *byte == 0 {
-				if !build.is_empty() {
-					strings.push((start as u64, build.clone()));
-				}
+				strings.push((start as u64, build.clone()));
+				build.clear();
 
 				start = i + 1;
 			} else {
