@@ -55,8 +55,8 @@ fn main() -> ExitCode {
 	};
 
 	for symbol in symbols_section.iter() {
-		let name = symbol_names_section.get_string_at_offset(symbol.name_offset).unwrap();
-		println!("{}", name);
+		let name = symbol_names_section.get_string_at_offset(symbol.name_offset);
+		println!("{:?}", name);
 	}
 
 	ExitCode::SUCCESS

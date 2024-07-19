@@ -539,7 +539,18 @@ impl StringTableSection {
 
 	/// Try get the string at the given offset, returning None if it doesn't exist.
 	pub fn get_string_at_offset(&self, offset: u64) -> Option<&str> {
-		return self.0.iter().find(|(o, _)| *o == offset).map(|(_, s)| s.as_ref());
+		let (str_offset, potential) = self
+			.0
+			.iter()
+			.find(|(o, s)| offset >= *o && offset <= *o + s.len() as u64)?;
+
+		let potential: &str = potential.as_ref();
+		let split_at = (offset - str_offset) as usize;
+		if split_at == 0 {
+			Some(potential)
+		} else {
+			Some(potential.split_at(split_at).1)
+		}
 	}
 }
 
