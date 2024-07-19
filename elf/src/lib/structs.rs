@@ -359,6 +359,7 @@ pub enum SectionHeaderType {
 	PreConstructors,
 	SectionGroup,
 	SectionIndices,
+	Number,
 	OSSpecific(u32),
 }
 
@@ -381,6 +382,7 @@ impl ReadFromWithEndian for SectionHeaderType {
 			0x10 => Ok(Self::PreConstructors),
 			0x11 => Ok(Self::SectionGroup),
 			0x12 => Ok(Self::SectionIndices),
+			0x13 => Ok(Self::Number),
 			n @ 0x60000000.. => Ok(Self::OSSpecific(n)),
 			n => Err(io::Error::new(
 				ErrorKind::InvalidData,
@@ -536,8 +538,8 @@ impl StringTableSection {
 	}
 
 	/// Try get the string at the given offset, returning None if it doesn't exist.
-	pub fn get_string_at_offset(&self, offset: u64) -> Option<&String> {
-		return self.0.iter().find(|(o, _)| *o == offset).map(|(_, s)| s);
+	pub fn get_string_at_offset(&self, offset: u64) -> Option<&str> {
+		return self.0.iter().find(|(o, _)| *o == offset).map(|(_, s)| s.as_ref());
 	}
 }
 
@@ -614,7 +616,7 @@ pub enum ElfSymbolVisibility {
 
 #[derive(Debug)]
 pub struct ElfSymbol {
-	pub name_offset: u32,
+	pub name_offset: u64,
 	pub value: u64,
 	pub size: u64,
 	pub ty: ElfSymbolType,
@@ -655,7 +657,7 @@ impl ElfSymbol {
 		let ty = ElfSymbolType::try_from(info & 0xF)?;
 
 		Ok(Self {
-			name_offset,
+			name_offset: name_offset as u64,
 			binding,
 			size,
 			symbol_table_index,
@@ -667,7 +669,7 @@ impl ElfSymbol {
 }
 
 #[derive(Debug)]
-pub struct SymbolTableSection(pub Vec<ElfSymbol>);
+pub struct SymbolTableSection(Vec<ElfSymbol>);
 
 impl SymbolTableSection {
 	fn read(bytes: &[u8], class: Class, endian: Endian) -> io::Result<Self> {
@@ -682,5 +684,9 @@ impl SymbolTableSection {
 		}
 
 		Ok(Self(symbols))
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = &ElfSymbol> {
+		self.0.iter()
 	}
 }

@@ -66,7 +66,7 @@ impl ElfFile {
 		SectionHeaderIterator::new(self, &self.header)
 	}
 
-	pub fn section_header_name(&self, header: &SectionHeader) -> Option<&String> {
+	pub fn section_header_name(&self, header: &SectionHeader) -> Option<&str> {
 		self.section_names.get_string_at_offset(header.name_offset as u64)
 	}
 }
