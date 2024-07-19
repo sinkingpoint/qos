@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{self, Cursor, ErrorKind, Read, Seek, SeekFrom};
 
 use bitflags::bitflags;
 use bytestruct::{Endian, ReadFrom, ReadFromWithEndian};
@@ -423,6 +423,9 @@ impl SectionHeaderFlags {
 /// The header of a section in an ELF file.
 #[derive(Debug)]
 pub struct SectionHeader {
+	class: Class,
+	endian: Endian,
+
 	/// The offset in the special section names section that contains the name of this section.
 	pub name_offset: u32,
 
@@ -459,6 +462,8 @@ impl SectionHeader {
 		let entry_size = class.read_value(source, endian)?;
 
 		Ok(Self {
+			class,
+			endian,
 			name_offset,
 			ty,
 			flags,
@@ -472,19 +477,30 @@ impl SectionHeader {
 		})
 	}
 
+	fn read_section<T: Read + Seek>(&self, mut reader: T) -> io::Result<Vec<u8>> {
+		reader.seek(SeekFrom::Start(self.offset))?;
+		let mut bytes = vec![0; self.size as usize];
+		reader.read_exact(&mut bytes)?;
+
+		Ok(bytes)
+	}
+
 	/// Attempt to read this section as a String Table, returning None if `ty` is not SectionHeaderType::StringTable.
-	pub fn read_string_table_section<T: Read + Seek>(&self, reader: &mut T) -> Option<io::Result<StringTableSection>> {
+	pub fn read_string_table_section<T: Read + Seek>(&self, reader: T) -> Option<io::Result<StringTableSection>> {
 		if !matches!(self.ty, SectionHeaderType::StringTable) {
 			return None;
 		}
+		let bytes = self.read_section(reader).ok()?;
+		Some(StringTableSection::read(&bytes))
+	}
 
-		reader.seek(SeekFrom::Start(self.offset)).ok()?;
-		let mut bytes = vec![0; self.size as usize];
-		if let Err(e) = reader.read_exact(&mut bytes) {
-			return Some(Err(e));
+	pub fn read_symbol_table_section<T: Read + Seek>(&self, reader: T) -> Option<io::Result<SymbolTableSection>> {
+		if !matches!(self.ty, SectionHeaderType::SymbolTable) {
+			return None;
 		}
 
-		Some(StringTableSection::read(&bytes))
+		let bytes = self.read_section(reader).ok()?;
+		Some(SymbolTableSection::read(&bytes, self.class, self.endian))
 	}
 }
 
@@ -522,5 +538,149 @@ impl StringTableSection {
 	/// Try get the string at the given offset, returning None if it doesn't exist.
 	pub fn get_string_at_offset(&self, offset: u64) -> Option<&String> {
 		return self.0.iter().find(|(o, _)| *o == offset).map(|(_, s)| s);
+	}
+}
+
+#[derive(Debug)]
+pub enum ElfSymbolType {
+	None,
+	Object,
+	Func,
+	Section,
+	File,
+	Common,
+	ThreadLocal,
+	OSSpecific(u8),
+	ProcessorSpecific(u8),
+}
+
+impl TryFrom<u8> for ElfSymbolType {
+	type Error = io::Error;
+
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(Self::None),
+			1 => Ok(Self::Object),
+			2 => Ok(Self::Func),
+			3 => Ok(Self::Section),
+			4 => Ok(Self::File),
+			5 => Ok(Self::Common),
+			6 => Ok(Self::ThreadLocal),
+			10..=12 => Ok(Self::OSSpecific(value)),
+			13..=15 => Ok(Self::ProcessorSpecific(value)),
+			_ => Err(io::Error::new(
+				ErrorKind::InvalidData,
+				format!("invalid elf symbol type: {}", value),
+			)),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub enum ElfSymbolBinding {
+	Local,
+	Global,
+	Weak,
+	OSSpecific(u8),
+	ProcessorSpecific(u8),
+}
+
+impl TryFrom<u8> for ElfSymbolBinding {
+	type Error = io::Error;
+
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(Self::Local),
+			1 => Ok(Self::Global),
+			2 => Ok(Self::Weak),
+			10..=12 => Ok(Self::OSSpecific(value)),
+			13..=15 => Ok(Self::ProcessorSpecific(value)),
+			_ => Err(io::Error::new(
+				ErrorKind::InvalidData,
+				format!("invalid elf symbol binding: {}", value),
+			)),
+		}
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+#[repr(u8)]
+pub enum ElfSymbolVisibility {
+	Default = 0,
+	Internal = 1,
+	Hidden = 2,
+	Protected = 3,
+}
+
+#[derive(Debug)]
+pub struct ElfSymbol {
+	pub name_offset: u32,
+	pub value: u64,
+	pub size: u64,
+	pub ty: ElfSymbolType,
+	pub binding: ElfSymbolBinding,
+	pub visibility: ElfSymbolVisibility,
+	pub symbol_table_index: u64,
+}
+
+impl ElfSymbol {
+	pub fn read_from_with_endian<T: io::Read>(source: &mut T, class: Class, endian: Endian) -> io::Result<Self> {
+		let name_offset: u32;
+		let value: u64;
+		let size: u64;
+		let info: u8;
+		let visibility: ElfSymbolVisibility;
+		let symbol_table_index: u64;
+
+		match class {
+			Class::ThirtyTwoBit => {
+				name_offset = u32::read_from_with_endian(source, endian)?;
+				value = class.read_value(source, endian)?;
+				size = class.read_value(source, endian)?;
+				info = u8::read_from(source)?;
+				visibility = ElfSymbolVisibility::read_from_with_endian(source, endian)?;
+				symbol_table_index = u16::read_from_with_endian(source, endian)? as u64;
+			}
+			Class::SixtyFourBit => {
+				name_offset = u32::read_from_with_endian(source, endian)?;
+				info = u8::read_from(source)?;
+				visibility = ElfSymbolVisibility::read_from_with_endian(source, endian)?;
+				symbol_table_index = u16::read_from_with_endian(source, endian)? as u64;
+				value = class.read_value(source, endian)?;
+				size = class.read_value(source, endian)?;
+			}
+		};
+
+		let binding = ElfSymbolBinding::try_from(info >> 4)?;
+		let ty = ElfSymbolType::try_from(info & 0xF)?;
+
+		Ok(Self {
+			name_offset,
+			binding,
+			size,
+			symbol_table_index,
+			ty,
+			value,
+			visibility,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct SymbolTableSection(pub Vec<ElfSymbol>);
+
+impl SymbolTableSection {
+	fn read(bytes: &[u8], class: Class, endian: Endian) -> io::Result<Self> {
+		let mut source = Cursor::new(bytes);
+		let mut symbols = Vec::new();
+		loop {
+			match ElfSymbol::read_from_with_endian(&mut source, class, endian) {
+				Ok(symbol) => symbols.push(symbol),
+				Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+				Err(e) => return Err(e),
+			};
+		}
+
+		Ok(Self(symbols))
 	}
 }

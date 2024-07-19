@@ -20,10 +20,11 @@ fn main() -> ExitCode {
 
 	for section in elffile.section_headers() {
 		let section = section.unwrap();
-		println!("Reading name at: {:?}", section);
 		let name = elffile.section_header_name(&section).unwrap();
-
-		println!("Got section: {}", name);
+		if name == ".symtab" {
+			println!("Found symtab section: {:?}", section);
+			println!("{:?}", section.read_symbol_table_section(&elffile));
+		}
 	}
 
 	ExitCode::SUCCESS

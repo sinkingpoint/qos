@@ -2,6 +2,7 @@ use std::{
 	fs::File,
 	io::{self, ErrorKind, Read, Seek, SeekFrom},
 	path::Path,
+	sync::Mutex,
 };
 
 mod structs;
@@ -10,7 +11,7 @@ pub use structs::*;
 
 #[derive(Debug)]
 pub struct ElfFile {
-	inner: File,
+	inner: Mutex<File>,
 
 	pub header: ElfHeader,
 
@@ -51,18 +52,18 @@ impl ElfFile {
 		};
 
 		Ok(Self {
-			inner: file,
+			inner: Mutex::new(file),
 			header,
 			section_names,
 		})
 	}
 
 	pub fn program_headers(&'_ self) -> impl Iterator<Item = io::Result<ProgramHeader>> + '_ {
-		ProgramHeaderIterator::new(&self.inner, &self.header)
+		ProgramHeaderIterator::new(self, &self.header)
 	}
 
 	pub fn section_headers(&'_ self) -> impl Iterator<Item = io::Result<SectionHeader>> + '_ {
-		SectionHeaderIterator::new(&self.inner, &self.header)
+		SectionHeaderIterator::new(self, &self.header)
 	}
 
 	pub fn section_header_name(&self, header: &SectionHeader) -> Option<&String> {
@@ -70,21 +71,35 @@ impl ElfFile {
 	}
 }
 
+impl Read for &ElfFile {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		let mut inner = self.inner.lock().unwrap();
+		inner.read(buf)
+	}
+}
+
+impl Seek for &ElfFile {
+	fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+		let mut inner = self.inner.lock().unwrap();
+		inner.seek(pos)
+	}
+}
+
 /// An iterator over a given ElfFile's program headers
-struct ProgramHeaderIterator<'a> {
+struct ProgramHeaderIterator<'a, T: Read + Seek> {
 	idx: u64,
 
-	inner: &'a File,
+	inner: T,
 	header: &'a ElfHeader,
 }
 
-impl<'a> ProgramHeaderIterator<'a> {
-	fn new(inner: &'a File, header: &'a ElfHeader) -> Self {
+impl<'a, T: Read + Seek> ProgramHeaderIterator<'a, T> {
+	fn new(inner: T, header: &'a ElfHeader) -> Self {
 		Self { idx: 0, inner, header }
 	}
 }
 
-impl<'a> Iterator for ProgramHeaderIterator<'a> {
+impl<'a, T: Read + Seek> Iterator for ProgramHeaderIterator<'a, T> {
 	type Item = io::Result<ProgramHeader>;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -94,20 +109,20 @@ impl<'a> Iterator for ProgramHeaderIterator<'a> {
 	}
 }
 
-struct SectionHeaderIterator<'a> {
+struct SectionHeaderIterator<'a, T: Read + Seek> {
 	idx: u64,
 
-	inner: &'a File,
+	inner: T,
 	header: &'a ElfHeader,
 }
 
-impl<'a> SectionHeaderIterator<'a> {
-	fn new(inner: &'a File, header: &'a ElfHeader) -> Self {
+impl<'a, T: Read + Seek> SectionHeaderIterator<'a, T> {
+	fn new(inner: T, header: &'a ElfHeader) -> Self {
 		Self { idx: 0, inner, header }
 	}
 }
 
-impl<'a> Iterator for SectionHeaderIterator<'a> {
+impl<'a, T: Read + Seek> Iterator for SectionHeaderIterator<'a, T> {
 	type Item = io::Result<SectionHeader>;
 	fn next(&mut self) -> Option<Self::Item> {
 		let header = read_section_header(&mut self.inner, self.header, self.idx);
