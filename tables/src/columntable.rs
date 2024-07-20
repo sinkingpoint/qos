@@ -1,4 +1,3 @@
-use crate::TableError;
 use std::fmt::{self, Display, Formatter};
 
 /// A setting that can be applied to a table.
@@ -94,14 +93,13 @@ impl<const COLS: usize> Table<COLS> {
 		base_width
 	}
 
-	pub fn add_row(&mut self, row: [&str; COLS]) -> Result<(), TableError> {
+	pub fn add_row(&mut self, row: [&str; COLS]) {
 		let row = row.map(|s| s.to_owned());
 		for (i, cell) in row.iter().enumerate() {
 			self.widths[i] = self.widths[i].max(cell.len());
 		}
 
 		self.rows.push(row);
-		Ok(())
 	}
 
 	fn write_row(&self, f: &mut fmt::Formatter, row: &[String]) -> fmt::Result {
@@ -166,9 +164,9 @@ mod tests {
 	#[test]
 	fn test_table() {
 		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 
 		let output = format!("{}", table);
 		assert_eq!(
@@ -183,9 +181,9 @@ mod tests {
 	#[test]
 	fn test_table_with_border() {
 		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 		table.with_setting(TableSetting::Border);
 
 		let output = format!("{}", table);
@@ -205,9 +203,9 @@ mod tests {
 	#[test]
 	fn test_table_with_header_seperator() {
 		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 		table.with_setting(TableSetting::HeaderSeperator);
 
 		let output = format!("{}", table);
@@ -224,9 +222,9 @@ mod tests {
 	#[test]
 	fn test_table_with_column_seperators() {
 		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 		table.with_setting(TableSetting::ColumnSeperators);
 
 		let output = format!("{}", table);
@@ -242,9 +240,9 @@ mod tests {
 	#[test]
 	fn test_table_with_all_settings() {
 		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 		table
 			.with_setting(TableSetting::Border)
 			.with_setting(TableSetting::HeaderSeperator)
@@ -268,9 +266,9 @@ mod tests {
 	#[test]
 	fn test_table_without_headers() {
 		let mut table = Table::new();
-		table.add_row(["Colin", "25", "Software Engineer"]).unwrap();
-		table.add_row(["John", "30", "Doctor"]).unwrap();
-		table.add_row(["Jane", "28", "Nurse"]).unwrap();
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 		table.headers = None;
 
 		let output = format!("{}", table);
