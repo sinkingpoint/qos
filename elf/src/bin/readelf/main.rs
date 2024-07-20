@@ -1,4 +1,7 @@
-use std::{io, process::ExitCode};
+use std::{
+	io::{self, Read, Seek},
+	process::ExitCode,
+};
 
 use clap::{Arg, ArgAction, Command};
 use elf::{ElfFile, SectionHeaderType, StringTableSection};
@@ -67,7 +70,7 @@ fn main() -> ExitCode {
 	ExitCode::SUCCESS
 }
 
-fn print_elf_file_header(file: &ElfFile) {
+fn print_elf_file_header<T: Read + Seek>(file: &ElfFile<T>) {
 	println!("ELF Header:");
 	println!("	Class: {:?}", file.header.class);
 	println!("	Endian: {:?}", file.header.endian);
@@ -91,7 +94,7 @@ fn print_elf_file_header(file: &ElfFile) {
 	);
 }
 
-fn print_program_headers(file: &ElfFile) {
+fn print_program_headers<T: Read + Seek>(file: &ElfFile<T>) {
 	if file.header.program_header_table_len == 0 {
 		println!("There are no program headers in this file");
 		return;
@@ -131,7 +134,7 @@ fn print_program_headers(file: &ElfFile) {
 	println!("{}", table);
 }
 
-fn print_section_headers(file: &ElfFile) {
+fn print_section_headers<T: Read + Seek>(file: &ElfFile<T>) {
 	if file.header.section_header_table_len == 0 {
 		println!("There are no section headers in this file");
 	}
@@ -175,7 +178,7 @@ fn print_section_headers(file: &ElfFile) {
 	println!("{}", table);
 }
 
-fn get_string_section(file: &ElfFile, name: &str) -> Option<io::Result<StringTableSection>> {
+fn get_string_section<T: Read + Seek>(file: &ElfFile<T>, name: &str) -> Option<io::Result<StringTableSection>> {
 	file.section_headers()
 		.find(|s| {
 			if let Ok(s) = s {
@@ -187,7 +190,7 @@ fn get_string_section(file: &ElfFile, name: &str) -> Option<io::Result<StringTab
 		.map(|s| s.unwrap().read_string_table_section(file).unwrap())
 }
 
-fn print_symbols(file: &ElfFile) {
+fn print_symbols<T: Read + Seek>(file: &ElfFile<T>) {
 	let sym_string_table = match get_string_section(file, ".strtab") {
 		Some(Ok(s)) => Some(s),
 		None => None,

@@ -10,17 +10,22 @@ use bytestruct::ReadFrom;
 pub use structs::*;
 
 #[derive(Debug)]
-pub struct ElfFile {
-	inner: Mutex<File>,
+pub struct ElfFile<T: Read + Seek> {
+	inner: Mutex<T>,
 
 	pub header: ElfHeader,
 
 	section_names: StringTableSection,
 }
 
-impl ElfFile {
+impl ElfFile<File> {
 	pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-		let mut file = File::open(path)?;
+		Self::new(File::open(path)?)
+	}
+}
+
+impl<T: Read + Seek> ElfFile<T> {
+	pub fn new(mut file: T) -> io::Result<Self> {
 		let header = ElfHeader::read_from(&mut file)?;
 
 		let section_names_header = match read_section_header(&mut file, &header, header.section_header_table_name_idx) {
@@ -71,14 +76,14 @@ impl ElfFile {
 	}
 }
 
-impl Read for &ElfFile {
+impl<T: Read + Seek> Read for &ElfFile<T> {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut inner = self.inner.lock().unwrap();
 		inner.read(buf)
 	}
 }
 
-impl Seek for &ElfFile {
+impl<T: Read + Seek> Seek for &ElfFile<T> {
 	fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
 		let mut inner = self.inner.lock().unwrap();
 		inner.seek(pos)
