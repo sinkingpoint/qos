@@ -479,7 +479,7 @@ impl SectionHeader {
 		})
 	}
 
-	fn read_section<T: Read + Seek>(&self, mut reader: T) -> io::Result<Vec<u8>> {
+	pub fn read_section<T: Read + Seek>(&self, mut reader: T) -> io::Result<Vec<u8>> {
 		reader.seek(SeekFrom::Start(self.offset))?;
 		let mut bytes = vec![0; self.size as usize];
 		reader.read_exact(&mut bytes)?;
