@@ -147,13 +147,13 @@ fn main() {
 
 				table
 					.add_row([
-						file.mode.to_string(),
-						file.nlink.to_string(),
-						username,
-						group,
-						file.size.to_string(),
-						file.mtime.to_string(),
-						file.name.to_string_lossy().to_string(),
+						&file.mode.to_string(),
+						&file.nlink.to_string(),
+						&username,
+						&group,
+						&file.size.to_string(),
+						&file.mtime.to_string(),
+						file.name.to_string_lossy().as_ref(),
 					])
 					.unwrap();
 			}
