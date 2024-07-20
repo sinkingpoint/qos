@@ -14,3 +14,6 @@ name = "busd"
 
 [[services]]
 name = "udevd"
+
+[[services]]
+name = "depmod"

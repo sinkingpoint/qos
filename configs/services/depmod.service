@@ -1,0 +1,9 @@
+name = "depmod"
+description = "Memoizes Kernel Modules Details"
+start_mode = "done"
+
+[service]
+command = "/sbin/depmod"
+
+[[wants]]
+name = "loggerd"

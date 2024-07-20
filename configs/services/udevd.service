@@ -6,3 +6,6 @@ command = "/sbin/udevd"
 
 [[needs]]
 name = "busd"
+
+[[needs]]
+name = "depmod"

@@ -13,6 +13,10 @@ pub enum StartMode {
 
 	/// The service must manually notify the control socket that it has started.
 	Notify,
+
+	/// The service must exit sucessfully before being considered started.
+	/// This is useful for "OneShot" type services.
+	Done,
 }
 
 impl Default for StartMode {

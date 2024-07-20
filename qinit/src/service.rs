@@ -359,6 +359,10 @@ impl ServiceManager {
 			match status {
 				WaitStatus::Exited(_, status) => {
 					service.state = ServiceState::Terminated(status);
+					if status == 0 && service.start_mode == StartMode::Done {
+						// Done services are considered "started" when they exit.
+						self.trigger_start_sweep(service).await;
+					}
 				}
 				WaitStatus::Signaled(_, signal, _) | WaitStatus::Stopped(_, signal) => {
 					service.state = ServiceState::Signaled(pid, signal);
