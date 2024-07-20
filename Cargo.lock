@@ -327,6 +327,7 @@ dependencies = [
  "bytestruct",
  "bytestruct-derive",
  "clap",
+ "tables",
 ]
 
 [[package]]

@@ -129,9 +129,9 @@ pub struct ElfHeader {
 	pub section_header_offset: u64,
 	pub flags: u32,
 	pub header_size: u64,
-	pub program_table_header_entry_size: u64,
+	pub program_header_size: u64,
 	pub program_header_table_len: u64,
-	pub section_table_header_entry_size: u64,
+	pub section_header_size: u64,
 	pub section_header_table_len: u64,
 	pub section_header_table_name_idx: u64,
 }
@@ -205,9 +205,9 @@ impl ReadFrom for ElfHeader {
 			section_header_offset,
 			flags,
 			header_size,
-			program_table_header_entry_size,
+			program_header_size: program_table_header_entry_size,
 			program_header_table_len,
-			section_table_header_entry_size,
+			section_header_size: section_table_header_entry_size,
 			section_header_table_len,
 			section_header_table_name_idx,
 		})
@@ -341,7 +341,7 @@ impl ProgramHeader {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SectionHeaderType {
 	Null,
 	ProgramData,
@@ -497,7 +497,10 @@ impl SectionHeader {
 	}
 
 	pub fn read_symbol_table_section<T: Read + Seek>(&self, reader: T) -> Option<io::Result<SymbolTableSection>> {
-		if !matches!(self.ty, SectionHeaderType::SymbolTable) {
+		if !matches!(
+			self.ty,
+			SectionHeaderType::SymbolTable | SectionHeaderType::DynamicLinkerSymbols
+		) {
 			return None;
 		}
 

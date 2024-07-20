@@ -141,7 +141,7 @@ fn read_program_header<T: Read + Seek>(
 		return None;
 	}
 
-	let offset = header.program_header_offset + idx * header.program_table_header_entry_size;
+	let offset = header.program_header_offset + idx * header.program_header_size;
 
 	if let Err(e) = reader.seek(SeekFrom::Start(offset)) {
 		return Some(Err(e));
@@ -164,7 +164,7 @@ fn read_section_header<T: Read + Seek>(
 		return None;
 	}
 
-	let offset = header.section_header_offset + idx * header.section_table_header_entry_size;
+	let offset = header.section_header_offset + idx * header.section_header_size;
 
 	if let Err(e) = reader.seek(SeekFrom::Start(offset)) {
 		return Some(Err(e));

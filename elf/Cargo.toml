@@ -16,3 +16,4 @@ bytestruct = { path = "../bytestruct" }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 clap = { workspace = true }
 bitflags = "2.6"
+tables = { path = "../tables" }
