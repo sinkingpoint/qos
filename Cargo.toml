@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "assemble-fs",
     "auth",
+    "bus",
     "bytestruct",
     "bytestruct/bytestruct-derive",
     "cat",
@@ -11,6 +12,8 @@ members = [
     "common",
     "control",
     "cpio",
+    "depmod",
+    "elf",
     "escapes",
     "escapes/escapes-derive",
     "getty",
@@ -19,11 +22,13 @@ members = [
     "login",
     "mount",
     "mkdir",
+    "netlink",
     "qinit",
     "qsh",
     "superblocks",
     "switchroot",
-    "tables", "netlink", "udevd", "bus", "elf",
+    "tables",
+    "udevd",
 ]
 
 [workspace.dependencies]
