@@ -557,7 +557,7 @@ impl StringTableSection {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ElfSymbolType {
 	None,
 	Object,
@@ -592,7 +592,7 @@ impl TryFrom<u8> for ElfSymbolType {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ElfSymbolBinding {
 	Local,
 	Global,

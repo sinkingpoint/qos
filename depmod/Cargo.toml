@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { workspace = true }
+nix = { workspace = true }
+common = { path = "../common" }
+slog = { workspace = true }
+anyhow = { workspace = true }
+lzma-rs = "0.3"
+elf = { path = "../elf" }
