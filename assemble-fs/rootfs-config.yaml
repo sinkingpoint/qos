@@ -13,10 +13,13 @@ secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/getty
   - ./target/x86_64-unknown-linux-musl/debug/udevd
   - ./target/x86_64-unknown-linux-musl/debug/busd
+  - ./target/x86_64-unknown-linux-musl/debug/depmod
 files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
   etc/group: configs/group
   /etc/qinit/services: configs/services
   /home/colin: configs/home
+modules:
+  - kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz
 output_file: ./target/filesystem.ext4

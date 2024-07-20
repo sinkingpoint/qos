@@ -21,6 +21,7 @@ struct Config {
 	binaries: Vec<PathBuf>,
 	secure_binaries: Vec<PathBuf>,
 	files: HashMap<String, PathBuf>,
+	modules: Option<Vec<PathBuf>>,
 	output_file: PathBuf,
 }
 
@@ -31,6 +32,7 @@ impl Default for Config {
 			binaries: Vec::new(),
 			secure_binaries: Vec::new(),
 			files: HashMap::new(),
+			modules: None,
 			output_file: PathBuf::from("./initramfs.cpio"),
 		}
 	}
@@ -55,6 +57,9 @@ struct Cli {
 	)]
 	base_dir: Option<String>,
 
+	#[arg(short, long, help = "The kernel release to build on. If set, allows loading modules")]
+	kernel_release: Option<String>,
+
 	#[arg(short, long, default_value_t=String::from("./config.yaml"), help="Path to the config file")]
 	config: String,
 }
@@ -64,7 +69,7 @@ fn main() -> ExitCode {
 
 	let logger = assemble_logger(stdout());
 
-	let config = match Config::load(&PathBuf::from(cli.config)) {
+	let mut config = match Config::load(&PathBuf::from(cli.config)) {
 		Ok(config) => config,
 		Err(err) => {
 			slog::error!(logger, "Failed to load config file: {}", err);
@@ -97,6 +102,19 @@ fn main() -> ExitCode {
 	if let Err(e) = copy_all_to(&logger, &base_dir.join("sbin"), &config.secure_binaries) {
 		slog::error!(logger, "Failed to copy sbinaries"; "error"=>e);
 		return ExitCode::FAILURE;
+	}
+
+	if let Some(mods) = config.modules {
+		if cli.kernel_release.is_none() {
+			slog::error!(logger, "kernel modules specified, without a release");
+			return ExitCode::FAILURE;
+		}
+
+		let module_folder = PathBuf::from("/lib/modules").join(cli.kernel_release.unwrap());
+		for module in mods {
+			let mod_path = module_folder.join(module);
+			config.files.insert(mod_path.to_string_lossy().into_owned(), mod_path);
+		}
 	}
 
 	for (dest, src) in config.files.iter() {
