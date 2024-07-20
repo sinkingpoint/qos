@@ -67,7 +67,7 @@ impl<const COLS: usize> Table<COLS> {
 	}
 
 	/// Add a setting to the table.
-	pub fn with_setting(&mut self, setting: TableSetting) -> &mut Self {
+	pub fn with_setting(mut self, setting: TableSetting) -> Self {
 		match setting {
 			TableSetting::HeaderSeperator => self.header_seperator = true,
 			TableSetting::ColumnSeperators => self.column_seperators = true,
@@ -180,11 +180,10 @@ mod tests {
 
 	#[test]
 	fn test_table_with_border() {
-		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
+		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]).with_setting(TableSetting::Border);
 		table.add_row(["Colin", "25", "Software Engineer"]);
 		table.add_row(["John", "30", "Doctor"]);
 		table.add_row(["Jane", "28", "Nurse"]);
-		table.with_setting(TableSetting::Border);
 
 		let output = format!("{}", table);
 		assert_eq!(
@@ -202,11 +201,11 @@ mod tests {
 
 	#[test]
 	fn test_table_with_header_seperator() {
-		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
+		let mut table =
+			Table::new_with_headers(["Name", "Age", "Occupation"]).with_setting(TableSetting::HeaderSeperator);
 		table.add_row(["Colin", "25", "Software Engineer"]);
 		table.add_row(["John", "30", "Doctor"]);
 		table.add_row(["Jane", "28", "Nurse"]);
-		table.with_setting(TableSetting::HeaderSeperator);
 
 		let output = format!("{}", table);
 		assert_eq!(
@@ -221,11 +220,11 @@ mod tests {
 
 	#[test]
 	fn test_table_with_column_seperators() {
-		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
+		let mut table =
+			Table::new_with_headers(["Name", "Age", "Occupation"]).with_setting(TableSetting::ColumnSeperators);
 		table.add_row(["Colin", "25", "Software Engineer"]);
 		table.add_row(["John", "30", "Doctor"]);
 		table.add_row(["Jane", "28", "Nurse"]);
-		table.with_setting(TableSetting::ColumnSeperators);
 
 		let output = format!("{}", table);
 		assert_eq!(
@@ -239,14 +238,13 @@ mod tests {
 
 	#[test]
 	fn test_table_with_all_settings() {
-		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"]);
-		table.add_row(["Colin", "25", "Software Engineer"]);
-		table.add_row(["John", "30", "Doctor"]);
-		table.add_row(["Jane", "28", "Nurse"]);
-		table
+		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"])
 			.with_setting(TableSetting::Border)
 			.with_setting(TableSetting::HeaderSeperator)
 			.with_setting(TableSetting::ColumnSeperators);
+		table.add_row(["Colin", "25", "Software Engineer"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
 
 		let output = format!("{}", table);
 		assert_eq!(
