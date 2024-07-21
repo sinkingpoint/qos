@@ -26,6 +26,7 @@ use nix::{
 use crate::config::{Permissions, ServiceConfig, StartMode};
 
 #[derive(Debug)]
+#[allow(dead_code)] // Some of the variants aren't used yet, but will be once we have a ctl binary.
 pub enum ServiceState {
 	// The service failed to start during the exec process.
 	Error(anyhow::Error),
