@@ -102,7 +102,6 @@ impl Action for ControlAction {
 		match self.ty {
 			ControlActionType::Ready => {
 				let pid = peer.pid().expect("failed to get pid");
-				println!("Marking {} as running", pid);
 				self.manager.mark_service_running(Pid::from_raw(pid)).await;
 				Ok(())
 			}

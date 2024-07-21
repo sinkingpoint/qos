@@ -25,11 +25,11 @@ use nix::{
 
 use crate::config::{Permissions, ServiceConfig, StartMode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)] // Some of the variants aren't used yet, but will be once we have a ctl binary.
 pub enum ServiceState {
 	// The service failed to start during the exec process.
-	Error(anyhow::Error),
+	Error(String),
 	Stopped,
 	// The service has been started, but has not yet hit its started conditions.
 	Started(Pid),
@@ -40,7 +40,7 @@ pub enum ServiceState {
 	Terminated(i32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Service {
 	name: String,
 	args: HashMap<String, String>,
@@ -271,7 +271,7 @@ impl ServiceManager {
 		info!(self.logger, "starting service"; "service" => service.to_string());
 		let start_future = async move {
 			if let Err(e) = service.start() {
-				service.state = ServiceState::Error(e);
+				service.state = ServiceState::Error(e.to_string());
 				return;
 			}
 
@@ -325,8 +325,6 @@ impl ServiceManager {
 				self.logger,
 				"PID {} is being marked as running, but is not managed by this version of qinit", pid
 			);
-
-			println!("{:?}", services);
 		}
 	}
 
@@ -361,8 +359,12 @@ impl ServiceManager {
 				WaitStatus::Exited(_, status) => {
 					service.state = ServiceState::Terminated(status);
 					if status == 0 && service.start_mode == StartMode::Done {
-						// Done services are considered "started" when they exit.
-						self.trigger_start_sweep(service).await;
+						// Done services are considered "started" when they exit. This is a bit ick because `trigger_start_sweep`
+						// can lock the services list again to start more things, so we need to clone + drop the lock here so
+						// that that doesn't deadlock.
+						let service = service.clone();
+						drop(services);
+						self.trigger_start_sweep(&service).await;
 					}
 				}
 				WaitStatus::Signaled(_, signal, _) | WaitStatus::Stopped(_, signal) => {
@@ -465,7 +467,7 @@ impl ServiceWaiter {
 
 	/// Remove the given service from the set of dependencies.
 	fn notify_service_started(&mut self, started: &Service) {
-		self.waiting_dependencies.retain(|s| !started.matches(s))
+		self.waiting_dependencies.retain(|s| !started.matches(s));
 	}
 
 	fn done(&self) -> bool {
