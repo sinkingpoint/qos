@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, io::ErrorKind, sync::Arc};
 
 use bus::{PUBLISH_ACTION, SUBSCRIBE_ACTION};
 use control::listen::Action;
@@ -84,7 +84,9 @@ impl Action for BusAction {
 				let mut writer = BufWriter::new(writer);
 				let mut rx = rx;
 				while let Some(message) = rx.recv().await {
-					writer.write_all(&message).await.unwrap();
+					let len = message.len() as u16;
+					writer.write_u16(len).await?;
+					writer.write_all(&message).await?;
 					if writer.flush().await.is_err() {
 						return Ok(());
 					}
@@ -95,13 +97,25 @@ impl Action for BusAction {
 			BusActionType::Publish => {
 				self.api.lock().await.create_topic(&self.topic);
 				let mut reader = BufReader::new(reader);
-				let mut buffer = Vec::new();
-				reader.read_to_end(&mut buffer).await?;
+				loop {
+					let len = match reader.read_u16().await {
+						Ok(len) => len as usize,
+						Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+						Err(e) => return Err(e.into()),
+					};
 
-				let mut api = self.api.lock().await;
-				let topic = api.topics.get_mut(&self.topic).ok_or(BusError::TopicNotFound)?;
+					let mut buffer = vec![0; len];
+					match reader.read_exact(&mut buffer).await {
+						Ok(_) => {}
+						Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+						Err(e) => return Err(e.into()),
+					};
 
-				topic.publish(&buffer).await;
+					let mut api = self.api.lock().await;
+					let topic = api.topics.get_mut(&self.topic).ok_or(BusError::TopicNotFound)?;
+
+					topic.publish(&buffer).await;
+				}
 
 				Ok(())
 			}

@@ -1,6 +1,6 @@
 use bus::{BusClient, DEFAULT_BUSD_SOCKET};
 use clap::{Arg, Command};
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 #[tokio::main]
 async fn main() {
@@ -38,11 +38,16 @@ async fn main() {
 	match action.as_str() {
 		"subscribe" => {
 			let mut reader = client.subscribe(topic).await.unwrap();
-			let mut line = String::new();
-			while reader.read_line(&mut line).await.unwrap() > 0 {
-				line.pop(); // Remove the newline
-				println!("{}", line);
-				line.clear();
+			while let Ok(msg) = reader.read_message().await {
+				let msg = match String::from_utf8(msg) {
+					Ok(msg) => msg,
+					Err(_) => {
+						println!("<Invalid UTF8 Msg");
+						continue;
+					}
+				};
+
+				println!("{}", msg.trim());
 			}
 		}
 		"publish" => {
@@ -51,8 +56,9 @@ async fn main() {
 
 			let mut line = String::new();
 			while reader.read_line(&mut line).await.unwrap() > 0 {
-				writer.write_all(line.as_bytes()).await.unwrap();
-				writer.flush().await.unwrap();
+				if let Err(e) = writer.publish_message(line.as_bytes()).await {
+					println!("Failed to publish message: {}", e);
+				}
 				line.clear();
 			}
 		}
