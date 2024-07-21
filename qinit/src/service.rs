@@ -250,6 +250,13 @@ impl ServiceManager {
 			}
 		}
 
+		{
+			let pending_services = self.pending_services.lock().await;
+			if pending_services.iter().any(|w| w.service.matches(&service)) {
+				return;
+			}
+		}
+
 		let mut unmet_dependencies = Vec::new();
 		for dep in dependencies.into_iter() {
 			if !self.is_running(&dep).await {
