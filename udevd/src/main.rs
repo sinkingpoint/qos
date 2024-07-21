@@ -1,10 +1,10 @@
 use std::{
-	collections::VecDeque,
+	collections::{HashMap, VecDeque},
 	io::{self, stderr},
 	path::Path,
 };
 
-use bus::BusClient;
+use bus::{BusClient, PublishHook};
 use netlink::{AsyncNetlinkSocket, NetlinkKObjectUEvent};
 use slog::{error, info};
 use tokio::{
@@ -13,6 +13,9 @@ use tokio::{
 };
 
 const BUSD_TOPIC: &str = "udev_events";
+
+// The presence of the SEQ_NUM_KEY KV indicates the end of a single event.
+const SEQ_NUM_KEY: &str = "SEQNUM";
 
 #[tokio::main]
 async fn main() {
@@ -47,10 +50,20 @@ async fn main() {
 async fn event_loop<T: AsyncWrite + Unpin>(
 	logger: &slog::Logger,
 	socket: AsyncNetlinkSocket<NetlinkKObjectUEvent>,
-	mut output: T,
+	mut output: PublishHook<T>,
 ) -> io::Result<()> {
 	let reader = BufReader::new(socket);
 	let mut segments = reader.split(b'\0');
+	let mut current_event = HashMap::new();
+
+	// Udev events come in the form:
+	// <summary>
+	// K1=V1
+	// K2=V2
+	// ...
+	// SEQNUM=<number>
+	// So this reads those groups of lines, and merges them into single
+	// events that can be easily consumed by downstream services.
 
 	while let Some(line) = segments.next_segment().await? {
 		if line.is_empty() {
@@ -66,7 +79,33 @@ async fn event_loop<T: AsyncWrite + Unpin>(
 			}
 		};
 
-		output.write_all(line.as_bytes()).await?;
+		if !line.contains('=') {
+			// This is the summary line.
+			current_event.insert(String::from("summary"), line.to_owned());
+			continue;
+		}
+
+		// Otherwise this is a K=V line.
+		let (key, value) = {
+			let mut parts = line.splitn(2, '=');
+			(parts.next().unwrap(), parts.next().unwrap())
+		};
+
+		current_event.insert(key.to_owned(), value.to_owned());
+		if key == SEQ_NUM_KEY {
+			// SEQNUM is always the last key of an event, so flush it.
+			let output_event = match serde_json::to_string(&current_event) {
+				Ok(o) => o,
+				Err(e) => {
+					error!(logger, "failed to construct event"; "error" => e.to_string());
+					current_event.clear();
+					continue;
+				}
+			};
+			current_event.clear();
+
+			output.publish_message(output_event.as_bytes()).await?;
+		}
 	}
 
 	Ok(())

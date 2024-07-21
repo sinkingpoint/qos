@@ -9,3 +9,4 @@ netlink = { path = "../netlink" }
 slog = { workspace = true }
 tokio = { workspace = true }
 bus = { path = "../bus" }
+serde_json = { workspace = true }
