@@ -65,6 +65,14 @@ fn main() -> ExitCode {
 		}
 	};
 
+	let mut names_out = match File::create(modules_path.join("modules.name")) {
+		Ok(f) => f,
+		Err(e) => {
+			error!(logger, "failed to open modules.name"; "error" => e.to_string());
+			return ExitCode::FAILURE;
+		}
+	};
+
 	let found_modules = match find_modules(&logger, modules_path) {
 		Ok(modules) => modules,
 		Err(e) => {
@@ -93,6 +101,7 @@ fn main() -> ExitCode {
 
 		write_aliases(&modinfo, &mut aliases_out).expect("failed to write aliases");
 		write_deps(&modinfo, &mut deps_out).expect("failed to write dependencies");
+		write_name(&module_path, &modinfo, &mut names_out).expect("failed to write names");
 		write_symbols(&logger, &modinfo, &elffile, &mut symbols_out).expect("failed to write symbols");
 	}
 
@@ -169,24 +178,24 @@ fn find_modules(logger: &slog::Logger, module_path: PathBuf) -> anyhow::Result<V
 	Ok(found_modules)
 }
 
-fn write_aliases<W: Write>(modinfo: &ModInfo, mut writer: W) -> Result<(), io::Error> {
+/// Writes an entry into the modules.alias file
+fn write_aliases<W: Write>(modinfo: &ModInfo, mut writer: W) -> io::Result<()> {
 	for alias in modinfo.aliases.iter() {
-		writer.write_all(
-			&format!("alias {} {}\n", alias, modinfo.name)
-				.bytes()
-				.collect::<Vec<u8>>(),
-		)?;
+		writer.write_all(format!("alias {} {}\n", alias, modinfo.name).as_bytes())?;
 	}
 
 	Ok(())
 }
 
-fn write_deps<W: Write>(modinfo: &ModInfo, mut writer: W) -> Result<(), io::Error> {
-	return writer.write_all(
-		&format!("{}: {}\n", modinfo.name, modinfo.dependencies.join(", "))
-			.bytes()
-			.collect::<Vec<u8>>(),
-	);
+/// Writes an entry into the modules.dep file
+fn write_deps<W: Write>(modinfo: &ModInfo, mut writer: W) -> io::Result<()> {
+	writer.write_all(format!("{}:{}\n", modinfo.name, modinfo.dependencies.join(", ")).as_bytes())
+}
+
+// Writes an entry into the module.name file. This is technically non standard - modprobe
+// etc will find modules themselves, but having this memoization helps make those simpler.
+fn write_name<W: Write>(path: &Path, modinfo: &ModInfo, mut writer: W) -> io::Result<()> {
+	writer.write_all(format!("{}:{}", modinfo.name, path.display()).as_bytes())
 }
 
 fn write_symbols<T: Read + Seek, W: Write>(
