@@ -1,13 +1,14 @@
 #![feature(hash_extract_if)]
+use lzma_rs::xz_decompress;
 use std::{
 	collections::HashMap,
 	ffi::CString,
 	fs::File,
-	io::{self, BufRead, BufReader},
+	io::{self, BufRead, BufReader, ErrorKind, Read},
 	path::{Path, PathBuf},
 };
 
-use nix::kmod::{finit_module, ModuleInitFlags};
+use nix::kmod::init_module;
 use slog::{debug, warn};
 use thiserror::Error;
 
@@ -24,6 +25,22 @@ pub enum ModuleLoadError {
 
 	#[error("Failed to load module: {0}")]
 	ModuleLoadError(#[from] nix::Error),
+}
+
+fn load_file(path: &Path) -> io::Result<Vec<u8>> {
+	let mut file = BufReader::new(File::open(path)?);
+	let mut buffer = Vec::new();
+	match path.extension().and_then(|s| s.to_str()) {
+		Some("o") | Some("ko") => {
+			file.read_to_end(&mut buffer)?;
+		}
+		Some("xz") => {
+			xz_decompress(&mut file, &mut buffer).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+		}
+		Some(_) | None => return Err(io::Error::new(ErrorKind::InvalidData, "invalid extension")),
+	};
+
+	Ok(buffer)
 }
 
 /// Intelligently loads the module with the given name, resolving dependencies and paths.
@@ -45,13 +62,10 @@ pub fn load_module(
 		};
 
 		debug!(logger, "loading module"; "name" => module, "path" => path.display());
+		let module_contents = load_file(path)?;
 
 		let module_file = File::open(path)?;
-		finit_module(
-			&module_file,
-			&CString::new(parameters.join(" ")).unwrap(),
-			ModuleInitFlags::empty(),
-		)?;
+		init_module(&module_contents, &CString::new(parameters.join(" ")).unwrap())?;
 	}
 
 	Ok(())

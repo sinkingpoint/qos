@@ -17,3 +17,5 @@ nix = { workspace = true }
 thiserror = { workspace = true }
 slog = { workspace = true }
 common = { path = "../common" }
+elf = { path = "../elf" }
+lzma-rs = "0.3"
