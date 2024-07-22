@@ -147,8 +147,6 @@ impl Topic {
 				false
 			}
 		});
-
-		info!(self.logger, "Published message"; "topic" => self.name.as_str(), "subscribers" => num_sucessfully_sent.to_string());
 	}
 
 	/// Subscribe to the topic.
