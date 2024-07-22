@@ -1,0 +1,16 @@
+[package]
+name = "udev"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bus = { path = "../bus" }
+clap = { workspace = true }
+tokio = { workspace = true }
+common = { path = "../common" }
+slog = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+nix = { workspace = true }
+modprobe = { path = "../modprobe" }

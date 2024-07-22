@@ -9,3 +9,6 @@ name = "busd"
 
 [[needs]]
 name = "depmod"
+
+[[needs]]
+name = "udev"

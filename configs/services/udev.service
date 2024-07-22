@@ -1,0 +1,12 @@
+name = "udev"
+description = "A udev"
+start_mode = "notify"
+
+[service]
+command = "/sbin/udev"
+
+[[needs]]
+name = "busd"
+
+[[needs]]
+name = "depmod"

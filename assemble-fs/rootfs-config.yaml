@@ -24,4 +24,5 @@ files:
   /home/colin: configs/home
 modules:
   - kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz
+  - config
 output_file: ./target/filesystem.ext4

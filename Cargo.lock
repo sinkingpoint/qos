@@ -720,6 +720,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "common",
+ "elf",
+ "lzma-rs",
  "nix",
  "slog",
  "thiserror",
@@ -1331,6 +1333,7 @@ dependencies = [
  "bus",
  "clap",
  "common",
+ "modprobe",
  "nix",
  "regex",
  "serde_json",

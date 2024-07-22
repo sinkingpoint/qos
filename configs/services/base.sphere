@@ -10,10 +10,18 @@ name = "getty"
 TTY = "/dev/tty1"
 
 [[services]]
+name = "getty"
+[services.arguments]
+TTY = "/dev/ttyS0"
+
+[[services]]
 name = "busd"
 
 [[services]]
 name = "udevd"
+
+[[services]]
+name = "udev"
 
 [[services]]
 name = "depmod"

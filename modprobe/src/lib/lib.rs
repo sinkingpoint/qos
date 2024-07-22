@@ -64,7 +64,6 @@ pub fn load_module(
 		debug!(logger, "loading module"; "name" => module, "path" => path.display());
 		let module_contents = load_file(path)?;
 
-		let module_file = File::open(path)?;
 		init_module(&module_contents, &CString::new(parameters.join(" ")).unwrap())?;
 	}
 
