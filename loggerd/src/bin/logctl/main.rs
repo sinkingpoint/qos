@@ -96,14 +96,14 @@ async fn main() {
 fn validate_kvs(kvs: Vec<&str>) -> Result<Vec<KV>, String> {
 	let mut result = vec![];
 	for kv in kvs {
-		let parts: Vec<&str> = kv.splitn(2, '=').collect();
-		if parts.len() != 2 {
-			return Err(format!("Invalid key-value pair: {}", kv));
-		}
+		let (key, value) = match kv.split_once('=') {
+			Some(kv) => kv,
+			None => return Err(format!("invalid kv: {}", kv)),
+		};
 
 		result.push(KV {
-			key: parts[0].to_string(),
-			value: parts[1].to_string(),
+			key: key.to_string(),
+			value: value.to_string(),
 		});
 	}
 

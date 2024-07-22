@@ -86,10 +86,7 @@ async fn event_loop<T: AsyncWrite + Unpin>(
 		}
 
 		// Otherwise this is a K=V line.
-		let (key, value) = {
-			let mut parts = line.splitn(2, '=');
-			(parts.next().unwrap(), parts.next().unwrap())
-		};
+		let (key, value) = line.split_once('=').unwrap();
 
 		current_event.insert(key.to_owned(), value.to_owned());
 		if key == SEQ_NUM_KEY {

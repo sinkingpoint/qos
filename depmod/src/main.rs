@@ -278,12 +278,10 @@ impl ModInfo {
 			.split_on_exclusive(b'\0')
 		{
 			let line = String::from_utf8(line).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-			let (key, value) = {
-				let mut split = line.splitn(2, '=');
-				(split.next().unwrap().to_owned(), split.next().unwrap().to_owned())
-			};
+			let (key, value) = line.split_once('=').unwrap();
+			let value = value.to_owned();
 
-			match key.as_ref() {
+			match key {
 				"name" => modinfo.name = value,
 				"vermagic" => modinfo.version_magic = value,
 				"intree" => modinfo.in_tree = value == "Y",
@@ -303,15 +301,16 @@ impl ModInfo {
 					}
 				}
 				"parm" | "parmtype" => {
-					let (parmname, parmvalue) = {
-						let mut split = line.splitn(2, '=');
-						(split.next().unwrap().to_owned(), split.next().unwrap().to_owned())
-					};
+					let (parmname, parmvalue) = line.split_once('=').unwrap();
 
 					if key == "parm" {
-						modinfo.parameter_descriptions.insert(parmname, parmvalue);
+						modinfo
+							.parameter_descriptions
+							.insert(parmname.to_owned(), parmvalue.to_owned());
 					} else if key == "parmtype" {
-						modinfo.parameter_types.insert(parmname, parmvalue);
+						modinfo
+							.parameter_types
+							.insert(parmname.to_owned(), parmvalue.to_owned());
 					}
 				}
 				_ => {
