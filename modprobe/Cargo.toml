@@ -1,0 +1,19 @@
+[package]
+name = "modprobe"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "modprobe"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "modprobe"
+path = "src/bin/modprobe/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+nix = { workspace = true }
+thiserror = { workspace = true }
+slog = { workspace = true }
+common = { path = "../common" }
