@@ -3,13 +3,15 @@ mod async_socket;
 #[cfg(feature = "async")]
 pub use async_socket::*;
 
+mod macros;
+
 use std::{
 	io::{self, Read, Write},
 	marker::PhantomData,
 	os::fd::{AsRawFd, OwnedFd},
 };
 
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 use bytestruct::{ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
 use nix::{
@@ -83,16 +85,24 @@ impl NetlinkSockType for NetlinkKObjectUEvent {
 	type MessageType = BaseNetlinkMessageType;
 }
 
+/// The Netlink socket type for sending and receiving route information.
+pub struct NetlinkRoute;
+
+impl NetlinkSockType for NetlinkRoute {
+	const SOCK_PROTOCOL: SockProtocol = SockProtocol::NetlinkRoute;
+	type MessageType = BaseNetlinkMessageType;
+}
+
 /// A trait for types that can be used as the message type for a Netlink socket.
 pub trait NetlinkSockType {
 	const SOCK_PROTOCOL: SockProtocol;
-	type MessageType: Flags<Bits = u16>;
+	type MessageType: ReadFromWithEndian + WriteToWithEndian;
 }
 
 #[derive(ByteStruct)]
 pub struct NetlinkMessageHeader<T: NetlinkSockType> {
 	pub length: u32,
-	pub message_type: NetlinkMessageType<T::MessageType>,
+	pub message_type: T::MessageType,
 	pub flags: NetlinkFlags,
 	pub sequence_number: u32,
 	pub port_id: u32,
@@ -138,52 +148,13 @@ impl ReadFromWithEndian for NetlinkFlags {
 	}
 }
 
-bitflags! {
+int_enum! {
 	/// The available base message types which are common to all Netlink sockets.
-	pub struct BaseNetlinkMessageType: u16 {
-		const NLMSG_NOOP = 0x1;
-		const NLMSG_ERROR = 0x2;
-		const NLMSG_DONE = 0x3;
-		const NLMSG_OVERRUN = 0x4;
-	}
-}
-
-/// A Netlink message type, which can be either a base type or a custom type based
-/// on the base message type for the socket.
-pub enum NetlinkMessageType<T: Flags<Bits = u16>> {
-	Base(BaseNetlinkMessageType),
-	Other(T),
-}
-
-impl<T: Flags<Bits = u16>> WriteToWithEndian for NetlinkMessageType<T>
-where
-	T::Bits: WriteToWithEndian,
-{
-	fn write_to_with_endian<W: std::io::Write>(
-		&self,
-		writer: &mut W,
-		endian: bytestruct::Endian,
-	) -> std::io::Result<()> {
-		match self {
-			NetlinkMessageType::Base(base) => base.bits().write_to_with_endian(writer, endian),
-			NetlinkMessageType::Other(other) => other.bits().write_to_with_endian(writer, endian),
-		}
-	}
-}
-
-impl<T: Flags<Bits = u16>> ReadFromWithEndian for NetlinkMessageType<T> {
-	fn read_from_with_endian<R: std::io::Read>(reader: &mut R, endian: bytestruct::Endian) -> std::io::Result<Self> {
-		let bits = u16::read_from_with_endian(reader, endian)?;
-		if let Some(base) = BaseNetlinkMessageType::from_bits(bits) {
-			Ok(NetlinkMessageType::Base(base))
-		} else if let Some(other) = T::from_bits(bits) {
-			Ok(NetlinkMessageType::Other(other))
-		} else {
-			Err(std::io::Error::new(
-				std::io::ErrorKind::InvalidData,
-				"Invalid NetlinkMessageType",
-			))
-		}
+	pub enum BaseNetlinkMessageType: u16 {
+		NoOp = 0x1,
+		Error = 0x2,
+		Done = 0x3,
+		Overrun = 0x4,
 	}
 }
 
