@@ -3,8 +3,6 @@ mod async_socket;
 #[cfg(feature = "async")]
 pub use async_socket::*;
 
-mod macros;
-
 use std::{
 	io::{self, Read, Write},
 	marker::PhantomData,
@@ -12,7 +10,7 @@ use std::{
 };
 
 use bitflags::bitflags;
-use bytestruct::{ReadFromWithEndian, WriteToWithEndian};
+use bytestruct::{int_enum, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
 use nix::{
 	sys::socket::{self, recv, send, AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType},

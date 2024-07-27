@@ -1,4 +1,5 @@
 #[macro_export]
+/// int_enum provides a macro to derive an enum from a set of numbers that can be read/write.
 macro_rules! int_enum {
     (
         $(#[$outer:meta])*
@@ -18,7 +19,7 @@ macro_rules! int_enum {
         }
 
         impl ::bytestruct::ReadFromWithEndian for $EnumName {
-            fn read_from_with_endian<T: Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> {
+            fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> {
                 let val = <$Type>::read_from_with_endian(source, endian)?;
 
                 match val {
