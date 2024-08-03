@@ -194,6 +194,28 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 	let name = input.ident;
 
+	let generics = input
+		.generics
+		.params
+		.iter()
+		.map(|param| {
+			quote! {#param}
+		})
+		.collect::<Vec<_>>();
+
+	let generic_names = input
+		.generics
+		.params
+		.iter()
+		.map(|param| {
+			let param = match param {
+				syn::GenericParam::Type(ty) => &ty.ident,
+				_ => panic!("Only type parameters are supported"),
+			};
+			quote! {#param}
+		})
+		.collect::<Vec<_>>();
+
 	if let Data::Struct(data) = &input.data {
 		let size = data.fields.iter().map(|field| {
 			let ty = &field.ty;
@@ -205,7 +227,7 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 		});
 
 		let gen = quote! {
-			impl ::bytestruct::Size for #name {
+			impl<#(#generics)*> ::bytestruct::Size for #name<#(#generic_names)*> {
 				fn size(&self) -> usize {
 					0 #(+ #size)*
 				}
@@ -216,7 +238,7 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	} else if let Data::Enum(_) = &input.data {
 		let repr = get_repr(&input.attrs);
 		let gen = quote! {
-			impl ::bytestruct::Size for #name {
+			impl<#(#generics)*> ::bytestruct::Size for #name<#(#generic_names)*> {
 				fn size(&self) -> usize {
 					<#repr as ::bytestruct::Size>::size(&0)
 				}
