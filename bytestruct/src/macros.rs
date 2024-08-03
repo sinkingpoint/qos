@@ -18,6 +18,23 @@ macro_rules! int_enum {
             )+
         }
 
+        impl From<&$EnumName> for $Type {
+            fn from(e: &$EnumName) -> $Type {
+                match e {
+                    $(
+                        $EnumName::$Variant => $Value,
+                    )+
+                }
+            }
+        }
+
+        impl ::bytestruct::Size for $EnumName {
+            fn size(&self) -> usize {
+                let val: $Type = self.into();
+                val.size()
+            }
+        }
+
         impl ::bytestruct::ReadFromWithEndian for $EnumName {
             fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> {
                 let val = <$Type>::read_from_with_endian(source, endian)?;
