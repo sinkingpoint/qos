@@ -1,10 +1,10 @@
 use std::{
 	fs::File,
 	io::{self, BufRead, BufReader, Read, Write},
-	os::fd::FromRawFd,
+	os::fd::{FromRawFd, RawFd},
 };
 
-use nix::unistd::pipe;
+use nix::unistd::{pipe, read};
 
 /// The standard input file descriptor.
 pub const STDIN_FD: i32 = 0;
@@ -85,5 +85,20 @@ impl Default for IOTriple {
 			stdout: STDOUT_FD,
 			stderr: STDERR_FD,
 		}
+	}
+}
+
+/// Wra
+pub struct RawFdReader(RawFd);
+
+impl RawFdReader {
+	pub fn new(fd: RawFd) -> Self {
+		Self(fd)
+	}
+}
+
+impl Read for RawFdReader {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		read(self.0, buf).map_err(io::Error::from)
 	}
 }
