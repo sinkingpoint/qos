@@ -44,7 +44,7 @@ macro_rules! int_enum {
                         $Value => Ok($EnumName::$Variant),
                     )+
                     _ => {
-                        Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, format!("invalid value: {}", val)))
+                        Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, format!("invalid value for {}: {}", stringify!($EnumName), val)))
                     }
                 }
             }
@@ -52,7 +52,7 @@ macro_rules! int_enum {
 
         impl ::bytestruct::WriteToWithEndian for $EnumName {
             fn write_to_with_endian<W: ::std::io::Write>(&self, writer: &mut W, endian: ::bytestruct::Endian) -> ::std::io::Result<()> {
-                let val = match self {
+                let val: $Type = match self {
                     $(
                         $EnumName::$Variant => $Value,
                     )+
