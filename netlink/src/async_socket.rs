@@ -3,7 +3,6 @@ use std::{
 	task::{ready, Context, Poll},
 };
 
-use nix::sys::socket::MsgFlags;
 use tokio::io::{self, unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{NetlinkSockType, NetlinkSocket};
@@ -26,7 +25,7 @@ impl<T: NetlinkSockType> AsyncRead for AsyncNetlinkSocket<T> {
 			let mut guard = ready!(self.0.poll_read_ready(cx))?;
 
 			let unfilled = buf.initialize_unfilled();
-			match guard.try_io(|inner| inner.get_ref().recv(unfilled, MsgFlags::empty())) {
+			match guard.try_io(|inner| inner.get_ref().uread(unfilled)) {
 				Ok(Ok(len)) => {
 					buf.advance(len);
 					return Poll::Ready(Ok(()));
@@ -43,7 +42,7 @@ impl<T: NetlinkSockType> AsyncWrite for AsyncNetlinkSocket<T> {
 		loop {
 			let mut guard = ready!(self.0.poll_write_ready(cx))?;
 
-			match guard.try_io(|inner| inner.get_ref().send(buf, MsgFlags::empty())) {
+			match guard.try_io(|inner| inner.get_ref().uwrite(buf)) {
 				Ok(result) => return Poll::Ready(result),
 				Err(_would_block) => continue,
 			}
