@@ -7,6 +7,7 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/cat
   - ./target/x86_64-unknown-linux-musl/debug/clear
   - ./target/x86_64-unknown-linux-musl/debug/busctl
+  - ./target/x86_64-unknown-linux-musl/debug/netc
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd

@@ -1,4 +1,4 @@
-use std::io::{self, BufReader, Cursor, Read, Write};
+use std::io::{self, Cursor, Write};
 
 use bitflags::bitflags;
 use bytestruct::{int_enum, ReadFromWithEndian, Size, WriteToWithEndian};

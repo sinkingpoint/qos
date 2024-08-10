@@ -23,6 +23,7 @@ members = [
     "modprobe",
     "mount",
     "mkdir",
+    "net",
     "netlink",
     "qinit",
     "qsh",
@@ -41,7 +42,14 @@ slog-async = "2.8"
 slog-json = "2.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-nix = { version = "0.27", features = ["fs", "term", "process", "signal", "user", "kmod"] }
+nix = { version = "0.27", features = [
+    "fs",
+    "term",
+    "process",
+    "signal",
+    "user",
+    "kmod",
+] }
 thiserror = "1.0"
 anyhow = "1.0"
 toml = "0.8"
