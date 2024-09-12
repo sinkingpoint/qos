@@ -59,6 +59,67 @@ pub struct InterfaceAttributes {
 	unknown: Vec<(u16, Vec<u8>)>,
 }
 
+impl WriteToWithEndian for InterfaceAttributes {
+	fn write_to_with_endian<T: Write>(&self, t: &mut T, e: Endian) -> io::Result<()> {
+		write_attribute(t, e, AttributeType::MacAddress, &self.mac_address)?;
+		write_attribute(t, e, AttributeType::BroadcastAddress, &self.broadcast_address)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::Name,
+			&self.name.clone().map(NullTerminatedString::<0>),
+		)?;
+		write_attribute(t, e, AttributeType::MTU, &self.mtu)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::Name,
+			&self.qdisc.clone().map(NullTerminatedString::<0>),
+		)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::Name,
+			&self.qdisc.clone().map(NullTerminatedString::<0>),
+		)?;
+		write_attribute(t, e, AttributeType::TransmitQueueLength, &self.transmit_queue_length)?;
+		write_attribute(t, e, AttributeType::OperationalState, &self.operational_state)?;
+		write_attribute(t, e, AttributeType::LinkMode, &self.link_mode)?;
+		write_attribute(t, e, AttributeType::Group, &self.group)?;
+		write_attribute(t, e, AttributeType::Promiscuity, &self.promiscuity)?;
+		write_attribute(t, e, AttributeType::NumTransmitQueues, &self.num_transmit_queues)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::GenericSegmentOffloadMaxSegments,
+			&self.generic_segment_offload_max_segments,
+		)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::GenericSegmentOffloadMaxSize,
+			&self.generic_segment_offload_max_size,
+		)?;
+		write_attribute(t, e, AttributeType::NewInterfaceIndex, &self.new_interface_index)?;
+		write_attribute(t, e, AttributeType::MinimumMTU, &self.minimum_mtu)?;
+		write_attribute(
+			t,
+			e,
+			AttributeType::TCPSegmentOffloadMaxSegments,
+			&self.tcp_segment_offload_max_segments,
+		)?;
+		Ok(())
+	}
+}
+
+impl ReadFromWithEndian for InterfaceAttributes {
+	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
+		let mut attributes = Self::default();
+		while let Ok(()) = attributes.read_attribute(source, endian) {}
+		Ok(attributes)
+	}
+}
+
 impl InterfaceAttributes {
 	pub(crate) fn read_attribute<T: Read>(&mut self, source: &mut T, endian: Endian) -> io::Result<()> {
 		let (attr_type, data_buffer) = read_attribute(source, endian)?;

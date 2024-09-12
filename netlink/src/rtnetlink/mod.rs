@@ -2,9 +2,10 @@ mod address;
 mod interface;
 mod parsing;
 
+use bytestruct_derive::ByteStruct;
 pub use interface::*;
 
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor};
 
 use address::InterfaceAddressMessage;
 use bytestruct::{int_enum, ReadFromWithEndian};
@@ -75,7 +76,7 @@ int_enum! {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, ByteStruct)]
 pub struct Interface {
 	pub family: u16,
 	pub ty: InterfaceType,
@@ -83,24 +84,6 @@ pub struct Interface {
 	pub flags: InterfaceFlags,
 	pub change: u32,
 	pub attributes: InterfaceAttributes,
-}
-
-impl ReadFromWithEndian for Interface {
-	fn read_from_with_endian<T: Read>(source: &mut T, endian: bytestruct::Endian) -> io::Result<Self> {
-		let interface = InterfaceInfoMessage::read_from_with_endian(source, bytestruct::Endian::Little)?;
-
-		let mut attributes = InterfaceAttributes::default();
-		while let Ok(()) = attributes.read_attribute(source, endian) {}
-
-		Ok(Self {
-			family: interface.family,
-			ty: interface.ty,
-			index: interface.index,
-			flags: interface.flags,
-			change: interface.change,
-			attributes,
-		})
-	}
 }
 
 pub trait RTNetlink {
