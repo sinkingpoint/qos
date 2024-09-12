@@ -740,8 +740,9 @@ dependencies = [
 name = "net"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "netlink",
- "tokio",
+ "tables",
 ]
 
 [[package]]

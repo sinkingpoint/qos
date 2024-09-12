@@ -18,6 +18,20 @@ macro_rules! int_enum {
             )+
         }
 
+        impl ::std::convert::TryFrom<$Type> for $EnumName {
+            type Error = String;
+
+            // Required method
+            fn try_from(value: $Type) -> Result<Self, String> {
+                match value {
+                    $(
+                        $Value => Ok($EnumName::$Variant),
+                    )+
+                    i => Err(format!("{:?} is not a valid {}", value, stringify!($EnumName)))
+                }
+            }
+        }
+
         impl From<&$EnumName> for $Type {
             fn from(e: &$EnumName) -> $Type {
                 match e {

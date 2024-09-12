@@ -1,3 +1,5 @@
+#![feature(buf_read_has_data_left)]
+
 #[cfg(feature = "async")]
 mod async_socket;
 #[cfg(feature = "async")]
