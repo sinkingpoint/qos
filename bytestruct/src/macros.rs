@@ -42,6 +42,16 @@ macro_rules! int_enum {
             }
         }
 
+        impl From<$EnumName> for $Type {
+            fn from(e: $EnumName) -> $Type {
+                match e {
+                    $(
+                        $EnumName::$Variant => $Value,
+                    )+
+                }
+            }
+        }
+
         impl ::bytestruct::Size for $EnumName {
             fn size(&self) -> usize {
                 let val: $Type = self.into();
