@@ -4,15 +4,18 @@ use std::{
 };
 
 use bitflags::bitflags;
-use bytestruct::{int_enum, Endian, ReadFromWithEndian, Size, WriteToWithEndian};
+use bytestruct::{int_enum, Endian, NullTerminatedString, ReadFromWithEndian, Size, WriteToWithEndian};
 use bytestruct_derive::{ByteStruct, Size};
 
 use crate::rtnetlink::parsing::{new_mac_address, new_string, new_u32};
 
-use super::{address::MacAddress, parsing::read_attribute};
+use super::{
+	address::MacAddress,
+	parsing::{read_attribute, write_attribute},
+};
 
 int_enum! {
-	enum InterfaceAttributeType: u16 {
+	enum AttributeType: u16 {
 		MacAddress = 1,
 		BroadcastAddress = 2,
 		Name = 3,
@@ -28,7 +31,7 @@ int_enum! {
 		NumTransmitQueues = 31,
 		GenericSegmentOffloadMaxSegments = 40,
 		GenericSegmentOffloadMaxSize = 41,
-		NewInterfaceOrder = 50,
+		NewInterfaceIndex = 50,
 		MinimumMTU = 51,
 		TCPSegmentOffloadMaxSegments = 61,
 		Unknown = 9999,
@@ -124,49 +127,49 @@ impl InterfaceAttributes {
 	pub(crate) fn read_attribute<T: Read>(&mut self, source: &mut T, endian: Endian) -> io::Result<()> {
 		let (attr_type, data_buffer) = read_attribute(source, endian)?;
 
-		match InterfaceAttributeType::try_from(attr_type).unwrap_or(InterfaceAttributeType::Unknown) {
-			InterfaceAttributeType::MacAddress => self.mac_address = Some(new_mac_address(&data_buffer)?),
-			InterfaceAttributeType::BroadcastAddress => self.broadcast_address = Some(new_mac_address(&data_buffer)?),
-			InterfaceAttributeType::Name => self.name = Some(new_string(&data_buffer)?),
-			InterfaceAttributeType::MTU => self.mtu = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::QDisc => self.qdisc = Some(new_string(&data_buffer)?),
-			InterfaceAttributeType::Stats => {
+		match AttributeType::try_from(attr_type).unwrap_or(AttributeType::Unknown) {
+			AttributeType::MacAddress => self.mac_address = Some(new_mac_address(&data_buffer)?),
+			AttributeType::BroadcastAddress => self.broadcast_address = Some(new_mac_address(&data_buffer)?),
+			AttributeType::Name => self.name = Some(new_string(&data_buffer)?),
+			AttributeType::MTU => self.mtu = Some(new_u32(&data_buffer)?),
+			AttributeType::QDisc => self.qdisc = Some(new_string(&data_buffer)?),
+			AttributeType::Stats => {
 				self.stats = Some(LinkStats::read_from_with_endian(&mut Cursor::new(data_buffer), endian)?)
 			}
-			InterfaceAttributeType::TransmitQueueLength => self.transmit_queue_length = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::OperationalState => {
+			AttributeType::TransmitQueueLength => self.transmit_queue_length = Some(new_u32(&data_buffer)?),
+			AttributeType::OperationalState => {
 				self.operational_state = Some(
 					InterfaceOperationalState::try_from(data_buffer[0])
 						.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
 				)
 			}
-			InterfaceAttributeType::LinkMode => {
+			AttributeType::LinkMode => {
 				self.link_mode = Some(
 					InterfaceLinkMode::try_from(data_buffer[0])
 						.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
 				)
 			}
-			InterfaceAttributeType::Stats64 => {
+			AttributeType::Stats64 => {
 				self.stats64 = Some(LinkStats64::read_from_with_endian(
 					&mut Cursor::new(data_buffer),
 					endian,
 				)?)
 			}
-			InterfaceAttributeType::Group => self.group = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::Promiscuity => self.promiscuity = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::NumTransmitQueues => self.num_transmit_queues = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::GenericSegmentOffloadMaxSegments => {
+			AttributeType::Group => self.group = Some(new_u32(&data_buffer)?),
+			AttributeType::Promiscuity => self.promiscuity = Some(new_u32(&data_buffer)?),
+			AttributeType::NumTransmitQueues => self.num_transmit_queues = Some(new_u32(&data_buffer)?),
+			AttributeType::GenericSegmentOffloadMaxSegments => {
 				self.generic_segment_offload_max_segments = Some(new_u32(&data_buffer)?)
 			}
-			InterfaceAttributeType::GenericSegmentOffloadMaxSize => {
+			AttributeType::GenericSegmentOffloadMaxSize => {
 				self.generic_segment_offload_max_size = Some(new_u32(&data_buffer)?)
 			}
-			InterfaceAttributeType::NewInterfaceOrder => self.new_interface_index = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::MinimumMTU => self.minimum_mtu = Some(new_u32(&data_buffer)?),
-			InterfaceAttributeType::TCPSegmentOffloadMaxSegments => {
+			AttributeType::NewInterfaceIndex => self.new_interface_index = Some(new_u32(&data_buffer)?),
+			AttributeType::MinimumMTU => self.minimum_mtu = Some(new_u32(&data_buffer)?),
+			AttributeType::TCPSegmentOffloadMaxSegments => {
 				self.tcp_segment_offload_max_segments = Some(new_u32(&data_buffer)?)
 			}
-			InterfaceAttributeType::Unknown => self.unknown.push((attr_type, data_buffer)),
+			AttributeType::Unknown => self.unknown.push((attr_type, data_buffer)),
 		}
 
 		Ok(())
