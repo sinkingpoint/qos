@@ -57,15 +57,18 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 		})
 	}
 
-	pub fn write_netlink_message<M: WriteToWithEndian + Size>(
+	pub fn write_netlink_message<M: WriteToWithEndian>(
 		&self,
 		mut header: NetlinkMessageHeader<T>,
 		msg: M,
 	) -> io::Result<usize> {
-		header.length = (header.size() + msg.size()) as u32;
+		let mut body = Vec::new();
+		msg.write_to_with_endian(&mut body, bytestruct::Endian::Little)?;
+
+		header.length = (header.size() + body.len()) as u32;
 		let mut buf = Vec::new();
 		header.write_to_with_endian(&mut buf, bytestruct::Endian::Little)?;
-		msg.write_to_with_endian(&mut buf, bytestruct::Endian::Little)?;
+		buf.extend(body);
 
 		self.uwrite(&buf)
 	}
