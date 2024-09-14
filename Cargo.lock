@@ -754,6 +754,7 @@ dependencies = [
  "bytestruct-derive",
  "common",
  "nix",
+ "thiserror",
  "tokio",
 ]
 

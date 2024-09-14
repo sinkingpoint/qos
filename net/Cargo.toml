@@ -9,4 +9,5 @@ path = "src/bin/netc/main.rs"
 
 [dependencies]
 netlink = { path = "../netlink" }
-tokio = { workspace = true }
+clap = { workspace = true }
+tables = { path = "../tables" }
