@@ -65,7 +65,7 @@ fn main() -> ExitCode {
 	let shadow = match user.shadow() {
 		Ok(Some(shadow)) => shadow,
 		Ok(None) => {
-			error!(logger, "User not found"; "username" => username);
+			error!(logger, "Shadow entry not found"; "username" => username);
 			return ExitCode::FAILURE;
 		}
 		Err(e) => {
