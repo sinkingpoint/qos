@@ -5,13 +5,16 @@ mod parsing;
 use bytestruct_derive::ByteStruct;
 pub use interface::*;
 
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, ErrorKind};
 
 use address::InterfaceAddressMessage;
 use bytestruct::{int_enum, ReadFromWithEndian};
 use nix::sys::socket::SockProtocol;
 
-use crate::{NetlinkFlags, NetlinkMessageHeader, NetlinkSockType, NetlinkSocket};
+use crate::{
+	read_netlink_result, NetlinkError, NetlinkFlags, NetlinkMessageHeader, NetlinkResult, NetlinkSockType,
+	NetlinkSocket,
+};
 
 /// The Netlink socket type for sending and receiving route information.
 #[derive(Debug)]
@@ -23,7 +26,7 @@ impl NetlinkSockType for NetlinkRoute {
 }
 
 int_enum! {
-	#[derive(Debug)]
+	#[derive(Debug, PartialEq)]
 	pub enum RTNetlinkMessageType: u16 {
 		NoOp = 0x1,
 		Error = 0x2,
@@ -88,7 +91,8 @@ pub struct Interface {
 
 pub trait RTNetlink {
 	fn get_links(&mut self) -> io::Result<Vec<Interface>>;
-	fn get_addrs(&mut self, interface_index: i32) -> io::Result<Vec<InterfaceAddressMessage>>;
+	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface>;
+	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<InterfaceAddressMessage>>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
@@ -117,13 +121,35 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		Ok(interfaces)
 	}
 
-	fn get_addrs(&mut self, interface_index: i32) -> io::Result<Vec<InterfaceAddressMessage>> {
+	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface> {
+		let header = NetlinkMessageHeader::new(
+			RTNetlinkMessageType::NewLink,
+			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_ACK,
+		);
+
+		self.write_netlink_message(header, i)?;
+
+		let (header, msg) = self.read_netlink_message()?;
+		if header.message_type != RTNetlinkMessageType::Error {
+			return Err(NetlinkError::IOError(io::Error::new(
+				ErrorKind::InvalidData,
+				format!("invalid message header in response: {:?}", header.message_type),
+			)));
+		}
+
+		let mut msg = Cursor::new(msg);
+
+		read_netlink_result(&mut msg, bytestruct::Endian::Little)
+	}
+
+	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<InterfaceAddressMessage>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
 			RTNetlinkMessageType::GetAddress,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
 		);
 
-		let msg = InterfaceAddressMessage::empty();
+		let mut msg = InterfaceAddressMessage::empty();
+		msg.interface_index = interface_index;
 
 		self.write_netlink_message(header, msg)?;
 

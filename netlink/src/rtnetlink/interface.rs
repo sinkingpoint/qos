@@ -1,18 +1,15 @@
 use std::{
 	fmt::Display,
-	io::{self, Cursor, Read, Write},
+	io::{self, Cursor, ErrorKind, Read, Write},
 };
 
 use bitflags::bitflags;
 use bytestruct::{int_enum, Endian, NullTerminatedString, ReadFromWithEndian, Size, WriteToWithEndian};
 use bytestruct_derive::{ByteStruct, Size};
 
-use crate::rtnetlink::parsing::{new_mac_address, new_string, new_u32};
+use crate::{new_string, new_u32, read_attribute, rtnetlink::parsing::new_mac_address, write_attribute};
 
-use super::{
-	address::MacAddress,
-	parsing::{read_attribute, write_attribute},
-};
+use super::address::MacAddress;
 
 int_enum! {
 	enum AttributeType: u16 {
@@ -83,7 +80,7 @@ impl WriteToWithEndian for InterfaceAttributes {
 			t,
 			e,
 			AttributeType::Name,
-			&self.qdisc.clone().map(NullTerminatedString::<0>),
+			&self.name.clone().map(NullTerminatedString::<0>),
 		)?;
 		write_attribute(t, e, AttributeType::TransmitQueueLength, &self.transmit_queue_length)?;
 		write_attribute(t, e, AttributeType::OperationalState, &self.operational_state)?;
@@ -105,12 +102,6 @@ impl WriteToWithEndian for InterfaceAttributes {
 		)?;
 		write_attribute(t, e, AttributeType::NewInterfaceIndex, &self.new_interface_index)?;
 		write_attribute(t, e, AttributeType::MinimumMTU, &self.minimum_mtu)?;
-		write_attribute(
-			t,
-			e,
-			AttributeType::TCPSegmentOffloadMaxSegments,
-			&self.tcp_segment_offload_max_segments,
-		)?;
 		Ok(())
 	}
 }
@@ -118,7 +109,13 @@ impl WriteToWithEndian for InterfaceAttributes {
 impl ReadFromWithEndian for InterfaceAttributes {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
 		let mut attributes = Self::default();
-		while let Ok(()) = attributes.read_attribute(source, endian) {}
+		loop {
+			match attributes.read_attribute(source, endian) {
+				Ok(_) => {}
+				Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+				Err(e) => return Err(e),
+			}
+		}
 		Ok(attributes)
 	}
 }
@@ -187,6 +184,22 @@ int_enum! {
 	  Dormant = 5,
 	  Up = 6,
   }
+}
+
+impl Display for InterfaceOperationalState {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let out = match self {
+			Self::Unknown => "unknown",
+			Self::NotPresent => "not present",
+			Self::Down => "down",
+			Self::LinkLayerDown => "link layer down",
+			Self::Testing => "testing",
+			Self::Dormant => "dormant",
+			Self::Up => "up",
+		};
+
+		f.write_str(out)
+	}
 }
 
 int_enum! {

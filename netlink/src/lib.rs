@@ -5,19 +5,23 @@ mod async_socket;
 #[cfg(feature = "async")]
 pub use async_socket::*;
 
+mod error;
+pub use error::*;
+
 pub mod rtnetlink;
 
 use std::{
-	io::{self, BufReader, Cursor, Read, Write},
+	io::{self, BufReader, Cursor, ErrorKind, Read, Write},
 	marker::PhantomData,
 	os::fd::{AsRawFd, OwnedFd},
 	sync::Mutex,
 };
 
 use bitflags::bitflags;
-use bytestruct::{int_enum, ReadFromWithEndian, Size, WriteToWithEndian};
+use bytestruct::{int_enum, Endian, ReadFromWithEndian, Size, WriteToWithEndian};
 use bytestruct_derive::{ByteStruct, Size};
 use nix::{
+	libc::{setsockopt, NETLINK_EXT_ACK, SOL_NETLINK},
 	sys::socket::{self, AddressFamily, NetlinkAddr, SockFlag, SockProtocol, SockType},
 	unistd::{getpid, write},
 };
@@ -36,7 +40,7 @@ pub struct NetlinkSocket<T: NetlinkSockType> {
 
 impl<T: NetlinkSockType> NetlinkSocket<T> {
 	/// Creates a new Netlink socket with the specified multicast groups.
-	pub fn new(groups: u32) -> std::io::Result<Self> {
+	pub fn new(groups: u32) -> io::Result<Self> {
 		let socket_fd = socket::socket(
 			AddressFamily::Netlink,
 			SockType::Raw,
@@ -47,6 +51,25 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 		let address = NetlinkAddr::new(getpid().as_raw() as u32, groups);
 
 		socket::bind(socket_fd.as_raw_fd(), &address)?;
+
+		// Set NETLINK_EXT_ACK, which gives us nicer error messages on failures.
+		let errcode = unsafe {
+			let val: u32 = 1;
+			setsockopt(
+				socket_fd.as_raw_fd(),
+				SOL_NETLINK,
+				NETLINK_EXT_ACK,
+				(&val as *const u32).cast(),
+				4,
+			)
+		};
+
+		if errcode != 0 {
+			return Err(io::Error::new(
+				ErrorKind::Other,
+				format!("failed to set NETLINK_EXT_ACK: {}", errcode),
+			));
+		}
 
 		Ok(Self {
 			// We have to use a BufReader here because Linux is very silly. Even though we _request_ a SOCK_RAW
@@ -234,4 +257,71 @@ bitflags! {
 			const RTMGRP_DECNET_ROUTE = 0x4000;
 			const RTMGRP_IPV6_PREFIX = 0x20000;
 	}
+}
+
+const ATTRIBUTE_SIZE: usize = 4;
+const ATTRIBUTE_ALIGN_TO: usize = 4;
+
+pub(crate) fn read_attribute<T: Read>(source: &mut T, endian: Endian) -> io::Result<(u16, Vec<u8>)> {
+	let length = u16::read_from_with_endian(source, endian)? as usize;
+	if length < ATTRIBUTE_SIZE {
+		return Err(io::Error::new(
+			ErrorKind::InvalidInput,
+			format!(
+				"error reading attribute, got length {} which is less than {}",
+				length, ATTRIBUTE_SIZE
+			),
+		));
+	}
+
+	let attr_type = u16::read_from_with_endian(source, endian)?;
+	let padding_length = ((length + ATTRIBUTE_ALIGN_TO - 1) & !(ATTRIBUTE_ALIGN_TO - 1)) - length;
+
+	let mut data_buffer = vec![0; length - ATTRIBUTE_SIZE];
+	source.read_exact(&mut data_buffer)?;
+
+	let mut _padding_buffer = vec![0; padding_length];
+	source.read_exact(&mut _padding_buffer)?;
+
+	Ok((attr_type, data_buffer))
+}
+
+pub(crate) fn write_attribute<W: Write, T: Into<u16>, D: WriteToWithEndian>(
+	dest: &mut W,
+	endian: Endian,
+	ty: T,
+	data: &Option<D>,
+) -> io::Result<()> {
+	if data.is_none() {
+		return Ok(());
+	}
+
+	let data = data.as_ref().unwrap();
+	let mut data_bytes = Vec::new();
+	data.write_to_with_endian(&mut data_bytes, endian)?;
+
+	let length = ATTRIBUTE_SIZE + data_bytes.len();
+	let padding_length = ((length + ATTRIBUTE_ALIGN_TO - 1) & !(ATTRIBUTE_ALIGN_TO - 1)) - length;
+
+	let mut output = Vec::new();
+	(length as u16).write_to_with_endian(&mut output, endian)?;
+	ty.into().write_to_with_endian(&mut output, endian)?;
+	output.extend(data_bytes);
+	output.extend(vec![0_u8; padding_length]);
+
+	dest.write_all(&output)?;
+
+	Ok(())
+}
+
+pub(crate) fn new_string(buffer: &[u8]) -> io::Result<String> {
+	Ok(std::str::from_utf8(&buffer[0..buffer.len() - 1])
+		.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+		.to_owned())
+}
+
+pub(crate) fn new_u32(buffer: &[u8]) -> io::Result<u32> {
+	Ok(u32::from_le_bytes(buffer.try_into().map_err(|e| {
+		io::Error::new(io::ErrorKind::InvalidData, format!("expected 4 bytes, got {:?}", e))
+	})?))
 }

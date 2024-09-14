@@ -10,6 +10,7 @@ bitflags = "2.5"
 nix = { workspace = true, features = ["socket"] }
 tokio = { workspace = true, optional = true }
 common = { path = "../common" }
+thiserror = { workspace = true }
 
 [features]
 default = ["async"]

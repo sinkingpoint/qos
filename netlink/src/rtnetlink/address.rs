@@ -25,6 +25,12 @@ impl Display for MacAddress {
 	}
 }
 
+impl WriteToWithEndian for MacAddress {
+	fn write_to_with_endian<T: Write>(&self, target: &mut T, endian: bytestruct::Endian) -> io::Result<()> {
+		self.0.write_to_with_endian(target, endian)
+	}
+}
+
 int_enum! {
 	#[derive(Debug)]
 	pub enum AddressFamily: u8 {
@@ -80,11 +86,11 @@ int_enum! {
 
 #[derive(Debug, ByteStruct, Size)]
 pub struct InterfaceAddressMessage {
-	family: AddressFamily,
-	prefix_length: u8,
-	flags: AddressFlags,
-	scope: AddressScope,
-	index: u32,
+	pub family: AddressFamily,
+	pub prefix_length: u8,
+	pub flags: AddressFlags,
+	pub scope: AddressScope,
+	pub interface_index: u32,
 }
 
 impl InterfaceAddressMessage {
@@ -94,7 +100,7 @@ impl InterfaceAddressMessage {
 			prefix_length: 0,
 			flags: AddressFlags::empty(),
 			scope: AddressScope::Universe,
-			index: 0,
+			interface_index: 0,
 		}
 	}
 }
