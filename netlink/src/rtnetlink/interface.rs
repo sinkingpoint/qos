@@ -35,13 +35,20 @@ int_enum! {
 	}
 }
 
+/// The rtattr's that can apply to an interface as received from a Netlink GET_LINK call.
 #[derive(Debug, Default)]
 pub struct InterfaceAttributes {
+	// The layer-2 address of the interface.
 	pub mac_address: Option<MacAddress>,
+	// The layer-2 broadcast address of the interface.
 	pub broadcast_address: Option<MacAddress>,
+	// The name of the interface.
 	pub name: Option<String>,
+	// The maximum size of a packet before the interface fragments it.
 	pub mtu: Option<u32>,
+	// The queueing discipline of the link.
 	pub qdisc: Option<String>,
+	// The stats on the link.
 	pub stats: Option<LinkStats>,
 	pub transmit_queue_length: Option<u32>,
 	pub operational_state: Option<InterfaceOperationalState>,
@@ -205,9 +212,9 @@ impl Display for InterfaceOperationalState {
 int_enum! {
   #[derive(Debug)]
   pub enum InterfaceLinkMode: u8 {
-	Default = 0,
-	Dormant = 1,
-	Testing = 2,
+		Default = 0,
+		Dormant = 1,
+		Testing = 2,
   }
 }
 

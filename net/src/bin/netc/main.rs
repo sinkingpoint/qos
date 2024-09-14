@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use clap::{Arg, ArgMatches, Command};
 use netlink::{
-	rtnetlink::{Interface, InterfaceFlags, InterfaceOperationalState, NetlinkRoute, RTNetlink},
+	rtnetlink::{Interface, InterfaceFlags, NetlinkRoute, RTNetlink},
 	NetlinkSocket,
 };
 
@@ -30,19 +30,29 @@ fn main() {
 		.subcommand(link_set_command)
 		.subcommand_required(true);
 
+	let address_command = Command::new("addr")
+		.about("manage network addresses")
+		.subcommand(Command::new("show").about("show the currently active addresses"))
+		.subcommand_required(true);
+
 	let app = Command::new("netc")
 		.about("Provides network information")
 		.author("Colin Douch <colin@quirl.co.nz>")
 		.subcommand(link_command)
+		.subcommand(address_command)
 		.subcommand_required(true)
 		.get_matches();
 
 	let mut netlink_socket = NetlinkSocket::<NetlinkRoute>::new(0).unwrap();
 	match app.subcommand() {
 		Some(("link", matches)) => match matches.subcommand() {
-			Some(("show", matches)) => show_links(&mut netlink_socket),
+			Some(("show", _matches)) => show_links(&mut netlink_socket),
 			Some(("set", matches)) => set_link(&mut netlink_socket, matches),
 			_ => panic!("unknown links subcommand"),
+		},
+		Some(("addr", matches)) => match matches.subcommand() {
+			Some(("show", _matches)) => show_addresses(&mut netlink_socket),
+			_ => panic!("unknown addr subcommand"),
 		},
 		_ => panic!("unknown subcommand"),
 	}
@@ -106,4 +116,39 @@ fn show_links(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
 	}
 
 	print!("{}", table);
+}
+
+fn show_addresses(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
+	let mut table = tables::Table::new_with_headers(["Interface", "Address", "Broadcast", "Scope", "Proto", "Flags"])
+		.with_setting(tables::TableSetting::ColumnSeperators)
+		.with_setting(tables::TableSetting::HeaderSeperator);
+
+	let addresses = netlink_socket.get_addrs(1).unwrap();
+	for addr in addresses {
+		let interface = &format!("{}", addr.interface_index);
+		let address = &format!(
+			"{}/{}",
+			addr.attributes.address.expect("ip address"),
+			addr.prefix_length
+		);
+
+		let broadcast = if let Some(addr) = addr.attributes.broadcast_address {
+			&format!("{}", addr)
+		} else {
+			"<None>"
+		};
+
+		let scope = &format!("{:?}", addr.scope);
+		let proto = if let Some(proto) = addr.attributes.protocol {
+			&format!("{:?}", proto)
+		} else {
+			"<None>"
+		};
+
+		let flags = &format!("{}", addr.flags);
+
+		table.add_row([interface, address, broadcast, scope, proto, flags]);
+	}
+
+	println!("{}", table);
 }

@@ -7,7 +7,7 @@ pub use interface::*;
 
 use std::io::{self, Cursor, ErrorKind};
 
-use address::InterfaceAddressMessage;
+use address::{AddressAttributes, AddressFamily, AddressFlags, AddressScope, InterfaceAddressMessage};
 use bytestruct::{int_enum, ReadFromWithEndian};
 use nix::sys::socket::SockProtocol;
 
@@ -89,10 +89,20 @@ pub struct Interface {
 	pub attributes: InterfaceAttributes,
 }
 
+#[derive(Debug, ByteStruct)]
+pub struct Address {
+	pub family: AddressFamily,
+	pub prefix_length: u8,
+	pub flags: AddressFlags,
+	pub scope: AddressScope,
+	pub interface_index: u32,
+	pub attributes: AddressAttributes,
+}
+
 pub trait RTNetlink {
 	fn get_links(&mut self) -> io::Result<Vec<Interface>>;
 	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface>;
-	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<InterfaceAddressMessage>>;
+	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<Address>>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
@@ -142,7 +152,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		read_netlink_result(&mut msg, bytestruct::Endian::Little)
 	}
 
-	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<InterfaceAddressMessage>> {
+	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<Address>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
 			RTNetlinkMessageType::GetAddress,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
@@ -161,10 +171,9 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 				break;
 			}
 
-			let interface =
-				InterfaceAddressMessage::read_from_with_endian(&mut Cursor::new(&body), bytestruct::Endian::Little)?;
+			let address = Address::read_from_with_endian(&mut Cursor::new(&body), bytestruct::Endian::Little)?;
 
-			addresses.push(interface);
+			addresses.push(address);
 		}
 
 		Ok(addresses)
