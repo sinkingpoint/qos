@@ -148,7 +148,7 @@ fn main() -> ExitCode {
 		}
 	}
 
-	match execvp::<&CStr>(&shell, &[]) {
+	match execvp::<&CStr>(&shell, &[&shell]) {
 		Ok(_) => (),
 		Err(e) => {
 			error!(logger, "Failed to execute shell"; "error" => format!("{:?}", e));
