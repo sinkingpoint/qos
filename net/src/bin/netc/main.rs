@@ -123,7 +123,7 @@ fn show_addresses(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
 		.with_setting(tables::TableSetting::ColumnSeperators)
 		.with_setting(tables::TableSetting::HeaderSeperator);
 
-	let addresses = netlink_socket.get_addrs(1).unwrap();
+	let addresses = netlink_socket.get_addrs().unwrap();
 	for addr in addresses {
 		let interface = &format!("{}", addr.interface_index);
 		let address = &format!(

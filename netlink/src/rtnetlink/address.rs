@@ -5,9 +5,9 @@ use std::{
 	io::{self, Cursor, ErrorKind, Read, Write},
 };
 
-use bytestruct::{int_enum, Endian, ReadFromWithEndian, Size, WriteToWithEndian};
+use bytestruct::{int_enum, Endian, NullTerminatedString, ReadFromWithEndian, Size, WriteToWithEndian};
 
-use crate::{new_string, new_u32, read_attribute};
+use crate::{new_string, new_u32, read_attribute, write_attribute};
 
 #[derive(Debug, Clone)]
 pub struct MacAddress([u8; 6]);
@@ -128,6 +128,15 @@ impl IPAddress {
 				ErrorKind::InvalidData,
 				format!("invalid IP address length: {}", bytes.len()),
 			)),
+		}
+	}
+}
+
+impl WriteToWithEndian for IPAddress {
+	fn write_to_with_endian<T: Write>(&self, target: &mut T, endian: Endian) -> io::Result<()> {
+		match self {
+			Self::IPv4(bytes) => <[u8; 4]>::write_to_with_endian(bytes, target, endian),
+			Self::IPv6(bytes) => <[u8; 16]>::write_to_with_endian(bytes, target, endian),
 		}
 	}
 }
@@ -253,6 +262,21 @@ impl ReadFromWithEndian for AddressAttributes {
 
 impl WriteToWithEndian for AddressAttributes {
 	fn write_to_with_endian<T: Write>(&self, target: &mut T, endian: Endian) -> io::Result<()> {
+		write_attribute(target, endian, AttributeType::Address, &self.address)?;
+		write_attribute(target, endian, AttributeType::Local, &self.local_address)?;
+		write_attribute(
+			target,
+			endian,
+			AttributeType::Label,
+			&self.label.clone().map(NullTerminatedString::<0>),
+		)?;
+		write_attribute(target, endian, AttributeType::Broadcast, &self.broadcast_address)?;
+		write_attribute(target, endian, AttributeType::Anycast, &self.anycast_address)?;
+		write_attribute(target, endian, AttributeType::Multicast, &self.multicast)?;
+		write_attribute(target, endian, AttributeType::Flags, &self.flags)?;
+		write_attribute(target, endian, AttributeType::RoutePriority, &self.priority)?;
+		write_attribute(target, endian, AttributeType::Protocol, &self.protocol)?;
+
 		Ok(())
 	}
 }

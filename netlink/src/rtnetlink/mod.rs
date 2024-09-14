@@ -100,9 +100,14 @@ pub struct Address {
 }
 
 pub trait RTNetlink {
+	// Get all the links on the system.
 	fn get_links(&mut self) -> io::Result<Vec<Interface>>;
+
+	// Create, or update a link on the system.
 	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface>;
-	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<Address>>;
+
+	// Get all the addresses on all the links of the system.
+	fn get_addrs(&mut self) -> io::Result<Vec<Address>>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
@@ -152,14 +157,13 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		read_netlink_result(&mut msg, bytestruct::Endian::Little)
 	}
 
-	fn get_addrs(&mut self, interface_index: u32) -> io::Result<Vec<Address>> {
+	fn get_addrs(&mut self) -> io::Result<Vec<Address>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
 			RTNetlinkMessageType::GetAddress,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
 		);
 
-		let mut msg = InterfaceAddressMessage::empty();
-		msg.interface_index = interface_index;
+		let msg = InterfaceAddressMessage::empty();
 
 		self.write_netlink_message(header, msg)?;
 
