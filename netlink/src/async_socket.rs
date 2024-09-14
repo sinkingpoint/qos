@@ -11,7 +11,7 @@ use crate::{NetlinkSockType, NetlinkSocket};
 pub struct AsyncNetlinkSocket<T: NetlinkSockType>(AsyncFd<NetlinkSocket<T>>);
 
 impl<T: NetlinkSockType> AsyncNetlinkSocket<T> {
-	pub fn new(groups: u32) -> std::io::Result<Self> {
+	pub fn new(groups: T::SockGroups) -> std::io::Result<Self> {
 		let socket = NetlinkSocket::new(groups)?;
 		let async_fd = AsyncFd::new(socket)?;
 

@@ -17,7 +17,7 @@ use std::{
 	sync::Mutex,
 };
 
-use bitflags::bitflags;
+use bitflags::{bitflags, Flags};
 use bytestruct::{int_enum, Endian, ReadFromWithEndian, Size, WriteToWithEndian};
 use bytestruct_derive::{ByteStruct, Size};
 use nix::{
@@ -40,7 +40,7 @@ pub struct NetlinkSocket<T: NetlinkSockType> {
 
 impl<T: NetlinkSockType> NetlinkSocket<T> {
 	/// Creates a new Netlink socket with the specified multicast groups.
-	pub fn new(groups: u32) -> io::Result<Self> {
+	pub fn new(groups: T::SockGroups) -> io::Result<Self> {
 		let socket_fd = socket::socket(
 			AddressFamily::Netlink,
 			SockType::Raw,
@@ -48,7 +48,7 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 			T::SOCK_PROTOCOL,
 		)?;
 
-		let address = NetlinkAddr::new(getpid().as_raw() as u32, groups);
+		let address = NetlinkAddr::new(getpid().as_raw() as u32, groups.bits());
 
 		socket::bind(socket_fd.as_raw_fd(), &address)?;
 
@@ -148,14 +148,23 @@ impl<T: NetlinkSockType> AsRawFd for NetlinkSocket<T> {
 /// The Netlink socket type for receiving kernel uevents.
 pub struct NetlinkKObjectUEvent;
 
+bitflags! {
+	pub struct UEventNetlinkGroups: u32 {
+		const None = 0;
+	}
+}
+
 impl NetlinkSockType for NetlinkKObjectUEvent {
 	const SOCK_PROTOCOL: SockProtocol = SockProtocol::NetlinkKObjectUEvent;
+	type SockGroups = UEventNetlinkGroups;
 	type MessageType = BaseNetlinkMessageType;
 }
 
 /// A trait for types that can be used as the message type for a Netlink socket.
 pub trait NetlinkSockType {
 	const SOCK_PROTOCOL: SockProtocol;
+
+	type SockGroups: Flags<Bits = u32>;
 	type MessageType: ReadFromWithEndian + WriteToWithEndian + Size + std::fmt::Debug;
 }
 

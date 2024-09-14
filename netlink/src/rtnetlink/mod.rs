@@ -2,6 +2,7 @@ mod address;
 mod interface;
 mod parsing;
 
+use bitflags::bitflags;
 use bytestruct_derive::ByteStruct;
 pub use interface::*;
 
@@ -22,6 +23,8 @@ pub struct NetlinkRoute;
 
 impl NetlinkSockType for NetlinkRoute {
 	const SOCK_PROTOCOL: SockProtocol = SockProtocol::NetlinkRoute;
+	type SockGroups = RTNetlinkGroups;
+
 	type MessageType = RTNetlinkMessageType;
 }
 
@@ -76,6 +79,27 @@ int_enum! {
 		NewNeighborTable = 64,
 		GetNeighborTable = 66,
 		SetNeighborTable = 67,
+	}
+}
+
+bitflags! {
+	pub struct RTNetlinkGroups: u32 {
+		const RTMGRP_NONE = 0;
+		const RTMGRP_LINK = 1;
+		const RTMGRP_NOTIFY = 2;
+		const RTMGRP_NEIGH = 4;
+		const RTMGRP_TC = 8;
+		const RTMGRP_IPV4_IFADDR = 0x10;
+		const RTMGRP_IPV4_MROUTE = 0x20;
+		const RTMGRP_IPV4_ROUTE = 0x40;
+		const RTMGRP_IPV4_RULE = 0x80;
+		const RTMGRP_IPV6_IFADDR = 0x100;
+		const RTMGRP_IPV6_MROUTE = 0x200;
+		const RTMGRP_IPV6_ROUTE = 0x400;
+		const RTMGRP_IPV6_IFINFO = 0x800;
+		const RTMGRP_DECnet_IFADDR = 0x1000;
+		const RTMGRP_DECnet_ROUTE = 0x4000;
+		const RTMGRP_IPV6_PREFIX = 0x20000;
 	}
 }
 

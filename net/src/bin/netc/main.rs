@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use clap::{Arg, ArgMatches, Command};
 use netlink::{
-	rtnetlink::{Interface, InterfaceFlags, NetlinkRoute, RTNetlink},
+	rtnetlink::{Interface, InterfaceFlags, NetlinkRoute, RTNetlink, RTNetlinkGroups},
 	NetlinkSocket,
 };
 
@@ -43,7 +43,7 @@ fn main() {
 		.subcommand_required(true)
 		.get_matches();
 
-	let mut netlink_socket = NetlinkSocket::<NetlinkRoute>::new(0).unwrap();
+	let mut netlink_socket = NetlinkSocket::<NetlinkRoute>::new(RTNetlinkGroups::RTMGRP_NONE).unwrap();
 	match app.subcommand() {
 		Some(("link", matches)) => match matches.subcommand() {
 			Some(("show", _matches)) => show_links(&mut netlink_socket),

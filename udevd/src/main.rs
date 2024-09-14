@@ -5,7 +5,7 @@ use std::{
 };
 
 use bus::{BusClient, PublishHook};
-use netlink::{AsyncNetlinkSocket, NetlinkKObjectUEvent};
+use netlink::{AsyncNetlinkSocket, NetlinkKObjectUEvent, UEventNetlinkGroups};
 use slog::{error, info};
 use tokio::{
 	fs::{read_dir, OpenOptions},
@@ -20,7 +20,7 @@ const SEQ_NUM_KEY: &str = "SEQNUM";
 #[tokio::main]
 async fn main() {
 	let logger = common::obs::assemble_logger(stderr());
-	let socket = AsyncNetlinkSocket::<NetlinkKObjectUEvent>::new(1).unwrap();
+	let socket = AsyncNetlinkSocket::<NetlinkKObjectUEvent>::new(UEventNetlinkGroups::None).unwrap();
 
 	let bus_socket = BusClient::new().await.unwrap().publish(BUSD_TOPIC).await.unwrap();
 
