@@ -318,6 +318,7 @@ impl<const MAX_SIZE: usize> WriteToWithEndian for LengthPrefixedString<MAX_SIZE>
 			65536..=0xFFFFFFFF => (self.0.len() as u32).write_to_with_endian(target, endian)?,
 			_ => (self.0.len() as u64).write_to_with_endian(target, endian)?,
 		}
+
 		target.write_all(self.0.as_bytes())?;
 		Ok(())
 	}

@@ -3,11 +3,11 @@ mod disk;
 
 use std::{
 	fs::File,
-	io::{self, Seek, SeekFrom},
+	io::{self, ErrorKind, Seek, SeekFrom},
 	path::{Path, PathBuf},
 };
 
-use bytestruct::{ReadFrom, WriteTo};
+use bytestruct::{ReadFrom, ReadFromWithEndian, WriteTo};
 use chrono::{DateTime, Utc};
 use control::ReadStreamOpts;
 use disk::{BlockType, EntryBlock, FieldBlock};
@@ -82,6 +82,14 @@ impl OpenLogFile {
 		let mut fields = Vec::new();
 		for offset in res.field_offsets {
 			self.file.seek(SeekFrom::Start(offset))?;
+			let block_type = BlockType::read_from_with_endian(&mut self.file, bytestruct::Endian::Little)?;
+			if !matches!(block_type, BlockType::Field) {
+				return Err(io::Error::new(
+					ErrorKind::InvalidData,
+					format!("invalid block type. Expected Field, got: {:?}", block_type),
+				));
+			}
+
 			let field = FieldBlock::read_from(&mut self.file)?;
 
 			if field.key.0 == "message" && !field.value.0.is_empty() {
@@ -154,8 +162,8 @@ impl OpenLogFile {
 			disk::FieldBlock::new(field.key, field.value).write_to(&mut self.file)?;
 		}
 
-		BlockType::Field.write_to(&mut self.file)?;
 		field_offsets.push(self.file.seek(SeekFrom::End(0))?);
+		BlockType::Field.write_to(&mut self.file)?;
 		disk::FieldBlock::new("message".to_string(), message.message).write_to(&mut self.file)?;
 
 		// Write the entry block.

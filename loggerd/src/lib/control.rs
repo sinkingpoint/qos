@@ -27,6 +27,7 @@ pub async fn start_write_stream(socket_path: &Path, fields: Vec<KV>) -> io::Resu
 		.map(|kv| format!("{}={}", kv.key, kv.value))
 		.collect::<Vec<_>>()
 		.join(" ");
+
 	let header_string = format!("ACTION={} {}\n", START_WRITE_STREAM_ACTION, fields_str);
 	conn.write_all(header_string.as_bytes()).await?;
 
@@ -87,12 +88,13 @@ impl ReadStreamOpts {
 				key if key == FOLLOW_HEADER => {
 					opts = opts.with_follow(value.parse()?);
 				}
-				_ => {
+				key if key != "ACTION" => {
 					filters.push(KV {
 						key: key.to_string(),
 						value: value.to_string(),
 					});
 				}
+				_ => {}
 			}
 		}
 
@@ -163,6 +165,7 @@ impl ReadStreamOpts {
 				}
 			}
 		}
+
 		true
 	}
 

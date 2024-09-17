@@ -4,7 +4,7 @@ use anyhow::Result;
 use control::listen::{Action, ActionFactory};
 use loggerd::{
 	control::{ReadStreamOpts, ReadStreamOptsParseError, START_READ_STREAM_ACTION, START_WRITE_STREAM_ACTION},
-	LogMessage,
+	LogMessage, KV,
 };
 use thiserror::Error;
 use tokio::{
@@ -41,7 +41,20 @@ impl ActionFactory for Controller {
 
 	fn build(&self, action: &str, args: &[(&str, &str)]) -> Result<Self::Action, <Self::Action as Action>::Error> {
 		match action {
-			_ if action == START_WRITE_STREAM_ACTION => Ok(ControlAction::StartWriteStream(self.api.clone())),
+			_ if action == START_WRITE_STREAM_ACTION => {
+				let fields = args
+					.iter()
+					.filter_map(|kv| match kv.0 {
+						key if key != "ACTION" => Some(KV {
+							key: kv.0.to_owned(),
+							value: kv.1.to_owned(),
+						}),
+						_ => None,
+					})
+					.collect();
+
+				Ok(ControlAction::StartWriteStream(self.api.clone(), fields))
+			}
 			_ if action == START_READ_STREAM_ACTION => {
 				let opts = ReadStreamOpts::from_kvs(args)?;
 				Ok(ControlAction::StartReadStream(self.api.clone(), opts))
@@ -53,7 +66,7 @@ impl ActionFactory for Controller {
 
 /// A control action that can be run by the controller.
 pub enum ControlAction {
-	StartWriteStream(Arc<Api>),
+	StartWriteStream(Arc<Api>, Vec<KV>),
 	StartReadStream(Arc<Api>, ReadStreamOpts),
 }
 
@@ -67,8 +80,8 @@ impl Action for ControlAction {
 		writer: W,
 	) -> Result<(), Self::Error> {
 		match self {
-			ControlAction::StartWriteStream(api) => {
-				let handler = WriteStreamHandler::new(reader, api);
+			ControlAction::StartWriteStream(api, fields) => {
+				let handler = WriteStreamHandler::new(reader, api, fields);
 				tokio::spawn(handler.run());
 			}
 			ControlAction::StartReadStream(api, opts) => {
@@ -84,11 +97,12 @@ impl Action for ControlAction {
 struct WriteStreamHandler<R: AsyncBufRead> {
 	stream: R,
 	api: Arc<Api>,
+	fields: Vec<KV>,
 }
 
 impl<R: AsyncBufRead + Unpin + Send> WriteStreamHandler<R> {
-	fn new(stream: R, api: Arc<Api>) -> Self {
-		Self { stream, api }
+	fn new(stream: R, api: Arc<Api>, fields: Vec<KV>) -> Self {
+		Self { stream, api, fields }
 	}
 
 	async fn run(mut self) -> Result<()> {
@@ -103,7 +117,7 @@ impl<R: AsyncBufRead + Unpin + Send> WriteStreamHandler<R> {
 
 			let message = LogMessage {
 				timestamp: chrono::Utc::now(),
-				fields: vec![],
+				fields: self.fields.clone(),
 				message: String::from_utf8_lossy(&buffer[0..len - 1]).to_string(),
 			};
 

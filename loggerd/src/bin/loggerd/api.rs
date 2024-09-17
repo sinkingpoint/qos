@@ -78,7 +78,6 @@ impl Api {
 		let mut log_stream = self.log_stream_read.lock().await;
 		loop {
 			let message = log_stream.recv().await.unwrap();
-			println!("Received log message: {:?}", message);
 			last_log_file.write_log(message).await?;
 		}
 	}
