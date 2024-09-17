@@ -1,12 +1,14 @@
 use std::{
-	io::stderr,
+	collections::HashMap,
+	io::{stderr, Cursor, ErrorKind},
 	path::{Path, PathBuf},
 };
 
+use bytestruct::{Endian, ReadFromWithEndian};
 use clap::{Arg, Command};
 use loggerd::{control::ReadStreamOpts, DEFAULT_CONTROL_SOCKET_PATH, KV};
 use slog::{error, Logger};
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::main]
 async fn main() {
@@ -14,6 +16,7 @@ async fn main() {
 		.arg(
 			Arg::new("control-socket")
 				.default_value(DEFAULT_CONTROL_SOCKET_PATH)
+				.short('c')
 				.long("control-socket")
 				.num_args(1)
 				.help("The path to the control socket for loggerd"),
@@ -38,6 +41,13 @@ async fn main() {
 						.long("until")
 						.num_args(1)
 						.help("The time to finish reading at"),
+				)
+				.arg(
+					Arg::new("format")
+						.short('o')
+						.long("output")
+						.default_value("text")
+						.help("The format to write logs in"),
 				),
 		)
 		.subcommand_required(true)
@@ -49,12 +59,12 @@ async fn main() {
 
 	match matches.subcommand() {
 		Some(("write", write_matches)) => {
-			let fields = match write_matches.get_many("kvs") {
-				Some(fields) => fields.copied().collect(),
+			let fields: Vec<String> = match write_matches.get_many("kvs") {
+				Some(fields) => fields.cloned().collect(),
 				None => Vec::new(),
 			};
 
-			let fields = match validate_kvs(fields) {
+			let fields = match validate_kvs(&fields) {
 				Ok(kvs) => kvs,
 				Err(e) => {
 					error!(logger, "Failed to validate key-value pairs: {}", e);
@@ -83,7 +93,17 @@ async fn main() {
 				opts = opts.with_max_time(max_time);
 			}
 
-			start_read_stream(logger, &socket_path, opts).await;
+			let log_format = read_matches.get_one::<String>("format").map_or("text", |s| s.as_str());
+
+			let log_format = match OutputLogFormat::try_from(log_format) {
+				Ok(f) => f,
+				Err(e) => {
+					eprintln!("{}", e);
+					return;
+				}
+			};
+
+			start_read_stream(logger, &socket_path, opts, log_format).await;
 		}
 		_ => {
 			unreachable!("Subcommand is required")
@@ -93,7 +113,7 @@ async fn main() {
 
 /// Takes a list of key-value pairs in the form `key=value` and returns a list of `KV` structs,
 /// or an error if any of the kvs are malformed.
-fn validate_kvs(kvs: Vec<&str>) -> Result<Vec<KV>, String> {
+fn validate_kvs(kvs: &Vec<String>) -> Result<Vec<KV>, String> {
 	let mut result = vec![];
 	for kv in kvs {
 		let (key, value) = match kv.split_once('=') {
@@ -141,7 +161,47 @@ async fn start_write_stream(logger: Logger, socket_path: &Path, kvs: Vec<KV>) {
 	}
 }
 
-async fn start_read_stream(logger: Logger, socket_path: &Path, opts: ReadStreamOpts) {
+#[derive(Debug)]
+pub enum OutputLogFormat {
+	Text,
+	JSON,
+}
+
+impl TryFrom<&str> for OutputLogFormat {
+	type Error = String;
+	fn try_from(value: &str) -> Result<Self, Self::Error> {
+		match value {
+			"text" => Ok(Self::Text),
+			"json" => Ok(Self::JSON),
+			_ => Err(format!("unknown log format: {}", value)),
+		}
+	}
+}
+
+impl OutputLogFormat {
+	fn format_log(&self, log: &HashMap<String, String>) -> String {
+		match self {
+			Self::JSON => serde_json::to_string(log).expect("format log"),
+			Self::Text => {
+				let mut kv_string = String::new();
+				for (k, v) in log {
+					if k.starts_with("__") {
+						continue;
+					}
+
+					kv_string.push_str(&format!(" {}={}", k, v));
+				}
+
+				let timestamp: &str = log.get("__timestamp").map_or("<no timestamp>", |s| s.as_str());
+				let msg = log.get("__msg").map_or("<no message>", |s| s.as_str());
+
+				format!("{}{} {}", timestamp, kv_string, msg)
+			}
+		}
+	}
+}
+
+async fn start_read_stream(logger: Logger, socket_path: &Path, opts: ReadStreamOpts, format: OutputLogFormat) {
 	let socket = match loggerd::control::start_read_stream(socket_path, opts).await {
 		Ok(socket) => socket,
 		Err(e) => {
@@ -150,19 +210,38 @@ async fn start_read_stream(logger: Logger, socket_path: &Path, opts: ReadStreamO
 		}
 	};
 
-	let reader = BufReader::new(socket);
-	let mut lines = reader.lines();
+	let mut reader = BufReader::new(socket);
 
 	loop {
-		let line = match lines.next_line().await {
-			Ok(Some(line)) => line,
-			Ok(None) => break,
+		let mut len_bytes = vec![0; 4];
+		match reader.read_exact(&mut len_bytes).await {
+			Ok(_) => {}
+			Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
 			Err(e) => {
-				error!(logger, "Failed to read from socket: {}", e);
+				eprintln!("failed to read log socket: {}", e);
+				break;
+			}
+		}
+		let len = <u32>::read_from_with_endian(&mut Cursor::new(&len_bytes), Endian::Little)
+			.expect("sucessful read len from vec");
+		let mut data = vec![0_u8; len as usize];
+		match reader.read_exact(&mut data).await {
+			Ok(_) => {}
+			Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+			Err(e) => {
+				eprintln!("failed to read log socket: {}", e);
+				break;
+			}
+		}
+
+		let msg = match serde_json::from_slice::<HashMap<String, String>>(&data) {
+			Ok(m) => m,
+			Err(e) => {
+				eprintln!("failed to read log socket: {}", e);
 				break;
 			}
 		};
 
-		println!("{}", line);
+		println!("{}", format.format_log(&msg));
 	}
 }

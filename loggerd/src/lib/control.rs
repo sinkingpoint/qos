@@ -1,5 +1,6 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
+use bytestruct::{Endian, WriteToWithEndian};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tokio::{
@@ -118,15 +119,26 @@ impl ReadStreamOpts {
 		self
 	}
 
-	pub fn format_log(&self, log: &LogMessage) -> String {
-		let timestamp = log.timestamp.to_rfc3339();
-		let fields = log
-			.fields
-			.iter()
-			.map(|kv| format!("{}={}", kv.key, kv.value))
-			.collect::<Vec<_>>()
-			.join(" ");
-		format!("{} {} {}\n", timestamp, fields, log.message)
+	pub fn format_log(&self, log: &LogMessage) -> Vec<u8> {
+		let mut msg = HashMap::new();
+		msg.insert("__timestamp", log.timestamp.to_rfc3339());
+		msg.insert("__msg", log.message.clone());
+		for kv in log.fields.iter() {
+			msg.insert(&kv.key, kv.value.to_owned());
+		}
+
+		let log = serde_json::to_string(&msg).expect("failed to format log");
+		let log_bytes = log.as_bytes();
+		let frame = log.len() as u32;
+
+		let mut bytes = Vec::with_capacity(log_bytes.len() + 4);
+		frame
+			.write_to_with_endian(&mut bytes, Endian::Little)
+			.expect("write to local buffer");
+
+		bytes.extend_from_slice(log_bytes);
+
+		bytes
 	}
 
 	pub fn matches(&self, log: &LogMessage) -> bool {

@@ -45,7 +45,13 @@ async fn main() {
 
 	let api = Arc::new(Api::new(&data_dir, logger.clone()));
 
-	let control = ControlSocket::open(&listen_path, Controller::new(api.clone())).unwrap();
+	let control = match ControlSocket::open(&listen_path, Controller::new(api.clone())) {
+		Ok(socket) => socket,
+		Err(e) => {
+			error!(logger, "failed to open control socket"; "path" => listen_path.display(), "error" => e.to_string());
+			return;
+		}
+	};
 
 	tokio::select! {
 		_ = tokio::signal::ctrl_c() => {

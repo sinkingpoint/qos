@@ -141,7 +141,7 @@ impl<W: AsyncWrite + Unpin + Send + 'static> ReadStreamHandler<W> {
 					break;
 				}
 			};
-			self.stream.write_all(self.opts.format_log(&log).as_bytes()).await?;
+			self.stream.write_all(&self.opts.format_log(&log)).await?;
 		}
 
 		Ok(())
