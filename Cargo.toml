@@ -49,6 +49,7 @@ nix = { version = "0.27", features = [
     "signal",
     "user",
     "kmod",
+    "mount"
 ] }
 thiserror = "1.0"
 anyhow = "1.0"

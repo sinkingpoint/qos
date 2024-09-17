@@ -34,7 +34,7 @@ impl SwitchrootCommand {
 	/// Mount the new root filesystem.
 	fn mount(&self) -> Result<()> {
 		let device = Device::new(&self.new_root);
-		let probe = match device.probe()? {
+		let probe = match device.probe().with_context(|| "failed to probe device")? {
 			Some(fstype) => fstype,
 			None => {
 				return Err(anyhow!(
@@ -65,10 +65,12 @@ impl SwitchrootCommand {
 	fn move_devices(&self) -> Result<()> {
 		for mount_dev in ["/dev", "/proc", "/sys", "/run", "/tmp"] {
 			let mount_dev = PathBuf::from(mount_dev);
-			let target = self.mount_path.join(mount_dev.file_name().unwrap());
+			let target = self
+				.mount_path
+				.join(mount_dev.file_name().expect("mount device has filename"));
 
 			if !target.exists() {
-				mkdir(&target, Mode::from_bits(0o755).unwrap())
+				mkdir(&target, Mode::from_bits(0o755).expect("valid mount bits"))
 					.with_context(|| format!("failed to create {}", &target.display()))?;
 			}
 
@@ -87,7 +89,8 @@ impl SwitchrootCommand {
 	/// Run the switchroot command.
 	pub fn run(&self) -> Result<()> {
 		println!("Switching root to {}", self.new_root.display());
-		fs::create_dir_all(&self.mount_path)?;
+		fs::create_dir_all(&self.mount_path)
+			.with_context(|| format!("failed to create directory: {}", self.mount_path.display()))?;
 
 		self.mount()?;
 		self.move_devices()?;
