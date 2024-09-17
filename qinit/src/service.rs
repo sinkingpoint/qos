@@ -23,7 +23,7 @@ use nix::{
 	unistd::{chown, execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
 };
 
-use crate::config::{Permissions, ServiceConfig, StartMode};
+use crate::config::{Dependency, Permissions, ServiceConfig, StartMode};
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Some of the variants aren't used yet, but will be once we have a ctl binary.
@@ -71,6 +71,20 @@ impl Service {
 		}
 
 		for (key, value) in &other.args {
+			if self.args.get(key) != Some(value) {
+				return false;
+			}
+		}
+
+		true
+	}
+
+	pub fn matches_dep(&self, other: &Dependency) -> bool {
+		if self.name != other.name {
+			return false;
+		}
+
+		for (key, value) in &other.arguments {
 			if self.args.get(key) != Some(value) {
 				return false;
 			}
@@ -203,6 +217,7 @@ impl Display for Service {
 }
 
 /// Manages the services that the system has started.
+#[derive(Debug)]
 pub struct ServiceManager {
 	/// The services that have been started.
 	services: Mutex<Vec<Service>>,
@@ -315,6 +330,7 @@ impl ServiceManager {
 			_ => false,
 		});
 
+		let mut start_sweep = None;
 		if let Some(service) = service {
 			if matches!(service.state, ServiceState::Running(_)) {
 				// The service is already running, so this is a no-op, and a bug probably.
@@ -326,22 +342,33 @@ impl ServiceManager {
 			}
 
 			service.state = ServiceState::Running(pid);
-			self.trigger_start_sweep(service).await;
+			start_sweep = Some(service.clone());
 		} else {
 			warn!(
 				self.logger,
 				"PID {} is being marked as running, but is not managed by this version of qinit", pid
 			);
 		}
+
+		drop(services);
+		if let Some(service) = start_sweep {
+			self.trigger_start_sweep(&service).await;
+		}
 	}
 
 	/// Sweep the pending services, starting any that were only waiting on the given service to start.
 	async fn trigger_start_sweep(&self, started: &Service) {
 		let mut pending = self.pending_services.lock().await;
-		for to_start in pending.extract_if(|w| {
-			w.notify_service_started(started);
-			w.done()
-		}) {
+		let to_start = pending
+			.extract_if(|w| {
+				w.notify_service_started(started);
+				w.done()
+			})
+			.collect::<Vec<ServiceWaiter>>();
+
+		drop(pending);
+
+		for to_start in to_start {
 			self.start(to_start.service).await;
 		}
 	}
@@ -456,6 +483,7 @@ impl Future for WaitFuture {
 }
 
 /// A service that is waiting on some set of dependencies.
+#[derive(Debug)]
 struct ServiceWaiter {
 	/// The service to start
 	service: Service,

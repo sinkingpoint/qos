@@ -8,17 +8,18 @@ use std::{
 	path::PathBuf,
 	process::ExitCode,
 	sync::Arc,
+	time::Duration,
 };
 
 use anyhow::{anyhow, Result};
 use clap::{Arg, Command};
 use common::obs::assemble_logger;
-use config::load_config;
+use config::{load_config, Dependency};
 use control::listen::{Action, ActionFactory, ControlSocket};
 use nix::unistd::Pid;
 use service::{Service, ServiceManager};
 use slog::{error, info};
-use tokio::{fs::create_dir_all, net::unix::UCred};
+use tokio::{fs::create_dir_all, net::unix::UCred, time::sleep};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -51,7 +52,9 @@ async fn main() -> ExitCode {
 		return ExitCode::FAILURE;
 	}
 
-	start_sphere(&logger, manager.clone(), &config, "base").await.unwrap();
+	start_sphere(&logger, manager.clone(), &config, "user").await.unwrap();
+
+	sleep(Duration::from_secs(5)).await;
 
 	manager.reaper().await;
 	ExitCode::SUCCESS
@@ -137,14 +140,62 @@ async fn start_sphere(
 	config: &config::Config,
 	sphere_name: &str,
 ) -> anyhow::Result<()> {
+	info!(logger, "queuing sphere"; "name" => sphere_name);
 	let sphere = match config.get_sphere(sphere_name) {
 		Some(s) => s,
 		None => return Err(anyhow!("sphere {} doesn't exist", sphere_name)),
 	};
 
-	info!(logger, "starting sphere"; "sphere_name" => sphere_name);
-	for dep in sphere.services.iter() {
-		start_service(logger, manager.clone(), config, &dep.name, dep.arguments.clone()).await?;
+	let mut to_start = Vec::new();
+	let mut stack = vec![sphere];
+	while let Some(sphere) = stack.pop() {
+		for dep_name in sphere.needs.iter() {
+			let sphere = match config.get_sphere(dep_name) {
+				Some(s) => s,
+				None => return Err(anyhow!("sphere {} doesn't exist", sphere_name)),
+			};
+
+			stack.push(sphere);
+		}
+
+		to_start.push(sphere);
+	}
+
+	let mut started: HashMap<String, Vec<Dependency>> = HashMap::new();
+	while !to_start.is_empty() {
+		let mut new_started = HashMap::new();
+		for startable in to_start
+			.iter()
+			.filter(|d| d.needs.iter().all(|s| started.contains_key(s)))
+		{
+			let deps = startable
+				.needs
+				.iter()
+				.flat_map(|n| started.get(n).unwrap())
+				.cloned()
+				.collect::<Vec<Dependency>>();
+
+			let mut new_deps = Vec::new();
+			for dep in startable.services.iter() {
+				start_service(
+					logger,
+					manager.clone(),
+					config,
+					&dep.name,
+					dep.arguments.clone(),
+					Some(&deps),
+				)
+				.await?;
+
+				new_deps.push(dep.clone());
+			}
+
+			new_deps.extend(deps);
+			new_started.insert(startable.name.clone(), new_deps);
+		}
+
+		to_start.retain(|s| !new_started.contains_key(&s.name));
+		started.extend(new_started);
 	}
 
 	Ok(())
@@ -157,6 +208,7 @@ async fn start_service(
 	config: &config::Config,
 	service_name: &str,
 	service_args: HashMap<String, String>,
+	extra_deps: Option<&Vec<Dependency>>,
 ) -> anyhow::Result<()> {
 	let service_config = match config.get_service_config(service_name) {
 		Some(conf) => conf,
@@ -165,6 +217,8 @@ async fn start_service(
 
 	let mut to_start = Vec::new();
 	let mut stack = vec![(service_config, service_args)];
+	let default_extra_deps = Vec::new();
+	let extra_deps = extra_deps.unwrap_or(&default_extra_deps);
 
 	while let Some((service_config, args)) = stack.pop() {
 		let dep_service = Service::new(service_config, args);
@@ -172,8 +226,12 @@ async fn start_service(
 			continue;
 		}
 
-		let mut dependencies = Vec::new();
-		for dep in service_config.needs.iter() {
+		let mut dependencies: Vec<Service> = Vec::new();
+		for dep in service_config.needs.iter().chain(extra_deps) {
+			if dependencies.iter().any(|s| s.matches_dep(dep)) || dep_service.matches_dep(dep) {
+				continue;
+			}
+
 			let config = match config.get_service_config(&dep.name) {
 				Some(conf) => conf,
 				None => {

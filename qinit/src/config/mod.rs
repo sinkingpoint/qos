@@ -9,7 +9,7 @@ use std::{
 };
 
 use service::SphereDefinition;
-pub use service::{Permissions, ServiceConfig, StartMode};
+pub use service::{Dependency, Permissions, ServiceConfig, StartMode};
 
 const SERVICE_FILE_EXTENSION: &str = "service";
 const SPHERE_FILE_EXTENSION: &str = "sphere";

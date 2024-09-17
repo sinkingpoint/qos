@@ -1,0 +1,23 @@
+name = "user"
+description = "Base services for all other services"
+
+needs = ["base"]
+
+[[services]]
+name = "getty"
+[services.arguments]
+TTY = "/dev/tty1"
+
+[[services]]
+name = "getty"
+[services.arguments]
+TTY = "/dev/ttyS0"
+
+[[services]]
+name = "udevd"
+
+[[services]]
+name = "udev"
+
+[[services]]
+name = "depmod"
