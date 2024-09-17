@@ -1,4 +1,4 @@
-KERNEL_RELEASE := 6.9.12-200.fc40.x86_64
+KERNEL_RELEASE := $(shell uname -r)
 .PHONY: build
 build:
 	cargo build --target=x86_64-unknown-linux-musl
