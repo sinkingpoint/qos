@@ -5,22 +5,27 @@ use std::{
 	fmt::Display,
 	fs::create_dir_all,
 	future::Future,
+	mem,
+	os::fd::AsRawFd,
+	path::PathBuf,
 	pin::Pin,
-	task::{Context, Poll},
+	task::Poll,
 };
 
 use auth::{Group, User};
+use common::io::{STDERR_FD, STDOUT_FD};
+use loggerd::{control::start_write_stream_sync, DEFAULT_CONTROL_SOCKET_PATH, KV};
 use slog::{error, info, warn};
 use tokio::sync::{oneshot, Mutex, Notify};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Context, Result};
 use nix::{
 	errno::Errno,
 	sys::{
 		signal::Signal,
 		wait::{waitpid, WaitPidFlag, WaitStatus},
 	},
-	unistd::{chown, execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
+	unistd::{chown, close, dup2, execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
 };
 
 use crate::config::{Permissions, ServiceConfig, StartMode};
@@ -150,6 +155,34 @@ impl Service {
 		Ok(())
 	}
 
+	fn pipe_logging(&self) -> Result<()> {
+		let stdout_map = vec![
+			KV::new(String::from("SERVICE"), self.name.clone()),
+			KV::new(String::from("STREAM"), String::from("stdout")),
+		];
+
+		if let Ok(stream) = start_write_stream_sync(&PathBuf::from(DEFAULT_CONTROL_SOCKET_PATH), stdout_map) {
+			let fd = stream.as_raw_fd();
+			mem::forget(stream);
+			dup2(fd, STDOUT_FD).with_context(|| "failed to pipe stdout to loggerd")?;
+			close(fd).with_context(|| "failed to close old stream fd")?;
+		}
+
+		let stderr_map = vec![
+			KV::new(String::from("SERVICE"), self.name.clone()),
+			KV::new(String::from("STREAM"), String::from("stdout")),
+		];
+
+		if let Ok(stream) = start_write_stream_sync(&PathBuf::from(DEFAULT_CONTROL_SOCKET_PATH), stderr_map) {
+			let fd = stream.as_raw_fd();
+			mem::forget(stream);
+			dup2(fd, STDERR_FD).with_context(|| "failed to pipe stdout to loggerd")?;
+			close(fd).with_context(|| "failed to close old stream fd")?;
+		}
+
+		Ok(())
+	}
+
 	/// Starts the service, forking and executing the command.
 	pub fn start(&mut self) -> Result<()> {
 		let args = self.split_args()?.unwrap();
@@ -179,6 +212,8 @@ impl Service {
 						)
 					})
 					.unwrap();
+
+				self.pipe_logging().unwrap();
 
 				execve::<_, &CStr>(&args[0], &args, &[])
 					.with_context(|| format!("failed to start service name: {}, args: {:?}", self.name, self.args))
@@ -442,7 +477,7 @@ impl WaitFuture {
 impl Future for WaitFuture {
 	type Output = nix::Result<WaitStatus>;
 
-	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
+	fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		match *self {
 			Self::Created(ref pid, ref flags) => {
 				let (tx, rx) = oneshot::channel();

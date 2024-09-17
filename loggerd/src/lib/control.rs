@@ -1,11 +1,11 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, io::Write, os::unix::net::UnixStream, path::Path};
 
 use bytestruct::{Endian, WriteToWithEndian};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tokio::{
 	io::{self, AsyncWriteExt},
-	net::{UnixSocket, UnixStream},
+	net::UnixSocket,
 };
 
 use crate::{LogMessage, KV};
@@ -20,7 +20,7 @@ const FOLLOW_HEADER: &str = "_FOLLOW";
 
 /// Starts a write stream with the given fields, returning the socket that can then be used
 /// to stream logs to a loggerd instance.
-pub async fn start_write_stream(socket_path: &Path, fields: Vec<KV>) -> io::Result<UnixStream> {
+pub async fn start_write_stream(socket_path: &Path, fields: Vec<KV>) -> io::Result<tokio::net::UnixStream> {
 	let mut conn = UnixSocket::new_stream()?.connect(socket_path).await?;
 	let fields_str = fields
 		.iter()
@@ -34,9 +34,23 @@ pub async fn start_write_stream(socket_path: &Path, fields: Vec<KV>) -> io::Resu
 	Ok(conn)
 }
 
+pub fn start_write_stream_sync(socket_path: &Path, fields: Vec<KV>) -> std::io::Result<UnixStream> {
+	let mut conn = UnixStream::connect(socket_path)?;
+	let fields_str = fields
+		.iter()
+		.map(|kv| format!("{}={}", kv.key, kv.value))
+		.collect::<Vec<_>>()
+		.join(" ");
+
+	let header_string = format!("ACTION={} {}\n", START_WRITE_STREAM_ACTION, fields_str);
+	conn.write_all(header_string.as_bytes())?;
+
+	Ok(conn)
+}
+
 /// Starts a read stream with the given options, returning the socket that can then be used
 /// to read logs from a loggerd instance.
-pub async fn start_read_stream(socket_path: &Path, opts: ReadStreamOpts) -> io::Result<UnixStream> {
+pub async fn start_read_stream(socket_path: &Path, opts: ReadStreamOpts) -> io::Result<tokio::net::UnixStream> {
 	let mut conn = UnixSocket::new_stream()?.connect(socket_path).await?;
 	let header_string = format!("ACTION={} {}\n", START_READ_STREAM_ACTION, opts.to_header_string());
 	conn.write_all(header_string.as_bytes()).await?;

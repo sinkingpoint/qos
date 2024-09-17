@@ -895,6 +895,7 @@ dependencies = [
  "clap",
  "common",
  "control",
+ "loggerd",
  "nix",
  "serde",
  "slog",

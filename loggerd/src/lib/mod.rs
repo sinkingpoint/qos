@@ -28,6 +28,12 @@ pub struct KV {
 	pub value: String,
 }
 
+impl KV {
+	pub fn new(key: String, value: String) -> KV {
+		KV { key, value }
+	}
+}
+
 #[derive(Debug)]
 pub struct LogMessage {
 	pub timestamp: DateTime<Utc>,
