@@ -1,0 +1,6 @@
+name = "base3"
+description = "Base services for all other services"
+
+needs = ["base2"]
+
+services = []

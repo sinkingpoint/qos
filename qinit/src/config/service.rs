@@ -238,4 +238,8 @@ pub struct SphereDefinition {
 
 	/// The services in the sphere.
 	pub services: Vec<Dependency>,
+
+	/// The "needs" of a sphere. This points to other spheres that must be started before this one.
+	#[serde(default)]
+	pub needs: Vec<String>,
 }

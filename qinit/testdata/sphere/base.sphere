@@ -1,0 +1,5 @@
+name = "base"
+description = "Base services for all other services"
+
+[[services]]
+name = "udev"

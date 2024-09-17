@@ -1,0 +1,5 @@
+name = "udev"
+description = "Udev"
+
+[service]
+command = "/sbin/udev"

@@ -1,7 +1,7 @@
 mod service;
 
 use std::{
-	collections::HashMap,
+	collections::{HashMap, VecDeque},
 	error::Error,
 	fmt::{self, Display, Formatter},
 	fs,
@@ -348,6 +348,39 @@ impl Config {
 		}
 
 		for sphere in self.spheres.values() {
+			let mut seen = HashMap::new();
+			let mut to_see = VecDeque::new();
+			to_see.push_back((sphere.name.clone(), Vec::new()));
+			while let Some((sphere_name, path)) = to_see.pop_back() {
+				if seen.contains_key(&sphere_name) {
+					errors.add_error(ValidationError::new_fatal(&format!(
+						"Found circular dependencies in spheres. Sphere {} is depended on through flow: {:?}",
+						sphere.name, path,
+					)));
+
+					continue;
+				}
+
+				let dep = self.get_sphere(&sphere_name).expect("already found sphere");
+				let mut new_deps = path.clone();
+				new_deps.push(sphere_name.clone());
+
+				for sphere_name in dep.needs.iter() {
+					if self.get_sphere(sphere_name).is_none() {
+						errors.add_error(ValidationError::new_fatal(&format!(
+							"Sphere {} needs sphere {}, but it doesn't exist",
+							sphere.name, sphere_name
+						)));
+
+						continue;
+					};
+
+					to_see.push_back((sphere_name.to_owned(), new_deps.clone()));
+				}
+
+				seen.insert(sphere_name, path);
+			}
+
 			for service in sphere.services.iter() {
 				if let Some(c) = self.get_service_config(&service.name) {
 					for arg in service.arguments.keys() {
@@ -659,5 +692,42 @@ mod test {
 			config.load_service_from_file(PathBuf::from("./testdata/dependant-service/udev.service").as_path());
 		assert!(!errors.is_error());
 		assert!(!config.validate().is_error());
+	}
+
+	#[test]
+	fn test_sphere() {
+		let mut config = Config::empty();
+		let errors = config.load_sphere_from_file(PathBuf::from("./testdata/sphere/base.sphere").as_path());
+		assert!(!errors.is_error(), "{:}", errors);
+		assert!(config.validate().is_error());
+
+		let errors =
+			config.load_service_from_file(PathBuf::from("./testdata/dependant-service/udev.service").as_path());
+		assert!(!errors.is_error());
+		assert!(!config.validate().is_error());
+	}
+
+	#[test]
+	fn test_dependant_sphere() {
+		let mut config = Config::empty();
+		let errors = config.load_sphere_from_file(PathBuf::from("./testdata/dependant-sphere/base.sphere").as_path());
+		assert!(!errors.is_error(), "{:}", errors);
+		assert!(config.validate().is_error());
+
+		let errors = config.load_sphere_from_file(PathBuf::from("./testdata/dependant-sphere/base1.sphere").as_path());
+		assert!(!errors.is_error());
+		assert!(!config.validate().is_error());
+	}
+
+	#[test]
+	fn test_circular_dependant_sphere() {
+		let mut config = Config::empty();
+		let errors = config.load_sphere_from_file(PathBuf::from("./testdata/dependant-sphere/base2.sphere").as_path());
+		assert!(!errors.is_error(), "{:}", errors);
+		assert!(config.validate().is_error());
+
+		let errors = config.load_sphere_from_file(PathBuf::from("./testdata/dependant-sphere/base3.sphere").as_path());
+		assert!(!errors.is_error());
+		assert!(config.validate().is_error(), "{:?}", config.validate());
 	}
 }
