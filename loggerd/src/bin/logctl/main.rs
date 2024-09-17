@@ -48,6 +48,13 @@ async fn main() {
 						.long("output")
 						.default_value("text")
 						.help("The format to write logs in"),
+				)
+				.arg(
+					Arg::new("filter")
+						.short('f')
+						.long("filter")
+						.num_args(0..)
+						.help("Values to filter by"),
 				),
 		)
 		.subcommand_required(true)
@@ -91,6 +98,23 @@ async fn main() {
 					.unwrap()
 					.into();
 				opts = opts.with_max_time(max_time);
+			}
+
+			if let Some(filters) = read_matches.get_many::<String>("filter") {
+				let mut kv_filters = Vec::new();
+				for filter in filters.into_iter() {
+					if let Some((k, v)) = filter.split_once("=") {
+						kv_filters.push(KV {
+							key: k.to_owned(),
+							value: v.to_owned(),
+						})
+					} else {
+						error!(logger, "Failed to validate filters: {}", filter);
+						return;
+					}
+				}
+
+				opts = opts.with_filters(kv_filters);
 			}
 
 			let log_format = read_matches.get_one::<String>("format").map_or("text", |s| s.as_str());
