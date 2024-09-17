@@ -7,7 +7,7 @@ use loggerd::DEFAULT_CONTROL_SOCKET_PATH;
 use std::{io::stderr, path::PathBuf, sync::Arc};
 
 use clap::{Arg, Command};
-use common::obs::assemble_logger;
+use common::{obs::assemble_logger, qinit::mark_running};
 use slog::{error, info};
 
 use crate::control::Controller;
@@ -52,6 +52,8 @@ async fn main() {
 			return;
 		}
 	};
+
+	mark_running().expect("marked running");
 
 	tokio::select! {
 		_ = tokio::signal::ctrl_c() => {

@@ -1,6 +1,7 @@
 name = "loggerd"
 description = "A logging daemon"
 runtime_directory = "/run/loggerd"
+start_mode = "notify"
 
 [service]
 command = "/sbin/loggerd"
