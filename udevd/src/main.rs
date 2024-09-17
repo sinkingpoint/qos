@@ -20,7 +20,7 @@ const SEQ_NUM_KEY: &str = "SEQNUM";
 #[tokio::main]
 async fn main() {
 	let logger = common::obs::assemble_logger(stderr());
-	let socket = AsyncNetlinkSocket::<NetlinkKObjectUEvent>::new(UEventNetlinkGroups::None).unwrap();
+	let socket = AsyncNetlinkSocket::<NetlinkKObjectUEvent>::new(UEventNetlinkGroups::UEvents).unwrap();
 
 	let bus_socket = BusClient::new().await.unwrap().publish(BUSD_TOPIC).await.unwrap();
 

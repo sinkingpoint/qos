@@ -150,7 +150,7 @@ pub struct NetlinkKObjectUEvent;
 
 bitflags! {
 	pub struct UEventNetlinkGroups: u32 {
-		const None = 0;
+		const UEvents = 1;
 	}
 }
 
