@@ -23,7 +23,7 @@ use nix::{
 	unistd::{chown, execve, fork, setgid, setuid, ForkResult, Gid, Pid, Uid},
 };
 
-use crate::config::{Dependency, Permissions, ServiceConfig, StartMode};
+use crate::config::{Permissions, ServiceConfig, StartMode};
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Some of the variants aren't used yet, but will be once we have a ctl binary.
@@ -65,26 +65,12 @@ impl Service {
 		}
 	}
 
-	pub fn matches(&self, other: &Service) -> bool {
-		if self.name != other.name {
+	pub fn matches(&self, name: &str, arguments: &HashMap<String, String>) -> bool {
+		if self.name != name {
 			return false;
 		}
 
-		for (key, value) in &other.args {
-			if self.args.get(key) != Some(value) {
-				return false;
-			}
-		}
-
-		true
-	}
-
-	pub fn matches_dep(&self, other: &Dependency) -> bool {
-		if self.name != other.name {
-			return false;
-		}
-
-		for (key, value) in &other.arguments {
+		for (key, value) in arguments {
 			if self.args.get(key) != Some(value) {
 				return false;
 			}
@@ -245,7 +231,7 @@ impl ServiceManager {
 	pub async fn is_running(&self, wants: &Service) -> bool {
 		let services = self.services.lock().await;
 		for s in services.iter() {
-			if !s.matches(wants) {
+			if !s.matches(&wants.name, &wants.args) {
 				continue;
 			}
 
@@ -260,14 +246,17 @@ impl ServiceManager {
 	pub async fn queue(&self, service: Service, dependencies: Vec<Service>) {
 		{
 			let services = self.services.lock().await;
-			if services.iter().any(|s| s.matches(&service)) {
+			if services.iter().any(|s| s.matches(&service.name, &service.args)) {
 				return;
 			}
 		}
 
 		{
 			let pending_services = self.pending_services.lock().await;
-			if pending_services.iter().any(|w| w.service.matches(&service)) {
+			if pending_services
+				.iter()
+				.any(|w| w.service.matches(&service.name, &service.args))
+			{
 				return;
 			}
 		}
@@ -502,7 +491,7 @@ impl ServiceWaiter {
 
 	/// Remove the given service from the set of dependencies.
 	fn notify_service_started(&mut self, started: &Service) {
-		self.waiting_dependencies.retain(|s| !started.matches(s));
+		self.waiting_dependencies.retain(|s| !started.matches(&s.name, &s.args));
 	}
 
 	fn done(&self) -> bool {

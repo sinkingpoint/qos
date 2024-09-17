@@ -221,14 +221,19 @@ async fn start_service(
 	let extra_deps = extra_deps.unwrap_or(&default_extra_deps);
 
 	while let Some((service_config, args)) = stack.pop() {
-		let dep_service = Service::new(service_config, args);
-		if to_start.iter().any(|(s, _): &(Service, _)| s.matches(&dep_service)) {
+		if to_start
+			.iter()
+			.any(|(s, _): &(Service, _)| s.matches(&service_config.name, &args))
+		{
 			continue;
 		}
+		let dep_service = Service::new(service_config, args);
 
 		let mut dependencies: Vec<Service> = Vec::new();
 		for dep in service_config.needs.iter().chain(extra_deps) {
-			if dependencies.iter().any(|s| s.matches_dep(dep)) || dep_service.matches_dep(dep) {
+			if dependencies.iter().any(|s| s.matches(&dep.name, &dep.arguments))
+				|| dep_service.matches(&dep.name, &dep.arguments)
+			{
 				continue;
 			}
 
