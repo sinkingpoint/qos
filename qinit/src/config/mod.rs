@@ -8,7 +8,6 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::Context;
 use service::SphereDefinition;
 pub use service::{Permissions, ServiceConfig, StartMode};
 
@@ -255,9 +254,7 @@ impl Config {
 			}
 		};
 
-		let sphere: SphereDefinition = match toml::from_str(&definition)
-			.with_context(|| format!("Failed to parse sphere definition from {}", path.display()))
-		{
+		let sphere: SphereDefinition = match toml::from_str(&definition) {
 			Ok(sphere) => sphere,
 			Err(e) => {
 				errors.add_error(ValidationError::new_fatal(&format!(
@@ -346,6 +343,26 @@ impl Config {
 							.collect::<Vec<_>>()
 							.join(", ")
 					)));
+				}
+			}
+		}
+
+		for sphere in self.spheres.values() {
+			for service in sphere.services.iter() {
+				if let Some(c) = self.get_service_config(&service.name) {
+					for arg in service.arguments.keys() {
+						if !c.service.has_argument(arg) {
+							errors.add_error(ValidationError::new_fatal(&format!(
+								"Sphere {} needs argument {} on service {}, but it doesn't exist",
+								sphere.name, arg, service.name
+							)))
+						}
+					}
+				} else {
+					errors.add_error(ValidationError::new(&format!(
+						"Sphere {} needs service {}, but it doesn't exist",
+						sphere.name, service.name
+					)))
 				}
 			}
 		}
@@ -496,7 +513,7 @@ mod test {
 			description = "Test service"
 			service = { command = "echo" }
 			wants = [
-				{ name = "other", args = { "test" = "value" } }
+				{ name = "other", arguments = { "test" = "value" } }
 			]
 		"#;
 		let errors = config.add_service(toml::from_str(definition).unwrap());
@@ -547,7 +564,7 @@ mod test {
 			description = "Test service"
 			service = { command = "echo" }
 			needs = [
-				{ name = "other", args = { "test" = "value" } }
+				{ name = "other", arguments = { "test" = "value" } }
 			]
 		"#;
 		let errors = config.add_service(toml::from_str(definition).unwrap());

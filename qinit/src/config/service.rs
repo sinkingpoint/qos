@@ -61,6 +61,7 @@ impl Argument {
 
 /// The definition of a service.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ServiceDefinition {
 	/// The command to run.
 	pub command: String,
@@ -100,6 +101,7 @@ impl ServiceDefinition {
 
 /// A service dependency.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Dependency {
 	/// The name of the service that this service depends on.
 	pub name: String,
