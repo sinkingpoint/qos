@@ -6,7 +6,10 @@ use bitflags::bitflags;
 use bytestruct_derive::ByteStruct;
 pub use interface::*;
 
-use std::io::{self, Cursor, ErrorKind};
+use std::{
+	io::{self, Cursor, ErrorKind},
+	sync::Arc,
+};
 
 use address::{AddressAttributes, AddressFamily, AddressFlags, AddressScope, InterfaceAddressMessage};
 use bytestruct::{int_enum, ReadFromWithEndian};
@@ -125,28 +128,27 @@ pub struct Address {
 
 pub trait RTNetlink {
 	// Get all the links on the system.
-	fn get_links(&mut self) -> io::Result<Vec<Interface>>;
+	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>>;
 
 	// Create, or update a link on the system.
-	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface>;
+	fn new_link(self: &Arc<Self>, i: Interface) -> NetlinkResult<NetlinkRoute, Interface>;
 
 	// Get all the addresses on all the links of the system.
-	fn get_addrs(&mut self) -> io::Result<Vec<Address>>;
+	fn get_addrs(self: &Arc<Self>) -> io::Result<Vec<Address>>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
-	fn get_links(&mut self) -> io::Result<Vec<Interface>> {
+	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
 			RTNetlinkMessageType::GetLink,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
 		);
 		let msg = InterfaceInfoMessage::empty();
 
-		self.write_netlink_message(header, msg)?;
+		let read_handle = self.write_netlink_message(header, msg)?;
 
 		let mut interfaces = Vec::new();
-		loop {
-			let (header, body) = self.read_netlink_message()?;
+		while let Some((header, body)) = read_handle.read() {
 			if matches!(header.message_type, RTNetlinkMessageType::Done) {
 				break;
 			}
@@ -160,28 +162,34 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		Ok(interfaces)
 	}
 
-	fn new_link(&mut self, i: Interface) -> NetlinkResult<NetlinkRoute, Interface> {
+	fn new_link(self: &Arc<Self>, i: Interface) -> NetlinkResult<NetlinkRoute, Interface> {
 		let header = NetlinkMessageHeader::new(
 			RTNetlinkMessageType::NewLink,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_ACK,
 		);
 
-		self.write_netlink_message(header, i)?;
+		let read_handle = self.write_netlink_message(header, i)?;
 
-		let (header, msg) = self.read_netlink_message()?;
-		if header.message_type != RTNetlinkMessageType::Error {
-			return Err(NetlinkError::IOError(io::Error::new(
-				ErrorKind::InvalidData,
-				format!("invalid message header in response: {:?}", header.message_type),
-			)));
+		if let Some((header, msg)) = read_handle.read() {
+			if header.message_type != RTNetlinkMessageType::Error {
+				return Err(NetlinkError::IOError(io::Error::new(
+					ErrorKind::InvalidData,
+					format!("invalid message header in response: {:?}", header.message_type),
+				)));
+			}
+
+			let mut msg = Cursor::new(msg);
+
+			read_netlink_result(&mut msg, bytestruct::Endian::Little)
+		} else {
+			Err(NetlinkError::IOError(io::Error::new(
+				ErrorKind::UnexpectedEof,
+				"failed to resp response",
+			)))
 		}
-
-		let mut msg = Cursor::new(msg);
-
-		read_netlink_result(&mut msg, bytestruct::Endian::Little)
 	}
 
-	fn get_addrs(&mut self) -> io::Result<Vec<Address>> {
+	fn get_addrs(self: &Arc<Self>) -> io::Result<Vec<Address>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
 			RTNetlinkMessageType::GetAddress,
 			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
@@ -189,12 +197,11 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 
 		let msg = InterfaceAddressMessage::empty();
 
-		self.write_netlink_message(header, msg)?;
+		let read_handle = self.write_netlink_message(header, msg)?;
 
 		let mut addresses = Vec::new();
 
-		loop {
-			let (header, body) = self.read_netlink_message()?;
+		while let Some((header, body)) = read_handle.read() {
 			if matches!(header.message_type, RTNetlinkMessageType::Done) {
 				break;
 			}

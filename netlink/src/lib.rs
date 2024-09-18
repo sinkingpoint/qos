@@ -11,10 +11,11 @@ pub use error::*;
 pub mod rtnetlink;
 
 use std::{
+	collections::HashMap,
 	io::{self, BufReader, Cursor, ErrorKind, Read, Write},
-	marker::PhantomData,
 	os::fd::{AsRawFd, OwnedFd},
-	sync::Mutex,
+	sync::{mpsc, Arc, Mutex},
+	thread,
 };
 
 use bitflags::{bitflags, Flags};
@@ -28,6 +29,9 @@ use nix::{
 
 use common::{io::RawFdReader, rand::rand_u32};
 
+type SequenceNumber = u32;
+type RawMessage<T> = (NetlinkMessageHeader<T>, Vec<u8>);
+
 /// A socket for communicating with the kernel over Netlink.
 pub struct NetlinkSocket<T: NetlinkSockType> {
 	socket_fd: OwnedFd,
@@ -35,12 +39,26 @@ pub struct NetlinkSocket<T: NetlinkSockType> {
 	/// A BufReader over the socket connection.
 	reader: Mutex<BufReader<RawFdReader>>,
 
-	_phantom: PhantomData<T>,
+	flows: Mutex<HashMap<SequenceNumber, mpsc::Sender<RawMessage<T>>>>,
+}
+
+impl<T: NetlinkSockType + Send + 'static> NetlinkSocket<T>
+where
+	T::MessageType: Send,
+{
+	/// Creates a new Netlink socket with the specified multicast groups.
+	pub fn new(groups: T::SockGroups) -> io::Result<Arc<Self>> {
+		let socket = Self::new_raw(groups)?;
+
+		let event_socket = socket.clone();
+		thread::spawn(move || event_loop(event_socket));
+
+		Ok(socket)
+	}
 }
 
 impl<T: NetlinkSockType> NetlinkSocket<T> {
-	/// Creates a new Netlink socket with the specified multicast groups.
-	pub fn new(groups: T::SockGroups) -> io::Result<Self> {
+	pub fn new_raw(groups: T::SockGroups) -> io::Result<Arc<Self>> {
 		let socket_fd = socket::socket(
 			AddressFamily::Netlink,
 			SockType::Raw,
@@ -71,20 +89,20 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 			));
 		}
 
-		Ok(Self {
+		Ok(Arc::new(Self {
 			// We have to use a BufReader here because Linux is very silly. Even though we _request_ a SOCK_RAW
 			// socket,
 			reader: Mutex::new(BufReader::new(RawFdReader::new(socket_fd.as_raw_fd()))),
 			socket_fd,
-			_phantom: PhantomData,
-		})
+			flows: Mutex::new(HashMap::new()),
+		}))
 	}
 
 	pub fn write_netlink_message<M: WriteToWithEndian>(
-		&self,
+		self: &Arc<Self>,
 		mut header: NetlinkMessageHeader<T>,
 		msg: M,
-	) -> io::Result<usize> {
+	) -> io::Result<ReadHandle<T>> {
 		let mut body = Vec::new();
 		msg.write_to_with_endian(&mut body, bytestruct::Endian::Little)?;
 
@@ -93,10 +111,13 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 		header.write_to_with_endian(&mut buf, bytestruct::Endian::Little)?;
 		buf.extend(body);
 
-		self.uwrite(&buf)
+		let read = self.register_flow(header.sequence_number);
+		self.uwrite(&buf)?;
+
+		Ok(read)
 	}
 
-	pub fn read_netlink_message(&self) -> io::Result<(NetlinkMessageHeader<T>, Vec<u8>)> {
+	fn read_netlink_message(&self) -> io::Result<(NetlinkMessageHeader<T>, Vec<u8>)> {
 		let mut header = [0; 16];
 		let n = self.uread(&mut header)?;
 		if n != 16 {
@@ -120,6 +141,44 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 
 	fn uwrite(&self, buf: &[u8]) -> io::Result<usize> {
 		write(self.as_raw_fd(), buf).map_err(io::Error::from)
+	}
+
+	fn register_flow(self: &Arc<Self>, sequence_number: SequenceNumber) -> ReadHandle<T> {
+		let (writer, reader) = mpsc::channel();
+
+		let mut flows = self.flows.lock().unwrap();
+		flows.insert(sequence_number, writer);
+		ReadHandle::new(self.clone(), sequence_number, reader)
+	}
+
+	fn deregister_flow(&self, flow: &ReadHandle<T>) {
+		let mut flows = self.flows.lock().unwrap();
+		flows.remove(&flow.sequence_number);
+	}
+}
+
+fn event_loop<T: NetlinkSockType>(socket: Arc<NetlinkSocket<T>>) {
+	loop {
+		let (header, data) = match socket.read_netlink_message() {
+			Ok((header, data)) => (header, data),
+			Err(e) => {
+				eprintln!("failed to read netlink message: {}", e);
+				continue;
+			}
+		};
+
+		let sequence_number = header.sequence_number;
+		let mut flows = socket.flows.lock().expect("flows lock");
+		if let Some(flow) = flows.get(&sequence_number) {
+			match flow.send((header, data)) {
+				Ok(_) => {}
+				Err(_) => {
+					flows.remove(&sequence_number);
+				}
+			}
+		} else {
+			eprintln!("missing flow for sequence number: {}", sequence_number);
+		}
 	}
 }
 
@@ -265,6 +324,40 @@ bitflags! {
 			const RTMGRP_DECNET_IFADDR = 0x1000;
 			const RTMGRP_DECNET_ROUTE = 0x4000;
 			const RTMGRP_IPV6_PREFIX = 0x20000;
+	}
+}
+
+pub struct ReadHandle<T: NetlinkSockType> {
+	socket: Arc<NetlinkSocket<T>>,
+	sequence_number: SequenceNumber,
+	reader: mpsc::Receiver<(NetlinkMessageHeader<T>, Vec<u8>)>,
+}
+
+impl<T: NetlinkSockType> ReadHandle<T> {
+	fn new(
+		socket: Arc<NetlinkSocket<T>>,
+		sequence_number: SequenceNumber,
+		reader: mpsc::Receiver<RawMessage<T>>,
+	) -> Self {
+		Self {
+			socket,
+			sequence_number,
+			reader,
+		}
+	}
+
+	pub fn read(&self) -> Option<RawMessage<T>> {
+		if let Ok(r) = self.reader.recv() {
+			Some(r)
+		} else {
+			None
+		}
+	}
+}
+
+impl<T: NetlinkSockType> Drop for ReadHandle<T> {
+	fn drop(&mut self) {
+		self.socket.deregister_flow(self);
 	}
 }
 

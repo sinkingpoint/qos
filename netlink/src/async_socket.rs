@@ -1,5 +1,6 @@
 use std::{
 	pin::Pin,
+	sync::Arc,
 	task::{ready, Context, Poll},
 };
 
@@ -8,11 +9,11 @@ use tokio::io::{self, unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 use crate::{NetlinkSockType, NetlinkSocket};
 
 /// An async wrapper around a Netlink socket.
-pub struct AsyncNetlinkSocket<T: NetlinkSockType>(AsyncFd<NetlinkSocket<T>>);
+pub struct AsyncNetlinkSocket<T: NetlinkSockType>(AsyncFd<Arc<NetlinkSocket<T>>>);
 
 impl<T: NetlinkSockType> AsyncNetlinkSocket<T> {
 	pub fn new(groups: T::SockGroups) -> std::io::Result<Self> {
-		let socket = NetlinkSocket::new(groups)?;
+		let socket = NetlinkSocket::new_raw(groups)?;
 		let async_fd = AsyncFd::new(socket)?;
 
 		Ok(Self(async_fd))
