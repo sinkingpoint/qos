@@ -117,6 +117,17 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 		Ok(read)
 	}
 
+	pub fn global_flow(self: &Arc<Self>) -> Option<ReadHandle<T>> {
+		let flows = self.flows.lock().unwrap();
+		if flows.contains_key(&0) {
+			return None;
+		}
+
+		drop(flows);
+
+		Some(self.register_flow(0))
+	}
+
 	fn read_netlink_message(&self) -> io::Result<(NetlinkMessageHeader<T>, Vec<u8>)> {
 		let mut header = [0; 16];
 		let n = self.uread(&mut header)?;
@@ -179,22 +190,6 @@ fn event_loop<T: NetlinkSockType>(socket: Arc<NetlinkSocket<T>>) {
 		} else {
 			eprintln!("missing flow for sequence number: {}", sequence_number);
 		}
-	}
-}
-
-impl<T: NetlinkSockType> Read for NetlinkSocket<T> {
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		self.uread(buf)
-	}
-}
-
-impl<T: NetlinkSockType> Write for NetlinkSocket<T> {
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		self.uwrite(buf)
-	}
-
-	fn flush(&mut self) -> io::Result<()> {
-		Ok(())
 	}
 }
 

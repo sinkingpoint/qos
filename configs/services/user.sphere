@@ -21,3 +21,6 @@ name = "udev"
 
 [[services]]
 name = "depmod"
+
+[[services]]
+name = "netd"

@@ -7,7 +7,13 @@ edition = "2021"
 name = "netc"
 path = "src/bin/netc/main.rs"
 
+[[bin]]
+name = "netd"
+path = "src/bin/netd/main.rs"
+
 [dependencies]
 netlink = { path = "../netlink" }
 clap = { workspace = true }
 tables = { path = "../tables" }
+common = { path = "../common" }
+slog = { workspace = true }

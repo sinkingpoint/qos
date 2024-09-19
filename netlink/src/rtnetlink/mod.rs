@@ -12,7 +12,7 @@ use std::{
 };
 
 use address::{AddressAttributes, AddressFamily, AddressFlags, AddressScope, InterfaceAddressMessage};
-use bytestruct::{int_enum, ReadFromWithEndian};
+use bytestruct::{int_enum, Endian, ReadFromWithEndian};
 use nix::sys::socket::SockProtocol;
 
 use crate::{
@@ -114,6 +114,12 @@ pub struct Interface {
 	pub flags: InterfaceFlags,
 	pub change: u32,
 	pub attributes: InterfaceAttributes,
+}
+
+impl Interface {
+	pub fn parse(body: Vec<u8>) -> io::Result<Self> {
+		Self::read_from_with_endian(&mut Cursor::new(body), Endian::Little)
+	}
 }
 
 #[derive(Debug, ByteStruct)]

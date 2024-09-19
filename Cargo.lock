@@ -741,7 +741,9 @@ name = "net"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "common",
  "netlink",
+ "slog",
  "tables",
 ]
 

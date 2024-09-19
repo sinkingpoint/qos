@@ -1,0 +1,5 @@
+name = "netd"
+description = "A networking daemon"
+
+[service]
+command = "/sbin/netd"

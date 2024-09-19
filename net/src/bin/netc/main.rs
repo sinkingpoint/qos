@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use clap::{Arg, ArgMatches, Command};
 use netlink::{
@@ -43,15 +43,15 @@ fn main() {
 		.subcommand_required(true)
 		.get_matches();
 
-	let mut netlink_socket = NetlinkSocket::<NetlinkRoute>::new(RTNetlinkGroups::RTMGRP_NONE).unwrap();
+	let netlink_socket = NetlinkSocket::<NetlinkRoute>::new(RTNetlinkGroups::RTMGRP_NONE).unwrap();
 	match app.subcommand() {
 		Some(("link", matches)) => match matches.subcommand() {
-			Some(("show", _matches)) => show_links(&mut netlink_socket),
-			Some(("set", matches)) => set_link(&mut netlink_socket, matches),
+			Some(("show", _matches)) => show_links(netlink_socket.clone()),
+			Some(("set", matches)) => set_link(netlink_socket, matches),
 			_ => panic!("unknown links subcommand"),
 		},
 		Some(("addr", matches)) => match matches.subcommand() {
-			Some(("show", _matches)) => show_addresses(&mut netlink_socket),
+			Some(("show", _matches)) => show_addresses(netlink_socket),
 			_ => panic!("unknown addr subcommand"),
 		},
 		_ => panic!("unknown subcommand"),
@@ -59,7 +59,7 @@ fn main() {
 }
 
 /// Returns the link with the given name, if it exists.
-fn get_link_by_name(netlink_socket: &mut NetlinkSocket<NetlinkRoute>, name: &str) -> Option<Interface> {
+fn get_link_by_name(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, name: &str) -> Option<Interface> {
 	netlink_socket
 		.get_links()
 		.unwrap()
@@ -67,7 +67,7 @@ fn get_link_by_name(netlink_socket: &mut NetlinkSocket<NetlinkRoute>, name: &str
 		.find(|l| matches!(&l.attributes.name, Some(s) if s == name))
 }
 
-fn set_link(netlink_socket: &mut NetlinkSocket<NetlinkRoute>, matches: &ArgMatches) {
+fn set_link(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, matches: &ArgMatches) {
 	let link_name: &String = match matches.get_one("device") {
 		Some(l) => l,
 		None => panic!("BUG: missing links"),
@@ -78,7 +78,7 @@ fn set_link(netlink_socket: &mut NetlinkSocket<NetlinkRoute>, matches: &ArgMatch
 		None => panic!("BUG: missing links"),
 	};
 
-	let mut link = match get_link_by_name(netlink_socket, link_name) {
+	let mut link = match get_link_by_name(netlink_socket.clone(), link_name) {
 		Some(l) => l,
 		None => {
 			eprintln!("no such device: {}", link_name);
@@ -99,7 +99,7 @@ fn set_link(netlink_socket: &mut NetlinkSocket<NetlinkRoute>, matches: &ArgMatch
 	println!("{:?}", err);
 }
 
-fn show_links(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
+fn show_links(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
 	let mut table = tables::Table::new_with_headers(["Index", "Name", "Flags", "State", "MTU", "QDisc"])
 		.with_setting(tables::TableSetting::ColumnSeperators)
 		.with_setting(tables::TableSetting::HeaderSeperator);
@@ -118,7 +118,7 @@ fn show_links(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
 	print!("{}", table);
 }
 
-fn show_addresses(netlink_socket: &mut NetlinkSocket<NetlinkRoute>) {
+fn show_addresses(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
 	let mut table = tables::Table::new_with_headers(["Interface", "Address", "Broadcast", "Scope", "Proto", "Flags"])
 		.with_setting(tables::TableSetting::ColumnSeperators)
 		.with_setting(tables::TableSetting::HeaderSeperator);
