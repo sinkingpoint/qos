@@ -142,6 +142,8 @@ impl Address {
 		let flags = AddressFlags::empty();
 		let scope = if address.is_host() {
 			AddressScope::Host
+		} else if address.is_link_local() {
+			AddressScope::Link
 		} else {
 			AddressScope::Universe
 		};

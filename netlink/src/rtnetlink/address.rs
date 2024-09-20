@@ -180,6 +180,17 @@ impl IPAddress {
 			}
 		}
 	}
+
+	// Returns true if the address is in the "link local" blocks, i.e. 169.254/16 for IPv4 or fe80::/10 for IPv4.
+	pub fn is_link_local(&self) -> bool {
+		match self {
+			Self::IPv4(_) => self.is_in_subnet(&IPAddress::IPv4([169, 254, 0, 0]), 16),
+			Self::IPv6(_) => self.is_in_subnet(
+				&IPAddress::IPv6([0xFE, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+				10,
+			),
+		}
+	}
 }
 
 impl TryFrom<&str> for IPAddress {
