@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use anyhow::anyhow;
 use clap::{Arg, ArgMatches, Command};
@@ -137,9 +137,21 @@ fn show_addresses(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
 		.with_setting(tables::TableSetting::ColumnSeperators)
 		.with_setting(tables::TableSetting::HeaderSeperator);
 
-	let addresses = netlink_socket.get_addrs().unwrap();
+	let links: HashMap<_, _> = netlink_socket
+		.get_links()
+		.unwrap()
+		.into_iter()
+		.map(|i| (i.index, i.attributes.name.to_owned().unwrap_or(format!("{}", i.index))))
+		.collect();
+
+	let mut addresses = netlink_socket.get_addrs().unwrap();
+	addresses.sort_by_key(|a| a.interface_index);
+
 	for addr in addresses {
-		let interface = &format!("{}", addr.interface_index);
+		let interface = links
+			.get(&addr.interface_index)
+			.map(|s| s.as_str())
+			.unwrap_or("<unknown>");
 		let address = &format!(
 			"{}/{}",
 			addr.attributes.address.expect("ip address"),
