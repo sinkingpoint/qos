@@ -23,6 +23,7 @@ files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
   etc/group: configs/group
+  etc/netd/config.toml: configs/netd.conf.toml
   /etc/qinit/services: configs/services
   /home/colin: configs/home
 modules:

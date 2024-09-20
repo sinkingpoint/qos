@@ -740,11 +740,14 @@ dependencies = [
 name = "net"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "common",
  "netlink",
+ "serde",
  "slog",
  "tables",
+ "toml",
 ]
 
 [[package]]

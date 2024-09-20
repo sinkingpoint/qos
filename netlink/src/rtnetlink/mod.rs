@@ -2,6 +2,7 @@ mod address;
 mod interface;
 mod parsing;
 
+pub use address::*;
 use bitflags::bitflags;
 use bytestruct_derive::ByteStruct;
 pub use interface::*;
@@ -11,7 +12,6 @@ use std::{
 	sync::Arc,
 };
 
-use address::{AddressAttributes, AddressFamily, AddressFlags, AddressScope, InterfaceAddressMessage};
 use bytestruct::{int_enum, Endian, ReadFromWithEndian};
 use nix::sys::socket::SockProtocol;
 
@@ -110,7 +110,7 @@ bitflags! {
 pub struct Interface {
 	pub family: u16,
 	pub ty: InterfaceType,
-	pub index: i32,
+	pub index: u32,
 	pub flags: InterfaceFlags,
 	pub change: u32,
 	pub attributes: InterfaceAttributes,
@@ -132,6 +132,38 @@ pub struct Address {
 	pub attributes: AddressAttributes,
 }
 
+impl Address {
+	pub fn new(address: IPAddress, prefix_length: u8, interface_index: u32) -> Self {
+		let family = match address {
+			IPAddress::IPv4(_) => AddressFamily::IPv4,
+			IPAddress::IPv6(_) => AddressFamily::IPv6,
+		};
+
+		let flags = AddressFlags::empty();
+		let scope = if address.is_host() {
+			AddressScope::Host
+		} else {
+			AddressScope::Universe
+		};
+
+		let mut attributes = AddressAttributes::default();
+		if address.is_host() || address.is_local() {
+			attributes.local_address = Some(address);
+		} else {
+			attributes.address = Some(address);
+		};
+
+		Self {
+			family,
+			prefix_length,
+			flags,
+			scope,
+			interface_index,
+			attributes,
+		}
+	}
+}
+
 pub trait RTNetlink {
 	// Get all the links on the system.
 	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>>;
@@ -141,6 +173,9 @@ pub trait RTNetlink {
 
 	// Get all the addresses on all the links of the system.
 	fn get_addrs(self: &Arc<Self>) -> io::Result<Vec<Address>>;
+
+	// Get all the addresses on all the links of the system.
+	fn new_address(self: &Arc<Self>, a: Address) -> NetlinkResult<NetlinkRoute, Address>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
@@ -218,5 +253,32 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		}
 
 		Ok(addresses)
+	}
+
+	fn new_address(self: &Arc<Self>, addr: Address) -> NetlinkResult<NetlinkRoute, Address> {
+		let header = NetlinkMessageHeader::new(
+			RTNetlinkMessageType::NewAddress,
+			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_ACK,
+		);
+
+		let read_handle = self.write_netlink_message(header, addr)?;
+
+		if let Some((header, msg)) = read_handle.read() {
+			if header.message_type != RTNetlinkMessageType::Error {
+				return Err(NetlinkError::IOError(io::Error::new(
+					ErrorKind::InvalidData,
+					format!("invalid message header in response: {:?}", header.message_type),
+				)));
+			}
+
+			let mut msg = Cursor::new(msg);
+
+			read_netlink_result(&mut msg, bytestruct::Endian::Little)
+		} else {
+			Err(NetlinkError::IOError(io::Error::new(
+				ErrorKind::UnexpectedEof,
+				"failed to resp response",
+			)))
+		}
 	}
 }

@@ -1,0 +1,10 @@
+[[interface]]
+mac = "00:12:34:56:78:9b"
+[interface.actions]
+rename_to = "host"
+
+[[interface]]
+name = "lo"
+[interface.actions]
+rename_to = "loopback"
+add_ips = ["127.0.0.2/32"]
