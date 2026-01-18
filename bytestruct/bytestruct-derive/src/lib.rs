@@ -4,9 +4,9 @@ use std::str::FromStr;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Expr};
+use syn::{parse_macro_input, Data, DeriveInput};
 
-#[proc_macro_derive(ByteStruct, attributes(big_endian, little_endian, ty))]
+#[proc_macro_derive(ByteStruct, attributes(big_endian, little_endian))]
 pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let input = parse_macro_input!(input as DeriveInput);
 
@@ -140,7 +140,7 @@ pub fn derive_byte_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 		let mut read_matches = Vec::new();
 		let mut write_matches = Vec::new();
 
-		let ty = get_repr(&input.attrs);
+		let ty = get_attribute_value("repr", &input.attrs).expect("missing repr attribute");
 
 		for (i, variant) in data.variants.iter().enumerate() {
 			let ident = &variant.ident;
@@ -236,7 +236,7 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 		gen.into()
 	} else if let Data::Enum(_) = &input.data {
-		let repr = get_repr(&input.attrs);
+		let repr = get_attribute_value("repr", &input.attrs).expect("missing repr attribute");
 		let gen = quote! {
 			impl<#(#generics)*> ::bytestruct::Size for #name<#(#generic_names)*> {
 				fn size(&self) -> usize {
@@ -251,19 +251,160 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	}
 }
 
-fn get_repr(attrs: &[syn::Attribute]) -> proc_macro2::Ident {
-	let ty = match attrs.iter().find(|attr| attr.path().is_ident("repr")) {
+fn get_attribute_value(name: &str, attrs: &[syn::Attribute]) -> Option<syn::Expr> {
+	let ty = match attrs.iter().find(|attr| attr.path().is_ident(name)) {
 		Some(repr) => repr,
-		None => panic!("enums require a #[repr] field"),
+		None => return None,
 	};
 
-	if let Ok(Expr::Path(path)) = ty.parse_args() {
-		if let Some(ident) = path.path.get_ident() {
-			ident.clone()
+	Some(ty.parse_args().unwrap())
+}
+
+#[proc_macro_derive(
+	TLVValues,
+	attributes(discriminant, end_type, type_type, length_type, no_length_type)
+)]
+pub fn derive_tlv_values(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	let input = parse_macro_input!(input as DeriveInput);
+
+	if let Data::Struct(data) = &input.data {
+		let end_type = get_attribute_value("end_type", &input.attrs).expect("missing end type");
+		let end_matches = quote! {
+			if matches!(ty, #end_type) {
+				return Ok(true)
+			}
+		};
+
+		let no_length_matches = if let Some(no_length_type) = get_attribute_value("no_length_type", &input.attrs) {
+			quote! {
+				if matches!(ty, #no_length_type) {
+					return Ok(false)
+				}
+			}
 		} else {
-			panic!("Only simple reprs are supported");
+			quote! {}
+		};
+
+		let set_matches: Vec<_> = data
+			.fields
+			.iter()
+			.map(|f| {
+				let name = f.ident.as_ref().expect("field name");
+				let ty = extract_type_from_option(&f.ty).expect("option type");
+
+				let matcher = get_attribute_value("discriminant", &f.attrs).expect("missing discriminant");
+
+				quote! {
+					#matcher => self.#name = Some(<#ty>::read_from_with_endian(&mut source, endian).map_err(|e| io::Error::new(e.kind(), format!("failed to read value for {}: {}", stringify!(#name), e)))?),
+				}
+			})
+			.collect();
+
+		let type_type = get_attribute_value("type_type", &input.attrs).expect("missing type type");
+		let length_type = get_attribute_value("length_type", &input.attrs).expect("missing length type");
+
+		let write_fields: Vec<_> = data
+			.fields
+			.iter()
+			.map(|f| {
+				let name = f.ident.as_ref().expect("field name");
+				let matcher = get_attribute_value("discriminant", &f.attrs).expect("missing discriminant");
+				quote! {
+					if let Some(f) = &self.#name {
+						let mut value = Vec::new();
+						f.write_to_with_endian(&mut value, endian)?;
+						#matcher.write_to_with_endian(&mut options_bytes, endian)?;
+						(value.len() as #length_type).write_to_with_endian(&mut options_bytes, endian)?;
+						options_bytes.write_all(&value)?;
+					}
+				}
+			})
+			.collect();
+
+		let name = input.ident;
+		quote! {
+			impl ::bytestruct::TLVValues for #name {
+				fn read_value<T: ::std::io::Read>(&mut self, source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<bool> {
+					let ty = <#type_type>::read_from_with_endian(source, endian).map_err(|e| io::Error::new(e.kind(), format!("failed to read type: {}", e)))?;
+					#end_matches
+					#no_length_matches
+
+					let len = <#length_type>::read_from_with_endian(source, endian).map_err(|e| io::Error::new(e.kind(), format!("failed to read length for {:?}: {}", ty, e)))?;
+					let mut value_bytes = vec![0_u8; len as usize];
+					source.read_exact(&mut value_bytes)?;
+
+					let mut source = ::std::io::Cursor::new(&mut value_bytes);
+					match ty {
+						#(#set_matches)*
+						_ => {},
+					}
+
+					Ok(false)
+				}
+			}
+
+			impl ::bytestruct::ReadFromWithEndian for #name {
+				fn read_from_with_endian<T: ::std::io::Read>(source: &mut T, endian: ::bytestruct::Endian) -> ::std::io::Result<Self> {
+					use ::bytestruct::TLVValues;
+					let mut new = Self::default();
+					while !new.read_value(source, endian)? {}
+					Ok(new)
+				}
+			}
+
+			impl ::bytestruct::WriteToWithEndian for #name {
+				fn write_to_with_endian<W: ::std::io::Write>(&self, writer: &mut W, endian: ::bytestruct::Endian) -> ::std::io::Result<()> {
+					use ::std::io::Write;
+					let mut options_bytes = Vec::new();
+					#(#write_fields)*
+					#end_type.write_to_with_endian(&mut options_bytes, endian)?;
+					writer.write_all(&options_bytes)?;
+					Ok(())
+				}
+			}
 		}
+		.into()
 	} else {
-		panic!("Only u8 is supported as repr for enums")
+		todo!("{:?}", input);
 	}
+}
+
+fn extract_type_from_option(ty: &syn::Type) -> Option<&syn::Type> {
+	use syn::{GenericArgument, Path, PathArguments, PathSegment};
+
+	fn extract_type_path(ty: &syn::Type) -> Option<&Path> {
+		match *ty {
+			syn::Type::Path(ref typepath) if typepath.qself.is_none() => Some(&typepath.path),
+			_ => None,
+		}
+	}
+
+	// TODO store (with lazy static) the vec of string
+	// TODO maybe optimization, reverse the order of segments
+	fn extract_option_segment(path: &Path) -> Option<&PathSegment> {
+		let idents_of_path = path.segments.iter().fold(String::new(), |mut acc, v| {
+			acc.push_str(&v.ident.to_string());
+			acc.push('|');
+			acc
+		});
+		vec!["Option|", "std|option|Option|", "core|option|Option|"]
+			.into_iter()
+			.find(|s| idents_of_path == *s)
+			.and_then(|_| path.segments.last())
+	}
+
+	extract_type_path(ty)
+		.and_then(|path| extract_option_segment(path))
+		.and_then(|path_seg| {
+			let type_params = &path_seg.arguments;
+			// It should have only on angle-bracketed param ("<String>"):
+			match *type_params {
+				PathArguments::AngleBracketed(ref params) => params.args.first(),
+				_ => None,
+			}
+		})
+		.and_then(|generic_arg| match *generic_arg {
+			GenericArgument::Type(ref ty) => Some(ty),
+			_ => None,
+		})
 }

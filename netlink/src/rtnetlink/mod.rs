@@ -106,7 +106,7 @@ bitflags! {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
+#[derive(Debug, ByteStruct, Clone)]
 pub struct Interface {
 	pub family: u16,
 	pub ty: InterfaceType,

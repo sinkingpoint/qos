@@ -741,9 +741,13 @@ name = "net"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitflags",
+ "bytestruct",
+ "bytestruct-derive",
  "clap",
  "common",
  "netlink",
+ "nix",
  "serde",
  "slog",
  "tables",

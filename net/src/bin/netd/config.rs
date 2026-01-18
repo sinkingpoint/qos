@@ -58,6 +58,8 @@ pub struct Actions {
 	pub rename_to: Option<String>,
 	#[serde(deserialize_with = "deserialize_scoped_address", default)]
 	pub add_ips: Option<Vec<ScopedAddress>>,
+
+	pub enable_dhcp: Option<bool>,
 }
 
 type ScopedAddress = (IPAddress, u8);

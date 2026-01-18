@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 bytestruct = { path = "../bytestruct" }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
-bitflags = "2.5"
+bitflags = { workspace = true }
 nix = { workspace = true, features = ["socket"] }
 tokio = { workspace = true, optional = true }
 common = { path = "../common" }

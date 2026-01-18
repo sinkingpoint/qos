@@ -49,7 +49,9 @@ nix = { version = "0.27", features = [
     "signal",
     "user",
     "kmod",
-    "mount"
+    "mount",
+    "socket",
+    "net"
 ] }
 thiserror = "1.0"
 anyhow = "1.0"
@@ -60,3 +62,4 @@ chrono = "0.4"
 futures = "0.3"
 tokio_stream = "0.1"
 regex = "1.10"
+bitflags = "2.5"

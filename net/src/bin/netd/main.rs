@@ -1,15 +1,17 @@
 mod config;
+mod dhcp;
 
-use std::{io::stderr, sync::Arc};
+use std::{io::stderr, sync::Arc, thread};
 
 use clap::{Arg, Command};
 use common::obs::assemble_logger;
 use config::Config;
+use dhcp::DHCPClient;
 use netlink::{
 	rtnetlink::{Address, Interface, InterfaceFlags, NetlinkRoute, RTNetlink, RTNetlinkGroups},
 	NetlinkSocket,
 };
-use slog::error;
+use slog::{error, info};
 
 fn main() {
 	let matches = Command::new("netd")
@@ -71,6 +73,7 @@ fn handle_new_link(
 	mut link: Interface,
 ) {
 	let config = config.get_actions_for_interface(&link);
+	let mut enable_dhcp = false;
 
 	link.flags |= InterfaceFlags::IFF_UP;
 	if let Some(config) = config {
@@ -89,9 +92,23 @@ fn handle_new_link(
 				}
 			}
 		}
+
+		enable_dhcp = config.enable_dhcp.unwrap_or(false);
 	}
 
-	if let Err(e) = netlink_socket.new_link(link) {
+	if let Err(e) = netlink_socket.new_link(link.clone()) {
 		error!(logger, "failed to bring link up"; "error" => format!("{:?}", e));
+	}
+
+	if enable_dhcp {
+		match DHCPClient::new(logger.clone(), link.clone()) {
+			Ok(d) => {
+				info!(logger, "started DHCP client for link"; "name" => format!("{}", link.attributes.name.as_ref().expect("interface name")));
+				thread::spawn(move || d.run());
+			}
+			Err(e) => {
+				error!(logger, "failed to enable dhcp on link"; "error" => format!("{:?}", e));
+			}
+		};
 	}
 }

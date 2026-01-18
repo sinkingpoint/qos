@@ -6,6 +6,8 @@ use std::{
 
 mod macros;
 
+pub use macros::TLVValues;
+
 /// A string that is null-terminated (C-style), with some maximum size.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NullTerminatedString<const SIZE: usize>(pub String);

@@ -2,6 +2,7 @@
 mac = "00:12:34:56:78:9b"
 [interface.actions]
 rename_to = "host"
+enable_dhcp = true
 
 [[interface]]
 name = "lo"

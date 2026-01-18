@@ -20,3 +20,7 @@ slog = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
+nix = { workspace = true }
+bitflags = { workspace = true }

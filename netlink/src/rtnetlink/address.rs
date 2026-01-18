@@ -3,6 +3,7 @@ use bytestruct_derive::{ByteStruct, Size};
 use std::{
 	fmt::{Display, Write as _},
 	io::{self, Cursor, ErrorKind, Read, Write},
+	net::{IpAddr, Ipv4Addr, Ipv6Addr},
 	num::ParseIntError,
 };
 
@@ -145,6 +146,13 @@ impl IPAddress {
 				ErrorKind::InvalidData,
 				format!("invalid IP address length: {}", bytes.len()),
 			)),
+		}
+	}
+
+	pub fn to_std(&self) -> IpAddr {
+		match self {
+			Self::IPv4(bytes) => IpAddr::V4(Ipv4Addr::from_bits(u32::from_le_bytes(*bytes))),
+			Self::IPv6(bytes) => IpAddr::V6(Ipv6Addr::from_bits(u128::from_le_bytes(*bytes))),
 		}
 	}
 

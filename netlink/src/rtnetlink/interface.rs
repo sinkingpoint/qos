@@ -36,7 +36,7 @@ int_enum! {
 }
 
 /// The rtattr's that can apply to an interface as received from a Netlink GET_LINK call.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InterfaceAttributes {
 	// The layer-2 address of the interface.
 	pub mac_address: Option<MacAddress>,
@@ -181,7 +181,7 @@ impl InterfaceAttributes {
 }
 
 int_enum! {
-  #[derive(Debug)]
+  #[derive(Debug, Clone)]
   pub enum InterfaceOperationalState: u8 {
 	  Unknown = 0,
 	  NotPresent = 1,
@@ -210,7 +210,7 @@ impl Display for InterfaceOperationalState {
 }
 
 int_enum! {
-  #[derive(Debug)]
+  #[derive(Debug, Clone)]
   pub enum InterfaceLinkMode: u8 {
 		Default = 0,
 		Dormant = 1,
@@ -240,7 +240,7 @@ impl InterfaceInfoMessage {
 }
 
 int_enum! {
-	#[derive(Debug)]
+	#[derive(Debug, Clone)]
 	pub enum InterfaceType: u16 {
 		NetRom = 0,
 		Ether  = 1,
@@ -300,7 +300,7 @@ int_enum! {
 }
 
 bitflags! {
-	#[derive(Debug)]
+	#[derive(Debug, Clone)]
 	pub struct InterfaceFlags: u32 {
 		const IFF_UP = 0x1;		/* Interface is up.  */
 		const IFF_BROADCAST = 0x2;	/* Broadcast address valid.  */
@@ -346,7 +346,7 @@ impl Size for InterfaceFlags {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
+#[derive(Debug, ByteStruct, Clone)]
 pub struct LinkStats {
 	received_packets: u32,
 	transmitted_packets: u32,
@@ -376,7 +376,7 @@ pub struct LinkStats {
 	receive_nohandler: u32,
 }
 
-#[derive(Debug, ByteStruct)]
+#[derive(Debug, ByteStruct, Clone)]
 pub struct LinkStats64 {
 	received_packets: u64,
 	transmitted_packets: u64,

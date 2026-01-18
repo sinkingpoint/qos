@@ -87,3 +87,31 @@ macro_rules! int_enum {
         }
     }
 }
+
+pub trait TLVValues {
+	fn read_value<T: ::std::io::Read>(&mut self, source: &mut T, endian: super::Endian) -> ::std::io::Result<bool>;
+}
+
+#[macro_export]
+macro_rules! tlv_values {
+	($(#[$outer:meta])*
+    $v:vis struct $StructName:ident: ($TypeType:ty, $LengthType:ty, $EndType:pat) {
+        $(
+            $(#[$inner:ident $($args:tt)*])*
+            $Field:ident:$SubType:ty = $Value:pat,
+        )+
+    }) => {
+        #[derive(Default, ::bytestruct_derive::TLVValues)]
+        #[type_type($TypeType)]
+        #[length_type($LengthType)]
+        #[end_type($EndType)]
+        $(#[$outer])*
+        $v struct $StructName {
+            $(
+                $(#[$inner $($args)*])*
+                #[discriminant($Value)]
+                $Field: Option<$SubType>,
+            )+
+        }
+    };
+}
