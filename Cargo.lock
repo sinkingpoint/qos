@@ -295,6 +295,7 @@ dependencies = [
 name = "control"
 version = "0.1.0"
 dependencies = [
+ "auth",
  "bytestruct",
  "slog",
  "tokio",

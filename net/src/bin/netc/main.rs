@@ -87,6 +87,7 @@ fn get_link_by_name(netlink_socket: &Arc<NetlinkSocket<NetlinkRoute>>, name: &st
 		.find(|l| matches!(&l.attributes.name, Some(s) if s == name))
 }
 
+/// Sets the link state (up/down) for the given device.
 fn set_link(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, matches: &ArgMatches) {
 	let link_name: &String = matches.get_one("device").expect("required device");
 	let state: &String = matches.get_one("state").expect("required state");
@@ -113,6 +114,7 @@ fn set_link(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, matches: &ArgMatch
 	}
 }
 
+/// Displays the currently active links.
 fn show_links(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
 	let mut table = tables::Table::new_with_headers(["Index", "Name", "Flags", "State", "MTU", "QDisc"])
 		.with_setting(tables::TableSetting::ColumnSeperators)

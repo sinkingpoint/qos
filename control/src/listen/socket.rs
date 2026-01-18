@@ -1,4 +1,10 @@
-use std::{fmt::Debug, fs, future::Future, path::Path};
+use std::{
+	fmt::Debug,
+	fs::{self, set_permissions},
+	future::Future,
+	os::unix::fs::{chown, PermissionsExt},
+	path::Path,
+};
 
 use tokio::{
 	io::{self, AsyncBufRead, AsyncBufReadExt, AsyncWrite, BufReader},
@@ -48,10 +54,22 @@ impl<F: ActionFactory + Send + 'static> ControlSocket<F> {
 			fs::remove_file(path)?;
 		}
 
-		Ok(Self {
-			socket: UnixListener::bind(path)?,
-			factory,
-		})
+		let socket = UnixListener::bind(path)?;
+
+		// Set the socket permissions to root:control with 770 permissions.
+		// So that only root and members of the control group can access it.
+		let control_group = auth::Group::from_groupname("control");
+		let root_perm = fs::Permissions::from_mode(0o770);
+		if let Ok(Some(group)) = control_group {
+			set_permissions(path, root_perm.clone())?;
+			chown(path, Some(0), Some(group.gid))?; // root:control
+		} else {
+			// Fallback to root:root if the control group doesn't exist.
+			set_permissions(path, root_perm.clone())?;
+			chown(path, Some(0), Some(0))?; // root:root
+		}
+
+		Ok(Self { socket, factory })
 	}
 
 	/// Listens for incoming connections and runs actions in response.
