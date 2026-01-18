@@ -153,6 +153,31 @@ impl User {
 		})
 	}
 
+	// Returns the groups that the user is a member of.
+	// The first group is always the primary group, with GID equal to the user's GID.
+	// the rest are supplementary groups.
+	pub fn get_groups(&self) -> Result<Vec<Group>, AuthError> {
+		let mut groups = Vec::new();
+		let primary_group = Group::from_gid(self.gid)?;
+		if let Some(group) = primary_group {
+			groups.push(group);
+		}
+
+		let group_file = read_to_string(GROUP_PATH)?;
+		for line in group_file.lines() {
+			let group = Group::from_group_line(line)?;
+			if group.gid == self.gid {
+				continue; // already added primary group
+			}
+
+			if group.members()?.into_iter().any(|m| m.uid == self.uid) {
+				groups.push(group);
+			}
+		}
+
+		Ok(groups)
+	}
+
 	pub fn shadow(&self) -> Result<Option<ShadowEntry>, AuthError> {
 		ShadowEntry::from_username(&self.username)
 	}
@@ -348,6 +373,9 @@ pub struct Group {
 
 	/// The name of the group.
 	pub name: String,
+
+	// The raw list of group members.
+	members: Vec<String>,
 }
 
 impl Group {
@@ -356,6 +384,7 @@ impl Group {
 		let new = Self {
 			gid,
 			name: name.to_owned(),
+			members: Vec::new(),
 		};
 
 		new.write()?;
@@ -369,7 +398,7 @@ impl Group {
 		for line in group.lines() {
 			let group = Self::from_group_line(line)?;
 			if group.gid == self.gid {
-				lines_to_write.push(format!("{}:{}:{}:", self.name, "x", self.gid));
+				lines_to_write.push(format!("{}:{}:{}:{}", self.name, "x", self.gid, self.members.join(",")));
 				exists = true;
 			} else {
 				lines_to_write.push(line.to_owned());
@@ -377,7 +406,7 @@ impl Group {
 		}
 
 		if !exists {
-			lines_to_write.push(format!("{}:{}:{}:", self.name, "x", self.gid));
+			lines_to_write.push(format!("{}:{}:{}:{}", self.name, "x", self.gid, self.members.join(",")));
 		}
 
 		Ok(())
@@ -416,6 +445,27 @@ impl Group {
 		Ok(None)
 	}
 
+	// Returns the users that are members of this group.
+	fn members(&self) -> Result<Vec<User>, AuthError> {
+		let mut users = Vec::new();
+		for member_name in &self.members {
+			// Members can be either usernames or UIDs, so we try to parse as UID first.
+			// And fall back to username if that fails.
+			if let Ok(uid) = member_name.parse() {
+				if let Some(user) = User::from_uid(uid)? {
+					users.push(user);
+				}
+				continue;
+			}
+
+			if let Some(user) = User::from_username(member_name)? {
+				users.push(user);
+			}
+		}
+
+		Ok(users)
+	}
+
 	/// Parses a line from the group file into a `Group`.
 	fn from_group_line(line: &str) -> Result<Self, AuthError> {
 		let parts: Vec<&str> = line.split(':').collect();
@@ -428,7 +478,13 @@ impl Group {
 			.parse()
 			.map_err(|_| AuthError::Malformed(format!("malformed gid: {}", parts[2])))?;
 
-		Ok(Self { gid, name })
+		let members = if parts[3].is_empty() {
+			Vec::new()
+		} else {
+			parts[3].split(',').map(|s| s.to_owned()).collect()
+		};
+
+		Ok(Self { gid, name, members })
 	}
 }
 
@@ -462,6 +518,7 @@ pub enum AuthError {
 	NoMoreIDs,
 }
 
+// Returns the number of days since the Unix epoch.
 fn days_since_epoch() -> u32 {
 	let now = chrono::Utc::now();
 	let then = DateTime::UNIX_EPOCH;

@@ -10,7 +10,7 @@ use clap::{Arg, Command};
 use common::{io::IOTriple, obs::assemble_logger};
 use nix::{
 	sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg, Termios},
-	unistd::{chdir, execvp, setgid, setuid, Gid, Uid},
+	unistd::{chdir, execvp, setgid, setgroups, setuid, Gid, Uid},
 };
 use slog::error;
 
@@ -42,6 +42,9 @@ fn main() -> ExitCode {
 	let username: &String = matches.get_one("username").unwrap();
 	let logger = assemble_logger(stderr());
 
+	// Disable terminal echo for password input.
+	// TODO: This might need to be done earlier (i.e. in the calling shell) to
+	// avoid racing.
 	let old_attrs = match disable_echo() {
 		Ok(attrs) => attrs,
 		Err(e) => {
@@ -100,6 +103,7 @@ fn main() -> ExitCode {
 		};
 	}
 
+	// Restore terminal attributes to clear the no-echo mode.
 	match tcsetattr(stdin(), SetArg::TCSANOW, &old_attrs) {
 		Ok(_) => (),
 		Err(e) => {
@@ -130,6 +134,26 @@ fn main() -> ExitCode {
 		Err(e) => {
 			error!(logger, "Failed to setgid"; "error" => format!("{:?}", e));
 			return ExitCode::FAILURE;
+		}
+	}
+
+	let groups = match user.get_groups() {
+		Ok(groups) => groups,
+		Err(e) => {
+			error!(logger, "Failed to get user groups"; "error" => format!("{:?}", e));
+			return ExitCode::FAILURE;
+		}
+	};
+
+	// Set supplementary groups.
+	if groups.len() > 1 {
+		let gids: Vec<Gid> = groups.iter().map(|g| Gid::from_raw(g.gid)).collect();
+		match setgroups(&gids) {
+			Ok(_) => (),
+			Err(e) => {
+				error!(logger, "Failed to set supplementary groups"; "error" => format!("{:?}", e));
+				return ExitCode::FAILURE;
+			}
 		}
 	}
 
