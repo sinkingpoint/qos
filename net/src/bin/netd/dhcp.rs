@@ -241,6 +241,7 @@ impl WriteToWithEndian for DHCPMessage {
 		self.server_ip.write_to_with_endian(&mut msg, endian)?;
 		self.gateway_ip.write_to_with_endian(&mut msg, endian)?;
 		self.client_hw_address.write_to_with_endian(&mut msg, endian)?;
+		[0_u8; 10].write_to_with_endian(&mut msg, endian)?; // Client hardware address padding
 		[0_u8; 192].write_to_with_endian(&mut msg, endian)?; // Padding
 		DHCP_MAGIC_COOKIE.write_to_with_endian(&mut msg, endian)?;
 		self.options.write_to_with_endian(&mut msg, endian)?;
