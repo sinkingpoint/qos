@@ -13,7 +13,7 @@ rootfs: build
 
 .PHONY: run
 run: initramfs rootfs
-	sudo qemu-system-x86_64 \
+	qemu-system-x86_64 \
 		-m 2G \
 		-kernel /boot/vmlinuz-$(KERNEL_RELEASE) \
 		-initrd ./target/initramfs.cpio \
@@ -21,6 +21,7 @@ run: initramfs rootfs
 		-display curses \
 		-append "console=ttyS0 root=/dev/sda" \
 		-drive format=raw,file=./target/filesystem.ext4 \
-		-netdev tap,ifname=qemutap0,script=no,downscript=no,id=net0 \
+		-netdev user,id=net0,dhcpstart=10.0.2.15 \
 		-device e1000,netdev=net0,mac=00:12:34:56:78:9b \
+		-object filter-dump,id=f1,netdev=net0,file=./target/dhcp.pcap \
 		--enable-kvm

@@ -16,15 +16,19 @@ use nix::{
 	errno::Errno,
 	sys::socket::{
 		bind, sendto, setsockopt, socket,
-		sockopt::{BindToDevice, Broadcast},
+		sockopt::{BindToDevice, Broadcast, ReceiveTimeout},
 		AddressFamily, MsgFlags, SockFlag, SockProtocol, SockType, SockaddrIn, SockaddrStorage,
 	},
+	sys::time::TimeVal,
 };
 
 const DHCP_SERVER_PORT: u16 = 67;
 const DHCP_CLIENT_PORT: u16 = 68;
 const DHCP_MAGIC_COOKIE: u32 = 0x63825363;
 const MAC_ADDRESS_SIZE: u8 = 6;
+const DHCP_BASE_TIMEOUT_SECS: i64 = 1;
+const DHCP_MAX_TIMEOUT_SECS: i64 = 64;
+const MAX_DHCP_DISCOVER_RETRIES: u32 = 30;
 
 int_enum! {
 	#[derive(Debug)]
@@ -121,7 +125,7 @@ int_enum! {
 bitflags! {
 	#[derive(Debug)]
 	pub struct DHCPFlags: u16 {
-		const Broadcast = 1;
+		const Broadcast = 0x8000;
 	}
 }
 
@@ -259,6 +263,7 @@ pub struct DHCPClient {
 	source_interface: Interface,
 	socket: OwnedFd,
 	state: State,
+	retry_count: u32,
 }
 
 impl DHCPClient {
@@ -282,6 +287,7 @@ impl DHCPClient {
 		setsockopt(&socket, BindToDevice, &OsString::from(&device_name))
 			.with_context(|| "failed tssssso bind to device")?;
 		setsockopt(&socket, Broadcast, &true).with_context(|| "failed to set broadcast")?;
+
 		bind(socket.as_raw_fd(), &SockaddrIn::new(0, 0, 0, 0, DHCP_CLIENT_PORT))
 			.with_context(|| "failed to bind to device")?;
 
@@ -290,6 +296,7 @@ impl DHCPClient {
 			source_interface,
 			socket,
 			state: State::Discover,
+			retry_count: 0,
 		})
 	}
 
@@ -313,6 +320,18 @@ impl DHCPClient {
 		loop {
 			match &self.state {
 				State::Discover => {
+					if self.retry_count >= MAX_DHCP_DISCOVER_RETRIES {
+						info!(self.logger, "Max DHCP retries reached, giving up");
+						return;
+					}
+
+					// Exponential backoff: 1s, 2s, 4s, 8s, 16s
+					let timeout_secs = (DHCP_BASE_TIMEOUT_SECS << self.retry_count).min(DHCP_MAX_TIMEOUT_SECS);
+					let timeout = TimeVal::new(timeout_secs, 0);
+					setsockopt(&self.socket, ReceiveTimeout, &timeout).expect("failed to set socket timeout");
+
+					info!(self.logger, "Sending DHCP Discover"; "attempt" => self.retry_count + 1, "timeout_secs" => timeout_secs);
+
 					let options = DHCPOptions {
 						message_type: Some(MessageType::Discover),
 						..DHCPOptions::default()
@@ -331,14 +350,24 @@ impl DHCPClient {
 					};
 
 					self.send(IPAddress::IPv4([0xFF, 0xFF, 0xFF, 0xFF]), message).unwrap();
+					self.retry_count += 1;
 					self.state = State::Offer;
-					info!(self.logger, "Sent DHCP Discover, moving to Offer State");
 				}
-				State::Offer => {
-					let msg = DHCPMessage::read_from_with_endian(&mut reader, Endian::Big);
-					println!("Got offer: {:?}", msg);
-					self.state = State::Request;
-				}
+				State::Offer => match DHCPMessage::read_from_with_endian(&mut reader, Endian::Big) {
+					Ok(msg) => {
+						info!(self.logger, "Received DHCP Offer");
+						println!("Got offer: {:?}", msg);
+						self.state = State::Request;
+					}
+					Err(e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+						info!(self.logger, "DHCP Offer timeout, retrying Discover");
+						self.state = State::Discover;
+					}
+					Err(e) => {
+						info!(self.logger, "Error reading DHCP message"; "error" => %e);
+						return;
+					}
+				},
 				State::Request => {
 					self.state = State::Acknowledge;
 				}

@@ -3,10 +3,10 @@ mod dhcp;
 
 use std::{io::stderr, sync::Arc, thread};
 
+use crate::dhcp::DHCPClient;
 use clap::{Arg, Command};
 use common::obs::assemble_logger;
 use config::Config;
-use dhcp::DHCPClient;
 use netlink::{
 	rtnetlink::{Address, Interface, InterfaceFlags, NetlinkRoute, RTNetlink, RTNetlinkGroups},
 	NetlinkSocket,
