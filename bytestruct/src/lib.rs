@@ -2,6 +2,7 @@
 use std::{
 	array,
 	io::{self, Read, Write},
+	ops::{Deref, DerefMut},
 };
 
 mod macros;
@@ -457,5 +458,52 @@ impl<const ALIGN: usize> WriteTo for Padding<ALIGN> {
 impl<const ALIGN: usize> WriteToWithEndian for Padding<ALIGN> {
 	fn write_to_with_endian<W: Write>(&self, target: &mut W, _: Endian) -> io::Result<()> {
 		self.write_to(target)
+	}
+}
+
+/// The standard implementation of ReadFromWithEndian has the first entry as
+/// the number of elements, but for TLV Values, it's the raw length in bytes.
+/// This wrapper struct reads a length-prefixed list of T values.
+#[derive(Debug, Clone)]
+pub struct TLVVec<T>(Vec<T>);
+impl<T: ReadFromWithEndian> ReadFromWithEndian for TLVVec<T> {
+	fn read_from_with_endian<U: std::io::Read>(source: &mut U, endian: Endian) -> std::io::Result<Self> {
+		let mut values = Vec::new();
+		loop {
+			let value = match T::read_from_with_endian(source, endian) {
+				Ok(v) => v,
+				Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+				Err(e) => return Err(e),
+			};
+
+			values.push(value);
+		}
+
+		Ok(Self(values))
+	}
+}
+
+impl<T: WriteToWithEndian> WriteToWithEndian for TLVVec<T> {
+	fn write_to_with_endian<U: std::io::Write>(&self, writer: &mut U, endian: Endian) -> std::io::Result<()> {
+		for value in &self.0 {
+			value.write_to_with_endian(writer, endian)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl<T> Deref for TLVVec<T> {
+	type Target = Vec<T>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+// Implement DerefMut for TLVVec if you want mutable operations
+impl<T> DerefMut for TLVVec<T> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
 	}
 }

@@ -54,11 +54,17 @@ fn main() {
 		.subcommand(addr_add_command)
 		.subcommand_required(true);
 
+	let route_command = Command::new("route")
+		.about("manage network routes")
+		.subcommand(Command::new("show").about("show the currently active routes"))
+		.subcommand_required(true);
+
 	let app = Command::new("netc")
 		.about("Provides network information")
 		.author("Colin Douch <colin@quirl.co.nz>")
 		.subcommand(link_command)
 		.subcommand(address_command)
+		.subcommand(route_command)
 		.subcommand_required(true)
 		.get_matches();
 
@@ -73,6 +79,10 @@ fn main() {
 			Some(("show", _matches)) => show_addresses(netlink_socket),
 			Some(("add", matches)) => add_address(netlink_socket, matches),
 			_ => panic!("unknown addr subcommand"),
+		},
+		Some(("route", matches)) => match matches.subcommand() {
+			Some(("show", _matches)) => show_routes(netlink_socket),
+			_ => panic!("unknown route subcommand"),
 		},
 		_ => panic!("unknown subcommand"),
 	}
@@ -218,5 +228,13 @@ fn add_address(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, matches: &ArgMa
 
 	if let Err(e) = netlink_socket.new_address(address) {
 		println!("failed to add address: {:?}", e);
+	}
+}
+
+fn show_routes(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
+	let routes = netlink_socket.get_route().unwrap();
+
+	for route in routes {
+		println!("{:?}", route);
 	}
 }

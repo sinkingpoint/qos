@@ -1,11 +1,13 @@
 mod address;
 mod interface;
 mod parsing;
+mod route;
 
 pub use address::*;
 use bitflags::bitflags;
 use bytestruct_derive::ByteStruct;
 pub use interface::*;
+pub use route::*;
 
 use std::{
 	io::{self, Cursor, ErrorKind},
@@ -166,6 +168,22 @@ impl Address {
 	}
 }
 
+#[derive(Debug, ByteStruct)]
+pub struct Route {
+	pub family: AddressFamily,
+	pub dst_length: u8,
+	pub src_length: u8,
+	pub tos: u8,
+
+	pub table_id: u8,
+	pub protocol: RouteProtocol,
+	pub scope: RouteScope,
+	pub ty: RouteTable,
+
+	pub flags: RouteTableFlags,
+	pub attributes: RouteAttributes,
+}
+
 pub trait RTNetlink {
 	// Get all the links on the system.
 	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>>;
@@ -176,8 +194,14 @@ pub trait RTNetlink {
 	// Get all the addresses on all the links of the system.
 	fn get_addrs(self: &Arc<Self>) -> io::Result<Vec<Address>>;
 
-	// Get all the addresses on all the links of the system.
+	// Create a new address on the system.
 	fn new_address(self: &Arc<Self>, a: Address) -> NetlinkResult<NetlinkRoute, Address>;
+
+	// Create a new route on the system.
+	fn new_route(self: &Arc<Self>, route: Route) -> NetlinkResult<NetlinkRoute, Route>;
+
+	// Get all the routes on the system.
+	fn get_route(self: &Arc<Self>) -> io::Result<Vec<Route>>;
 }
 
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
@@ -214,7 +238,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		let read_handle = self.write_netlink_message(header, i)?;
 
 		if let Some((header, msg)) = read_handle.read() {
-			if header.message_type != RTNetlinkMessageType::Error {
+			if header.message_type == RTNetlinkMessageType::Error {
 				return Err(NetlinkError::IOError(io::Error::new(
 					ErrorKind::InvalidData,
 					format!("invalid message header in response: {:?}", header.message_type),
@@ -266,7 +290,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		let read_handle = self.write_netlink_message(header, addr)?;
 
 		if let Some((header, msg)) = read_handle.read() {
-			if header.message_type != RTNetlinkMessageType::Error {
+			if header.message_type == RTNetlinkMessageType::Error {
 				return Err(NetlinkError::IOError(io::Error::new(
 					ErrorKind::InvalidData,
 					format!("invalid message header in response: {:?}", header.message_type),
@@ -282,5 +306,55 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 				"failed to resp response",
 			)))
 		}
+	}
+
+	fn new_route(self: &Arc<Self>, route: Route) -> NetlinkResult<NetlinkRoute, Route> {
+		let header = NetlinkMessageHeader::new(
+			RTNetlinkMessageType::NewRoute,
+			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_ACK,
+		);
+
+		let read_handle = self.write_netlink_message(header, route)?;
+		if let Some((header, msg)) = read_handle.read() {
+			if header.message_type == RTNetlinkMessageType::Error {
+				return Err(NetlinkError::IOError(io::Error::new(
+					ErrorKind::InvalidData,
+					format!("invalid message header in response: {:?}", header.message_type),
+				)));
+			}
+
+			let mut msg = Cursor::new(msg);
+
+			read_netlink_result(&mut msg, bytestruct::Endian::Little)
+		} else {
+			Err(NetlinkError::IOError(io::Error::new(
+				ErrorKind::UnexpectedEof,
+				"failed to resp response",
+			)))
+		}
+	}
+
+	fn get_route(self: &Arc<Self>) -> io::Result<Vec<Route>> {
+		let header = NetlinkMessageHeader::<NetlinkRoute>::new(
+			RTNetlinkMessageType::GetRoute,
+			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_MATCH | NetlinkFlags::NLM_F_EXCL,
+		);
+		let msg = RouteMessage::empty();
+
+		let read_handle = self.write_netlink_message(header, msg)?;
+
+		let mut routes = Vec::new();
+		while let Some((header, body)) = read_handle.read() {
+			if matches!(header.message_type, RTNetlinkMessageType::Done) {
+				break;
+			}
+
+			let mut cursor = Cursor::new(&body);
+			let route = Route::read_from_with_endian(&mut cursor, bytestruct::Endian::Little)?;
+
+			routes.push(route);
+		}
+
+		Ok(routes)
 	}
 }
