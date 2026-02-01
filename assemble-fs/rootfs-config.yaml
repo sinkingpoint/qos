@@ -26,6 +26,7 @@ files:
   etc/netd/config.toml: configs/netd.conf.toml
   /etc/qinit/services: configs/services
   /home/colin: configs/home
+  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 modules:
   - kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz
   - config
