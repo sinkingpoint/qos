@@ -101,7 +101,7 @@ fn handle_new_link(
 	}
 
 	if enable_dhcp {
-		match DHCPClient::new(logger.clone(), link.clone()) {
+		match DHCPClient::new(logger.clone(), netlink_socket.clone(), link.clone()) {
 			Ok(d) => {
 				info!(logger, "started DHCP client for link"; "name" => format!("{}", link.attributes.name.as_ref().expect("interface name")));
 				thread::spawn(move || d.run());

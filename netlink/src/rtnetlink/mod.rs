@@ -311,7 +311,10 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 	fn new_route(self: &Arc<Self>, route: Route) -> NetlinkResult<NetlinkRoute, Route> {
 		let header = NetlinkMessageHeader::new(
 			RTNetlinkMessageType::NewRoute,
-			NetlinkFlags::NLM_F_REQUEST | NetlinkFlags::NLM_F_ACK,
+			NetlinkFlags::NLM_F_REQUEST
+				| NetlinkFlags::NLM_F_ACK
+				| NetlinkFlags::NLM_F_CREATE
+				| NetlinkFlags::NLM_F_EXCL,
 		);
 
 		let read_handle = self.write_netlink_message(header, route)?;
