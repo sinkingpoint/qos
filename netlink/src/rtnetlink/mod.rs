@@ -238,7 +238,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		let read_handle = self.write_netlink_message(header, i)?;
 
 		if let Some((header, msg)) = read_handle.read() {
-			if header.message_type == RTNetlinkMessageType::Error {
+			if header.message_type != RTNetlinkMessageType::Error {
 				return Err(NetlinkError::IOError(io::Error::new(
 					ErrorKind::InvalidData,
 					format!("invalid message header in response: {:?}", header.message_type),
@@ -290,7 +290,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 		let read_handle = self.write_netlink_message(header, addr)?;
 
 		if let Some((header, msg)) = read_handle.read() {
-			if header.message_type == RTNetlinkMessageType::Error {
+			if header.message_type != RTNetlinkMessageType::Error {
 				return Err(NetlinkError::IOError(io::Error::new(
 					ErrorKind::InvalidData,
 					format!("invalid message header in response: {:?}", header.message_type),
@@ -316,7 +316,7 @@ impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 
 		let read_handle = self.write_netlink_message(header, route)?;
 		if let Some((header, msg)) = read_handle.read() {
-			if header.message_type == RTNetlinkMessageType::Error {
+			if header.message_type != RTNetlinkMessageType::Error {
 				return Err(NetlinkError::IOError(io::Error::new(
 					ErrorKind::InvalidData,
 					format!("invalid message header in response: {:?}", header.message_type),

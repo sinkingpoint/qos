@@ -1,4 +1,7 @@
-use std::io::{self, Cursor, ErrorKind, Read};
+use std::{
+	fmt::Display,
+	io::{self, Cursor, ErrorKind, Read},
+};
 
 use bitflags::bitflags;
 use bytestruct::{int_enum, Endian, ReadFromWithEndian, WriteToWithEndian};
@@ -119,6 +122,12 @@ bitflags! {
 			  * include/uapi/linux/ipv6_route.h
 			  */
   }
+}
+
+impl Display for RouteTableFlags {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		bitflags::parser::to_writer_strict(self, f)
+	}
 }
 
 impl WriteToWithEndian for RouteTableFlags {

@@ -232,9 +232,82 @@ fn add_address(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>, matches: &ArgMa
 }
 
 fn show_routes(netlink_socket: Arc<NetlinkSocket<NetlinkRoute>>) {
+	let mut table = tables::Table::new_with_headers(["Destination", "Gateway", "Protocol", "Scope", "Source", "Flags"])
+		.with_setting(tables::TableSetting::ColumnSeperators)
+		.with_setting(tables::TableSetting::HeaderSeperator);
+
 	let routes = netlink_socket.get_route().unwrap();
+	let interfaces = netlink_socket
+		.get_links()
+		.unwrap()
+		.into_iter()
+		.map(|i| (i.index, i.attributes.name.unwrap_or(format!("{}", i.index))))
+		.collect::<HashMap<_, _>>();
 
 	for route in routes {
-		println!("{:?}", route);
+		let dst = route
+			.attributes
+			.destination
+			.map(|d| format!("{}", d))
+			.unwrap_or("default".to_string());
+
+		let gateway = match (route.attributes.gateway, route.attributes.output_interface) {
+			(Some(gw), _) => format!("{}", gw),
+			(_, Some(dev)) => {
+				if let Some(name) = interfaces.get(&dev) {
+					name.to_string()
+				} else {
+					format!("{}", dev)
+				}
+			}
+			_ => "<none>".to_string(),
+		};
+
+		let protocol = match route.protocol {
+			netlink::rtnetlink::RouteProtocol::Kernel => "kernel",
+			netlink::rtnetlink::RouteProtocol::Boot => "boot",
+			netlink::rtnetlink::RouteProtocol::Static => "static",
+			netlink::rtnetlink::RouteProtocol::Babel => "babel",
+			netlink::rtnetlink::RouteProtocol::Bird => "bird",
+			netlink::rtnetlink::RouteProtocol::Ospf => "ospf",
+			netlink::rtnetlink::RouteProtocol::Rip => "rip",
+			netlink::rtnetlink::RouteProtocol::Eigrp => "eigrp",
+			netlink::rtnetlink::RouteProtocol::Isis => "isis",
+			netlink::rtnetlink::RouteProtocol::Dhcp => "dhcp",
+			netlink::rtnetlink::RouteProtocol::Zebra => "zebra",
+			netlink::rtnetlink::RouteProtocol::Unspecified => "unspecified",
+			netlink::rtnetlink::RouteProtocol::Bgp => "bgp",
+			netlink::rtnetlink::RouteProtocol::DnRouted => "dnrouted",
+			netlink::rtnetlink::RouteProtocol::Gated => "gated",
+			netlink::rtnetlink::RouteProtocol::Keepalived => "keepalived",
+			netlink::rtnetlink::RouteProtocol::Mrouted => "mrouted",
+			netlink::rtnetlink::RouteProtocol::Mrt => "mrt",
+			netlink::rtnetlink::RouteProtocol::Ntk => "ntk",
+			netlink::rtnetlink::RouteProtocol::Openr => "openr",
+			netlink::rtnetlink::RouteProtocol::Redirect => "redirect",
+			netlink::rtnetlink::RouteProtocol::Ra => "ra",
+			netlink::rtnetlink::RouteProtocol::Xorp => "xorp",
+			netlink::rtnetlink::RouteProtocol::Ovn => "ovn",
+		};
+
+		let scope = match route.scope {
+			netlink::rtnetlink::RouteScope::Universe => "global",
+			netlink::rtnetlink::RouteScope::Site => "site",
+			netlink::rtnetlink::RouteScope::Link => "link",
+			netlink::rtnetlink::RouteScope::Host => "host",
+			netlink::rtnetlink::RouteScope::Nowhere => "nowhere",
+		};
+
+		let source = route
+			.attributes
+			.source
+			.map(|s| format!("{}", s))
+			.unwrap_or("any".to_string());
+
+		let flags = route.flags.to_string();
+
+		table.add_row([&dst, &gateway, protocol, scope, &source, &flags]);
 	}
+
+	println!("{}", table);
 }
