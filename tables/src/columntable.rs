@@ -17,7 +17,7 @@ pub struct Table<const COLS: usize> {
 	headers: Option<[String; COLS]>,
 	rows: Vec<[String; COLS]>,
 
-	// A memoized copy of the amaximum width of each column.
+	// A memoized copy of the maximum width of each column.
 	widths: [usize; COLS],
 
 	// Settings
@@ -77,17 +77,17 @@ impl<const COLS: usize> Table<COLS> {
 	}
 
 	fn width(&self) -> usize {
-		// The width of all the columns.
+		// The width of all the columns, including a trailing space between each column.
 		let mut base_width = self.widths.iter().sum::<usize>() + COLS - 1;
 
 		if self.border {
-			// If we have a border, we have two on each side of the table.
+			// If we have a border, we have two on each side of the table, a "| " and a " |".
 			base_width += 4;
 		}
 
 		if self.column_seperators {
-			// If we have column seperators, we have three (two spaces and a |) for each column.
-			base_width += COLS - 1;
+			// If we have column seperators, we have an extra " |" between each column, except the first last.
+			base_width += (COLS - 1) * 2;
 		}
 
 		base_width
@@ -129,7 +129,7 @@ impl<const COLS: usize> Table<COLS> {
 impl<const COLS: usize> Display for Table<COLS> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		let width = self.width();
-		let border_width = if self.column_seperators { width } else { width - 2 };
+		let border_width = width - 2;
 		if self.border {
 			writeln!(f, "+{}+", "-".repeat(border_width))?;
 		}
@@ -139,7 +139,7 @@ impl<const COLS: usize> Display for Table<COLS> {
 
 			if self.header_seperator {
 				if self.border {
-					writeln!(f, "|{}|", "-".repeat(width))?;
+					writeln!(f, "|{}|", "-".repeat(border_width))?;
 				} else {
 					writeln!(f, "{}", "-".repeat(width))?;
 				}
@@ -172,9 +172,9 @@ mod tests {
 		assert_eq!(
 			output,
 			"Name  Age Occupation       \n\
-							Colin 25  Software Engineer\n\
-							John  30  Doctor           \n\
-							Jane  28  Nurse            \n"
+			 Colin 25  Software Engineer\n\
+			 John  30  Doctor           \n\
+			 Jane  28  Nurse            \n"
 		);
 	}
 
@@ -189,11 +189,11 @@ mod tests {
 		assert_eq!(
 			output,
 			"+-----------------------------+\n\
-							| Name  Age Occupation        |\n\
-							| Colin 25  Software Engineer |\n\
-							| John  30  Doctor            |\n\
-							| Jane  28  Nurse             |\n\
-							+-----------------------------+\n",
+			 | Name  Age Occupation        |\n\
+			 | Colin 25  Software Engineer |\n\
+			 | John  30  Doctor            |\n\
+			 | Jane  28  Nurse             |\n\
+			 +-----------------------------+\n",
 			"\n{}",
 			output
 		);
@@ -211,10 +211,10 @@ mod tests {
 		assert_eq!(
 			output,
 			"Name  Age Occupation       \n\
-							---------------------------\n\
-							Colin 25  Software Engineer\n\
-							John  30  Doctor           \n\
-							Jane  28  Nurse            \n"
+			 ---------------------------\n\
+			 Colin 25  Software Engineer\n\
+			 John  30  Doctor           \n\
+			 Jane  28  Nurse            \n"
 		);
 	}
 
@@ -230,9 +230,9 @@ mod tests {
 		assert_eq!(
 			output,
 			"Name  | Age | Occupation       \n\
-							Colin | 25  | Software Engineer\n\
-							John  | 30  | Doctor           \n\
-							Jane  | 28  | Nurse            \n"
+			 Colin | 25  | Software Engineer\n\
+			 John  | 30  | Doctor           \n\
+			 Jane  | 28  | Nurse            \n"
 		);
 	}
 
@@ -250,12 +250,12 @@ mod tests {
 		assert_eq!(
 			output,
 			"+---------------------------------+\n\
-							| Name  | Age | Occupation        |\n\
-							|---------------------------------|\n\
-							| Colin | 25  | Software Engineer |\n\
-							| John  | 30  | Doctor            |\n\
-							| Jane  | 28  | Nurse             |\n\
-							+---------------------------------+\n",
+			 | Name  | Age | Occupation        |\n\
+			 |---------------------------------|\n\
+			 | Colin | 25  | Software Engineer |\n\
+			 | John  | 30  | Doctor            |\n\
+			 | Jane  | 28  | Nurse             |\n\
+			 +---------------------------------+\n",
 			"\n{}",
 			output
 		);
@@ -273,8 +273,27 @@ mod tests {
 		assert_eq!(
 			output,
 			"Colin 25 Software Engineer\n\
-							John  30 Doctor           \n\
-							Jane  28 Nurse            \n"
+			 John  30 Doctor           \n\
+			 Jane  28 Nurse            \n"
+		);
+	}
+
+	#[test]
+	fn test_table_with_seperators() {
+		let mut table = Table::new_with_headers(["Name", "Age", "Occupation"])
+			.with_setting(TableSetting::HeaderSeperator)
+			.with_setting(TableSetting::ColumnSeperators);
+		table.add_row(["Colin", "25", "Software"]);
+		table.add_row(["John", "30", "Doctor"]);
+		table.add_row(["Jane", "28", "Nurse"]);
+		let output = format!("{}", table);
+		assert_eq!(
+			output,
+			"Name  | Age | Occupation\n\
+			 ------------------------\n\
+			 Colin | 25  | Software  \n\
+			 John  | 30  | Doctor    \n\
+			 Jane  | 28  | Nurse     \n"
 		);
 	}
 }
