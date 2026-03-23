@@ -501,8 +501,99 @@ impl<T> Deref for TLVVec<T> {
 	}
 }
 
+// This trait is for types that can be used as the length field in a length-prefixed structure. It provides a method to convert the value to usize, which is needed for reading the correct number of bytes.
+pub trait UnsignedLength: ReadFromWithEndian + WriteToWithEndian + std::fmt::Debug {
+	fn to_usize(self) -> usize;
+	fn from_usize(val: usize) -> Self;
+}
+
+impl UnsignedLength for u8 {
+	fn to_usize(self) -> usize {
+		self as usize
+	}
+	fn from_usize(val: usize) -> Self {
+		val as u8
+	}
+}
+impl UnsignedLength for u16 {
+	fn to_usize(self) -> usize {
+		self as usize
+	}
+	fn from_usize(val: usize) -> Self {
+		val as u16
+	}
+}
+impl UnsignedLength for u32 {
+	fn to_usize(self) -> usize {
+		self as usize
+	}
+	fn from_usize(val: usize) -> Self {
+		val as u32
+	}
+}
+impl UnsignedLength for u64 {
+	fn to_usize(self) -> usize {
+		self as usize
+	}
+	fn from_usize(val: usize) -> Self {
+		val as u64
+	}
+}
+
 // Implement DerefMut for TLVVec if you want mutable operations
 impl<T> DerefMut for TLVVec<T> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
+	}
+}
+
+#[derive(Debug)]
+pub struct LengthPrefixedVec<T, L: UnsignedLength>(Vec<T>, std::marker::PhantomData<L>);
+impl<T, L: UnsignedLength> LengthPrefixedVec<T, L> {
+	pub fn new(vec: Vec<T>) -> Self {
+		Self(vec, std::marker::PhantomData)
+	}
+}
+
+impl<T: ReadFromWithEndian, L: UnsignedLength> ReadFromWithEndian for LengthPrefixedVec<T, L> {
+	fn read_from_with_endian<U: std::io::Read>(source: &mut U, endian: Endian) -> std::io::Result<Self> {
+		let length = L::read_from_with_endian(source, endian)?;
+		let mut bytes = vec![0u8; length.to_usize()];
+		source.read_exact(&mut bytes)?;
+		let mut cursor = std::io::Cursor::new(bytes);
+		let mut values = Vec::new();
+		while (cursor.position() as usize) < cursor.get_ref().len() {
+			values.push(T::read_from_with_endian(&mut cursor, endian)?);
+		}
+
+		Ok(Self(values, std::marker::PhantomData))
+	}
+}
+
+impl<T: WriteToWithEndian, L: UnsignedLength> WriteToWithEndian for LengthPrefixedVec<T, L> {
+	fn write_to_with_endian<U: std::io::Write>(&self, writer: &mut U, endian: Endian) -> std::io::Result<()> {
+		let mut buf = Vec::new();
+		for value in &self.0 {
+			value.write_to_with_endian(&mut buf, endian)?;
+		}
+
+		let length = L::from_usize(buf.len());
+		length.write_to_with_endian(writer, endian)?;
+		writer.write_all(&buf)?;
+
+		Ok(())
+	}
+}
+
+impl<T, L: UnsignedLength> Deref for LengthPrefixedVec<T, L> {
+	type Target = Vec<T>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl<T, L: UnsignedLength> DerefMut for LengthPrefixedVec<T, L> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.0
 	}
