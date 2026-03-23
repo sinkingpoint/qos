@@ -31,7 +31,7 @@ members = [
     "switchroot",
     "tables",
     "udev",
-    "udevd",
+    "udevd", "dns",
 ]
 
 [workspace.dependencies]

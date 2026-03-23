@@ -364,6 +364,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "bytestruct",
+ "bytestruct-derive",
+ "clap",
+ "tokio",
+]
+
+[[package]]
 name = "elf"
 version = "0.1.0"
 dependencies = [

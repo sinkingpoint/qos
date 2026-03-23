@@ -1,0 +1,19 @@
+[package]
+name = "dns"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "dnsd"
+path = "dnsd/src/main.rs"
+
+[lib]
+name = "dns"
+path = "dnsl/src/lib.rs"
+
+[dependencies]
+bitflags = "2.5"
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
+tokio = { workspace = true }
+clap = { workspace = true }
