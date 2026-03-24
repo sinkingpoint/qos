@@ -555,6 +555,16 @@ impl<T, L: UnsignedLength> LengthPrefixedVec<T, L> {
 	}
 }
 
+impl<T, L: UnsignedLength> Clone for LengthPrefixedVec<T, L>
+where
+	T: Clone,
+	L: UnsignedLength,
+{
+	fn clone(&self) -> Self {
+		Self(self.0.clone(), std::marker::PhantomData)
+	}
+}
+
 impl<T: ReadFromWithEndian, L: UnsignedLength> ReadFromWithEndian for LengthPrefixedVec<T, L> {
 	fn read_from_with_endian<U: std::io::Read>(source: &mut U, endian: Endian) -> std::io::Result<Self> {
 		let length = L::read_from_with_endian(source, endian)?;

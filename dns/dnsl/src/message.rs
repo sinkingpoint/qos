@@ -1,6 +1,5 @@
 use std::io;
 
-use bitflags::bitflags;
 use bytestruct::{int_enum, LengthPrefixedVec, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
 
@@ -48,44 +47,83 @@ use flags::*;
 
 #[derive(Debug)]
 pub struct DNSMessage {
-	header: DNSMessageHeader,
-	questions: Vec<DNSQuestion>,
-	answers: Vec<DNSAnswer>,
-	authorities: Vec<DNSAnswer>,
-	additionals: Vec<DNSAnswer>,
-	edns_record: Option<EDNSRecord>,
+	pub header: DNSMessageHeader,
+	pub questions: Vec<DNSQuestion>,
+	pub answers: Vec<DNSAnswer>,
+	pub authorities: Vec<DNSAnswer>,
+	pub additionals: Vec<DNSAnswer>,
+	pub edns_record: Option<EDNSRecord>,
+}
+
+impl DNSMessage {
+	pub fn new_query(question: DNSQuestion) -> Self {
+		Self {
+			header: DNSMessageHeader {
+				transaction_id: rand::random(),
+				flags: DNSMessageFlags::new_query(),
+				question_count: 1,
+				answer_count: 0,
+				authority_count: 0,
+				additional_count: 0,
+			},
+			questions: vec![question],
+			answers: Vec::new(),
+			authorities: Vec::new(),
+			additionals: Vec::new(),
+			edns_record: None,
+		}
+	}
+
+	pub fn new_response(request: &DNSMessage, answers: Vec<DNSAnswer>) -> Self {
+		Self {
+			header: DNSMessageHeader {
+				transaction_id: request.header.transaction_id,
+				flags: DNSMessageFlags {
+					message_type: DNSMessageType::Response,
+					opcode: request.header.flags.opcode.clone(),
+					authoritative_answer: true,
+					truncated: false,
+					recursion_desired: request.header.flags.recursion_desired,
+					recursion_available: true,
+					z: false,
+					authenticated_data: false,
+					checking_disabled: false,
+					response_code: DNSResponseCode::NoError,
+				},
+				question_count: request.questions.len() as u16,
+				answer_count: answers.len() as u16,
+				authority_count: 0,
+				additional_count: 0,
+			},
+			questions: request.questions.clone(),
+			answers,
+			authorities: Vec::new(),
+			additionals: Vec::new(),
+			edns_record: None,
+		}
+	}
 }
 
 impl ReadFromWithEndian for DNSMessage {
 	fn read_from_with_endian<T: std::io::Read>(source: &mut T, endian: bytestruct::Endian) -> std::io::Result<Self> {
 		let header = DNSMessageHeader::read_from_with_endian(source, endian)?;
 
-		println!("Parsed header: {:?}", header);
-
 		let mut questions = Vec::with_capacity(header.question_count as usize);
 		for _ in 0..header.question_count {
 			questions.push(DNSQuestion::read_from_with_endian(source, endian)?);
 		}
-
-		println!("Parsed questions: {:?}", questions);
 
 		let mut answers = Vec::with_capacity(header.answer_count as usize);
 		for _ in 0..header.answer_count {
 			answers.push(DNSAnswer::read_from_with_endian(source, endian)?);
 		}
 
-		println!("Parsed answers: {:?}", answers);
-
 		let mut authorities = Vec::with_capacity(header.authority_count as usize);
 		for _ in 0..header.authority_count {
 			authorities.push(DNSAnswer::read_from_with_endian(source, endian)?);
 		}
 
-		println!("Parsed authorities: {:?}", authorities);
-
 		let mut edns_record = None;
-
-		println!("Reading additionals... {}", header.additional_count);
 		let mut additionals = Vec::with_capacity(header.additional_count as usize);
 		for _ in 0..header.additional_count {
 			let raw_answer = RawDNSAnswer::read_from_with_endian(source, endian)?;
@@ -112,8 +150,6 @@ impl ReadFromWithEndian for DNSMessage {
 			}
 		}
 
-		println!("Parsed additionals: {:?}", additionals);
-
 		Ok(Self {
 			header,
 			questions,
@@ -125,31 +161,58 @@ impl ReadFromWithEndian for DNSMessage {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct DNSMessageHeader {
-	transaction_id: u16,
-	flags: DNSMessageFlags,
-	question_count: u16,
-	answer_count: u16,
-	authority_count: u16,
-	additional_count: u16,
+impl WriteToWithEndian for DNSMessage {
+	fn write_to_with_endian<T: std::io::Write>(
+		&self,
+		target: &mut T,
+		endian: bytestruct::Endian,
+	) -> std::io::Result<()> {
+		self.header.write_to_with_endian(target, endian)?;
+		for question in &self.questions {
+			question.write_to_with_endian(target, endian)?;
+		}
+		for answer in &self.answers {
+			answer.write_to_with_endian(target, endian)?;
+		}
+		for authority in &self.authorities {
+			authority.write_to_with_endian(target, endian)?;
+		}
+		for additional in &self.additionals {
+			additional.write_to_with_endian(target, endian)?;
+		}
+		if let Some(edns_record) = &self.edns_record {
+			edns_record.write_to_with_endian(target, endian)?;
+		}
+
+		Ok(())
+	}
 }
 
-#[derive(Debug)]
-enum DNSMessageType {
+#[derive(Debug, ByteStruct, Clone)]
+pub struct DNSMessageHeader {
+	pub transaction_id: u16,
+	pub flags: DNSMessageFlags,
+	pub question_count: u16,
+	pub answer_count: u16,
+	pub authority_count: u16,
+	pub additional_count: u16,
+}
+
+#[derive(Debug, Clone)]
+pub enum DNSMessageType {
 	Query,
 	Response,
 }
 
-#[derive(Debug)]
-enum DNSOpcode {
+#[derive(Debug, Clone)]
+pub enum DNSOpcode {
 	StandardQuery,
 	InverseQuery,
 	ServerStatusRequest,
 }
 
 int_enum! {
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DNSResponseCode: u8 {
 	NoError = 0,
 	FormatError = 1,
@@ -174,18 +237,34 @@ pub enum DNSResponseCode: u8 {
 }
 }
 
-#[derive(Debug)]
-struct DNSMessageFlags {
-	message_type: DNSMessageType,
-	opcode: DNSOpcode,
-	authoritative_answer: bool,
-	truncated: bool,
-	recursion_desired: bool,
-	recursion_available: bool,
-	z: bool,
-	authenticated_data: bool,
-	checking_disabled: bool,
-	response_code: DNSResponseCode,
+#[derive(Debug, Clone)]
+pub struct DNSMessageFlags {
+	pub message_type: DNSMessageType,
+	pub opcode: DNSOpcode,
+	pub authoritative_answer: bool,
+	pub truncated: bool,
+	pub recursion_desired: bool,
+	pub recursion_available: bool,
+	pub z: bool,
+	pub authenticated_data: bool,
+	pub checking_disabled: bool,
+	pub response_code: DNSResponseCode,
+}
+impl DNSMessageFlags {
+	fn new_query() -> Self {
+		Self {
+			message_type: DNSMessageType::Query,
+			opcode: DNSOpcode::StandardQuery,
+			authoritative_answer: false,
+			truncated: false,
+			recursion_desired: true,
+			recursion_available: false,
+			z: false,
+			authenticated_data: false,
+			checking_disabled: false,
+			response_code: DNSResponseCode::NoError,
+		}
+	}
 }
 
 impl WriteToWithEndian for DNSMessageFlags {
@@ -290,8 +369,8 @@ impl ReadFromWithEndian for DNSMessageFlags {
 	}
 }
 
-#[derive(Debug)]
-struct DNSLabels {
+#[derive(Debug, Clone)]
+pub struct DNSLabels {
 	labels: Vec<String>,
 }
 
@@ -318,6 +397,13 @@ impl ReadFromWithEndian for DNSLabels {
 		loop {
 			let length = u8::read_from_with_endian(source, endian)?;
 			if length == 0 {
+				break;
+			}
+
+			if length & 0b1100_0000 == 0b1100_0000 {
+				println!("Skipping DNS label compression pointer");
+				// This is a pointer, we need to skip the next byte as well
+				u8::read_from_with_endian(source, endian)?;
 				break;
 			}
 
@@ -362,12 +448,15 @@ impl WriteToWithEndian for DNSLabels {
 			target.write_all(label.as_bytes())?;
 		}
 
+		// Write the null byte at the end of the labels
+		0u8.write_to_with_endian(target, endian)?;
+
 		Ok(())
 	}
 }
 
 int_enum! {
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum QType: u16 {
 	/// Host address (IPv4)
 	A = 0x0001,
@@ -515,7 +604,7 @@ pub enum QType: u16 {
 }
 
 int_enum! {
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum QClass: u16 {
 	/// Internet
 	IN = 0x0001,
@@ -530,31 +619,24 @@ pub enum QClass: u16 {
 }
 }
 
-#[derive(Debug, ByteStruct)]
-struct DNSQuestion {
-	name: DNSLabels,
-	qtype: QType,
-	qclass: QClass,
+#[derive(Debug, ByteStruct, Clone)]
+pub struct DNSQuestion {
+	pub name: DNSLabels,
+	pub qtype: QType,
+	pub qclass: QClass,
 }
 
-#[derive(Debug, ByteStruct)]
-struct DNSAnswer {
-	name: DNSLabels,
-	atype: QType,
-	aclass: QClass,
-	ttl: u32,
-	rdata: LengthPrefixedVec<u8, u16>,
-}
-
-bitflags! {
-	#[derive(Debug)]
-	struct EDNSZFlags: u16 {
-		const DO = 0x8000;
-	}
+#[derive(Debug, ByteStruct, Clone)]
+pub struct DNSAnswer {
+	pub name: DNSLabels,
+	pub atype: QType,
+	pub aclass: QClass,
+	pub ttl: u32,
+	pub rdata: LengthPrefixedVec<u8, u16>,
 }
 
 int_enum! {
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EDNSOptionCode: u16 {
 	LLQ = 1,
 	UL = 2,
@@ -579,19 +661,19 @@ pub enum EDNSOptionCode: u16 {
 }
 }
 
-#[derive(Debug, ByteStruct)]
-struct EDNSOption {
-	code: EDNSOptionCode,
-	data: LengthPrefixedVec<u8, u16>,
+#[derive(Debug, ByteStruct, Clone)]
+pub struct EDNSOption {
+	pub code: EDNSOptionCode,
+	pub data: LengthPrefixedVec<u8, u16>,
 }
 
-#[derive(Debug)]
-struct EDNSRecord {
-	udp_payload_size: u16,
-	extended_rcode: u8,
-	edns_version: u8,
-	flags: EDNSZFlags,
-	options: LengthPrefixedVec<EDNSOption, u16>,
+#[derive(Debug, Clone, ByteStruct)]
+pub struct EDNSRecord {
+	pub udp_payload_size: u16,
+	pub extended_rcode: u8,
+	pub edns_version: u8,
+	pub flags: u16,
+	pub options: LengthPrefixedVec<EDNSOption, u16>,
 }
 
 // This is a "raw" DNS answer that we read from the network, which may be an EDNS record
@@ -632,12 +714,10 @@ impl TryInto<EDNSRecord> for RawDNSAnswer {
 			return Err("This is a normal DNS answer, not an EDNS record".to_string());
 		}
 
-		println!("Parsing EDNS record from raw answer: {:?}", self);
-
 		let udp_payload_size = self.class_or_udp_size;
 		let extended_rcode = (self.ttl_or_edns_data >> 24) as u8;
 		let edns_version = ((self.ttl_or_edns_data >> 16) & 0xFF) as u8;
-		let flags = EDNSZFlags::from_bits((self.ttl_or_edns_data & 0xFFFF) as u16).ok_or("Invalid EDNS flags")?;
+		let flags = (self.ttl_or_edns_data & 0xFFFF) as u16;
 
 		// We need to parse the options from the rdata, which is a length-prefixed vector of options
 		let mut options = Vec::new();
