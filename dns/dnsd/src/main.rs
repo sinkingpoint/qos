@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use bytestruct::WriteToWithEndian;
 use clap::Command;
+use common::qinit::mark_running;
 use dns::{
 	message::{DNSMessage, DNSQuestion, DNSResponseCode, QType},
 	resolver::DNSStubResolver,
@@ -28,6 +29,7 @@ async fn main() {
 		.unwrap_or("127.0.0.1:53");
 
 	let server = DNSServer::new(address).await.expect("Failed to start DNS server");
+	mark_running().unwrap();
 
 	if let Err(e) = server.run().await {
 		eprintln!("Error running DNS server: {}", e);

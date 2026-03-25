@@ -19,3 +19,4 @@ tokio = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
+common = { path = "../common" }

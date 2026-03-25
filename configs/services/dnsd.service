@@ -1,0 +1,9 @@
+name = "dnsd"
+description = "DNS Stub Resolver Daemon"
+start_mode = "notify"
+
+[service]
+command = "/sbin/dnsd"
+
+[[wants]]
+name = "loggerd"

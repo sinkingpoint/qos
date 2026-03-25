@@ -6,3 +6,6 @@ name = "loggerd"
 
 [[services]]
 name = "busd"
+
+[[services]]
+name = "dnsd"
