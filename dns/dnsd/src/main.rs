@@ -1,8 +1,11 @@
-use std::{io::Cursor, net::SocketAddr};
+use std::net::SocketAddr;
 
-use bytestruct::{ReadFromWithEndian, WriteToWithEndian};
+use bytestruct::WriteToWithEndian;
 use clap::Command;
-use dns::{message::DNSMessage, resolver::DNSStubResolver};
+use dns::{
+	message::{DNSMessage, DNSResponseCode},
+	resolver::DNSStubResolver,
+};
 use tokio::net::UdpSocket;
 
 #[tokio::main]
@@ -61,14 +64,14 @@ impl DNSServer {
 		loop {
 			let mut header_bytes = [0u8; 512];
 			let (size, src) = self.listener.recv_from(&mut header_bytes).await?;
-			let header =
-				DNSMessage::read_from_with_endian(&mut Cursor::new(&header_bytes[..size]), bytestruct::Endian::Big)?;
+			let header = DNSMessage::from_bytes(&header_bytes[..size], bytestruct::Endian::Big)?;
 			self.handle_request(src, header).await;
 		}
 	}
 
 	async fn handle_request(&self, src: SocketAddr, request: DNSMessage) {
 		let mut answers = Vec::new();
+		let mut response_code = DNSResponseCode::NoError;
 		for question in &request.questions {
 			if let Some(resp) = self
 				.resolver
@@ -76,12 +79,16 @@ impl DNSServer {
 				.await
 			{
 				answers.extend(resp.answers);
+				if resp.header.flags.response_code != DNSResponseCode::NoError {
+					response_code = resp.header.flags.response_code;
+				}
 			} else {
+				response_code = DNSResponseCode::ServerFailure;
 				break;
 			}
 		}
 
-		let response = DNSMessage::new_response(&request, answers);
+		let response = DNSMessage::new_response(&request, response_code, answers);
 		let mut response_bytes = Vec::new();
 		if let Err(e) = response.write_to_with_endian(&mut response_bytes, bytestruct::Endian::Big) {
 			eprintln!("Failed to serialize DNS response: {}", e);

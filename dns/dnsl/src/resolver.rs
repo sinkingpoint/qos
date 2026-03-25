@@ -3,7 +3,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bytestruct::{ReadFromWithEndian, WriteToWithEndian};
+use bytestruct::WriteToWithEndian;
 use tokio::sync::{oneshot, Mutex};
 use tokio::{net::UdpSocket, time::timeout};
 
@@ -82,7 +82,7 @@ async fn start(
 	let mut buf = [0u8; 1024];
 	loop {
 		let (len, _) = listener.recv_from(&mut buf).await?;
-		let msg = match DNSMessage::read_from_with_endian(&mut &buf[..len], bytestruct::Endian::Big) {
+		let msg = match DNSMessage::from_bytes(&buf[..len], bytestruct::Endian::Big) {
 			Ok(m) => m,
 			Err(e) => {
 				eprintln!("Failed to parse DNS message: {}", e);

@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Cursor};
 
 use bytestruct::{int_enum, LengthPrefixedVec, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
@@ -41,9 +41,14 @@ mod flags {
 
 	/// RCODE (Response Code) field: 4 bits indicating the response code
 	pub const RESPONSE_CODE_MASK: u16           = 0b0000_0000_0000_1111;
+
+	// The two most significant bits of a DNS label length byte are used for compression pointers
+	pub const COMPRESSION_POINTER_MASK: u8 = 0b1100_0000;
 }
 
 use flags::*;
+
+const MAX_LABEL_RECURSION_DEPTH: u8 = 10;
 
 #[derive(Debug)]
 pub struct DNSMessage {
@@ -74,7 +79,7 @@ impl DNSMessage {
 		}
 	}
 
-	pub fn new_response(request: &DNSMessage, answers: Vec<DNSAnswer>) -> Self {
+	pub fn new_response(request: &DNSMessage, response_code: DNSResponseCode, answers: Vec<DNSAnswer>) -> Self {
 		Self {
 			header: DNSMessageHeader {
 				transaction_id: request.header.transaction_id,
@@ -88,7 +93,7 @@ impl DNSMessage {
 					z: false,
 					authenticated_data: false,
 					checking_disabled: false,
-					response_code: DNSResponseCode::NoError,
+					response_code,
 				},
 				question_count: request.questions.len() as u16,
 				answer_count: answers.len() as u16,
@@ -102,51 +107,49 @@ impl DNSMessage {
 			edns_record: None,
 		}
 	}
-}
 
-impl ReadFromWithEndian for DNSMessage {
-	fn read_from_with_endian<T: std::io::Read>(source: &mut T, endian: bytestruct::Endian) -> std::io::Result<Self> {
-		let header = DNSMessageHeader::read_from_with_endian(source, endian)?;
+	pub fn from_bytes(buf: &[u8], endian: bytestruct::Endian) -> io::Result<Self> {
+		let src = &mut Cursor::new(buf);
+		let header = DNSMessageHeader::read_from_with_endian(src, endian)?;
 
 		let mut questions = Vec::with_capacity(header.question_count as usize);
 		for _ in 0..header.question_count {
-			questions.push(DNSQuestion::read_from_with_endian(source, endian)?);
+			let raw_name = RawLabels::read_from_with_endian(src, endian)?;
+			let qtype = QType::read_from_with_endian(src, endian)?;
+			let qclass = QClass::read_from_with_endian(src, endian)?;
+			questions.push(DNSQuestion {
+				name: raw_name.resolve_labels(buf, endian)?,
+				qtype,
+				qclass,
+			});
 		}
 
 		let mut answers = Vec::with_capacity(header.answer_count as usize);
 		for _ in 0..header.answer_count {
-			answers.push(DNSAnswer::read_from_with_endian(source, endian)?);
+			answers.push(RawDNSAnswer::read_from_with_endian(src, endian)?.into_answer(buf, endian)?);
 		}
 
 		let mut authorities = Vec::with_capacity(header.authority_count as usize);
 		for _ in 0..header.authority_count {
-			authorities.push(DNSAnswer::read_from_with_endian(source, endian)?);
+			authorities.push(RawDNSAnswer::read_from_with_endian(src, endian)?.into_answer(buf, endian)?);
 		}
 
 		let mut edns_record = None;
 		let mut additionals = Vec::with_capacity(header.additional_count as usize);
 		for _ in 0..header.additional_count {
-			let raw_answer = RawDNSAnswer::read_from_with_endian(source, endian)?;
-			if raw_answer.atype == QType::OPT {
-				edns_record = match raw_answer.try_into() {
+			let raw = RawDNSAnswer::read_from_with_endian(src, endian)?;
+			if raw.atype == QType::OPT {
+				edns_record = match raw.try_into() {
 					Ok(edns_record) => Some(edns_record),
 					Err(e) => {
-						return Err(std::io::Error::new(
-							std::io::ErrorKind::InvalidData,
+						return Err(io::Error::new(
+							io::ErrorKind::InvalidData,
 							format!("Failed to parse EDNS record: {}", e),
 						))
 					}
-				}
+				};
 			} else {
-				additionals.push(match raw_answer.try_into() {
-					Ok(answer) => answer,
-					Err(e) => {
-						return Err(std::io::Error::new(
-							std::io::ErrorKind::InvalidData,
-							format!("Failed to parse DNS answer: {}", e),
-						))
-					}
-				});
+				additionals.push(raw.into_answer(buf, endian)?);
 			}
 		}
 
@@ -391,44 +394,6 @@ impl DNSLabels {
 	}
 }
 
-impl ReadFromWithEndian for DNSLabels {
-	fn read_from_with_endian<T: std::io::Read>(source: &mut T, endian: bytestruct::Endian) -> std::io::Result<Self> {
-		let mut labels = Vec::new();
-		loop {
-			let length = u8::read_from_with_endian(source, endian)?;
-			if length == 0 {
-				break;
-			}
-
-			if length & 0b1100_0000 == 0b1100_0000 {
-				println!("Skipping DNS label compression pointer");
-				// This is a pointer, we need to skip the next byte as well
-				u8::read_from_with_endian(source, endian)?;
-				break;
-			}
-
-			if length > 63 {
-				return Err(io::Error::new(
-					io::ErrorKind::InvalidData,
-					format!("DNS label length too long: {}", length),
-				));
-			}
-
-			let mut label_bytes = vec![0u8; length as usize];
-			source.read_exact(&mut label_bytes)?;
-			let label = String::from_utf8(label_bytes).map_err(|e| {
-				std::io::Error::new(
-					std::io::ErrorKind::InvalidData,
-					format!("Invalid UTF-8 in DNS label: {}", e),
-				)
-			})?;
-			labels.push(label);
-		}
-
-		Ok(Self { labels })
-	}
-}
-
 impl WriteToWithEndian for DNSLabels {
 	fn write_to_with_endian<T: std::io::Write>(
 		&self,
@@ -452,6 +417,75 @@ impl WriteToWithEndian for DNSLabels {
 		0u8.write_to_with_endian(target, endian)?;
 
 		Ok(())
+	}
+}
+
+// Private intermediate type used during parsing to represent a name that may end in a
+// compression pointer. Only used inside `DNSMessage::from_bytes`.
+#[derive(Debug)]
+enum RawLabels {
+	Resolved(Vec<String>),
+	WithPointer(Vec<String>, u16),
+}
+
+impl ReadFromWithEndian for RawLabels {
+	fn read_from_with_endian<T: std::io::Read>(source: &mut T, endian: bytestruct::Endian) -> std::io::Result<Self> {
+		let mut labels = Vec::new();
+		loop {
+			let length = u8::read_from_with_endian(source, endian)?;
+			if length == 0 {
+				return Ok(RawLabels::Resolved(labels));
+			}
+
+			// If the
+			if length & COMPRESSION_POINTER_MASK == COMPRESSION_POINTER_MASK {
+				let low = u8::read_from_with_endian(source, endian)?;
+				let offset = (((length & 0b00111111) as u16) << 8) | (low as u16); // The offset is the last 14 bits of the length and low bytes combined
+				return Ok(RawLabels::WithPointer(labels, offset));
+			}
+			if length > 63 {
+				return Err(io::Error::new(
+					io::ErrorKind::InvalidData,
+					format!("DNS label length too long: {}", length),
+				));
+			}
+			let mut label_bytes = vec![0u8; length as usize];
+			source.read_exact(&mut label_bytes)?;
+			let label = String::from_utf8(label_bytes).map_err(|e| {
+				io::Error::new(io::ErrorKind::InvalidData, format!("Invalid UTF-8 in DNS label: {}", e))
+			})?;
+			labels.push(label);
+		}
+	}
+}
+
+impl RawLabels {
+	fn resolve_labels(self, buf: &[u8], endian: bytestruct::Endian) -> io::Result<DNSLabels> {
+		self.resolve_labels_depth(buf, endian, 0)
+	}
+
+	fn resolve_labels_depth(self, buf: &[u8], endian: bytestruct::Endian, depth: u8) -> io::Result<DNSLabels> {
+		if depth > MAX_LABEL_RECURSION_DEPTH {
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"DNS label pointer chain too deep (possible cycle)",
+			));
+		}
+
+		match self {
+			RawLabels::Resolved(labels) => Ok(DNSLabels { labels }),
+			RawLabels::WithPointer(mut labels, offset) => {
+				if offset as usize >= buf.len() {
+					return Err(io::Error::new(
+						io::ErrorKind::InvalidData,
+						format!("DNS pointer offset {} is out of bounds (buf len {})", offset, buf.len()),
+					));
+				}
+				let more = RawLabels::read_from_with_endian(&mut Cursor::new(&buf[offset as usize..]), endian)?;
+				labels.extend(more.resolve_labels_depth(buf, endian, depth + 1)?.labels);
+				Ok(DNSLabels { labels })
+			}
+		}
 	}
 }
 
@@ -619,20 +653,48 @@ pub enum QClass: u16 {
 }
 }
 
-#[derive(Debug, ByteStruct, Clone)]
+#[derive(Debug, Clone)]
 pub struct DNSQuestion {
 	pub name: DNSLabels,
 	pub qtype: QType,
 	pub qclass: QClass,
 }
 
-#[derive(Debug, ByteStruct, Clone)]
+impl WriteToWithEndian for DNSQuestion {
+	fn write_to_with_endian<T: std::io::Write>(
+		&self,
+		target: &mut T,
+		endian: bytestruct::Endian,
+	) -> std::io::Result<()> {
+		self.name.write_to_with_endian(target, endian)?;
+		self.qtype.write_to_with_endian(target, endian)?;
+		self.qclass.write_to_with_endian(target, endian)?;
+		Ok(())
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct DNSAnswer {
 	pub name: DNSLabels,
 	pub atype: QType,
 	pub aclass: QClass,
 	pub ttl: u32,
 	pub rdata: LengthPrefixedVec<u8, u16>,
+}
+
+impl WriteToWithEndian for DNSAnswer {
+	fn write_to_with_endian<T: std::io::Write>(
+		&self,
+		target: &mut T,
+		endian: bytestruct::Endian,
+	) -> std::io::Result<()> {
+		self.name.write_to_with_endian(target, endian)?;
+		self.atype.write_to_with_endian(target, endian)?;
+		self.aclass.write_to_with_endian(target, endian)?;
+		self.ttl.write_to_with_endian(target, endian)?;
+		self.rdata.write_to_with_endian(target, endian)?;
+		Ok(())
+	}
 }
 
 int_enum! {
@@ -679,27 +741,45 @@ pub struct EDNSRecord {
 // This is a "raw" DNS answer that we read from the network, which may be an EDNS record
 // or a normal answer. We need to parse it first to determine which one it is, and then
 // we can convert it into either a DNSAnswer or an EDNSRecord.
-#[derive(Debug, ByteStruct)]
+#[derive(Debug)]
 struct RawDNSAnswer {
-	name: DNSLabels,
+	name: RawLabels,
 	atype: QType,
 	class_or_udp_size: u16,
 	ttl_or_edns_data: u32,
 	rdata: LengthPrefixedVec<u8, u16>,
 }
 
-impl TryInto<DNSAnswer> for RawDNSAnswer {
-	type Error = String;
+impl ReadFromWithEndian for RawDNSAnswer {
+	fn read_from_with_endian<T: std::io::Read>(source: &mut T, endian: bytestruct::Endian) -> std::io::Result<Self> {
+		let name = RawLabels::read_from_with_endian(source, endian)?;
+		let atype = QType::read_from_with_endian(source, endian)?;
+		let class_or_udp_size = u16::read_from_with_endian(source, endian)?;
+		let ttl_or_edns_data = u32::read_from_with_endian(source, endian)?;
+		let rdata = LengthPrefixedVec::<u8, u16>::read_from_with_endian(source, endian)?;
+		Ok(Self {
+			name,
+			atype,
+			class_or_udp_size,
+			ttl_or_edns_data,
+			rdata,
+		})
+	}
+}
 
-	fn try_into(self) -> Result<DNSAnswer, Self::Error> {
+impl RawDNSAnswer {
+	fn into_answer(self, buf: &[u8], endian: bytestruct::Endian) -> io::Result<DNSAnswer> {
 		if self.atype == QType::OPT {
-			return Err("This is an EDNS record, not a normal DNS answer".to_string());
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"This is an EDNS record, not a normal DNS answer",
+			));
 		}
-
 		Ok(DNSAnswer {
-			name: self.name,
+			name: self.name.resolve_labels(buf, endian)?,
 			atype: self.atype,
-			aclass: QClass::try_from(self.class_or_udp_size).map_err(|_| "Invalid QClass in DNS answer".to_string())?,
+			aclass: QClass::try_from(self.class_or_udp_size)
+				.map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid QClass in DNS answer"))?,
 			ttl: self.ttl_or_edns_data,
 			rdata: self.rdata,
 		})
