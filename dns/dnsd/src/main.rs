@@ -19,14 +19,11 @@ async fn main() {
 				.short('l')
 				.long("listen")
 				.value_name("ADDRESS:PORT")
-				.help("The address and port to listen on (default: 127.0.0.1:53)"),
+				.help("The address and port to listen on (default: [::]:53)"),
 		)
 		.get_matches();
 
-	let address = app
-		.get_one::<String>("listen")
-		.map(|s| s.as_str())
-		.unwrap_or("127.0.0.1:53");
+	let address = app.get_one::<String>("listen").map(|s| s.as_str()).unwrap_or("[::]:53");
 
 	let server = DNSServer::new(address).await.expect("Failed to start DNS server");
 	mark_running().unwrap();
