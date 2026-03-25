@@ -18,3 +18,4 @@ bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 tokio = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
+chrono = { workspace = true }

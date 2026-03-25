@@ -370,6 +370,7 @@ dependencies = [
  "bitflags",
  "bytestruct",
  "bytestruct-derive",
+ "chrono",
  "clap",
  "rand",
  "tokio",

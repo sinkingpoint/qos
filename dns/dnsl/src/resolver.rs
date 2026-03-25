@@ -90,8 +90,6 @@ async fn start(
 			}
 		};
 
-		println!("Received DNS message with transaction ID {}", msg.header.transaction_id);
-
 		let mut active_queries = active_queries.lock().await;
 		if let Some(response_tx) = active_queries.remove(&msg.header.transaction_id) {
 			let _ = response_tx.send(msg);

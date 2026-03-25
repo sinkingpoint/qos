@@ -1,12 +1,12 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use bytestruct::WriteToWithEndian;
 use clap::Command;
 use dns::{
-	message::{DNSMessage, DNSResponseCode},
+	message::{DNSMessage, DNSQuestion, DNSResponseCode, QType},
 	resolver::DNSStubResolver,
 };
-use tokio::net::UdpSocket;
+use tokio::{net::UdpSocket, sync::Mutex};
 
 #[tokio::main]
 async fn main() {
@@ -39,10 +39,25 @@ struct Config {
 	upstream_resolvers: Vec<String>,
 }
 
+type DNSExpiryTime = chrono::DateTime<chrono::Utc>;
+type DNSCache = std::collections::HashMap<DNSCacheKey, DNSCacheEntry>;
+struct DNSCacheEntry {
+	expiry: DNSExpiryTime,
+	response: DNSMessage,
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+struct DNSCacheKey {
+	name: String,
+	record_type: QType,
+}
+
 struct DNSServer {
 	config: Config,
 	listener: UdpSocket,
 	resolver: DNSStubResolver,
+
+	cache: Arc<Mutex<DNSCache>>,
 }
 
 impl DNSServer {
@@ -57,6 +72,7 @@ impl DNSServer {
 			listener,
 			config,
 			resolver,
+			cache: Arc::new(Mutex::new(DNSCache::new())),
 		})
 	}
 
@@ -69,15 +85,70 @@ impl DNSServer {
 		}
 	}
 
+	async fn check_cache(&self, question: &DNSQuestion) -> Option<DNSMessage> {
+		let cache_key = DNSCacheKey {
+			name: question.name.to_domain_name(),
+			record_type: question.qtype.clone(),
+		};
+
+		let mut cache = self.cache.lock().await;
+		if let Some(entry) = cache.get(&cache_key) {
+			if entry.expiry > chrono::Utc::now() {
+				Some(entry.response.clone())
+			} else {
+				cache.remove(&cache_key);
+				None
+			}
+		} else {
+			None
+		}
+	}
+
+	// Caches the response for a given question with the appropriate TTL
+	async fn cache_result(&self, question: &DNSQuestion, response: &DNSMessage) {
+		let cache_key = DNSCacheKey {
+			name: question.name.to_domain_name(),
+			record_type: question.qtype.clone(),
+		};
+
+		let expiry = chrono::Utc::now()
+			+ chrono::Duration::seconds(response.answers.iter().map(|a| a.ttl).min().unwrap_or(0) as i64);
+		if expiry <= chrono::Utc::now() {
+			// If the TTL is expired or zero, we shouldn't cache the response at all
+			// This will happen in the case of an NXDOMAIN because we don't parse the
+			// TTL from the SOA record yet.
+			return;
+		}
+		let mut cache = self.cache.lock().await;
+		cache.insert(
+			cache_key,
+			DNSCacheEntry {
+				expiry,
+				response: response.clone(),
+			},
+		);
+	}
+
 	async fn handle_request(&self, src: SocketAddr, request: DNSMessage) {
 		let mut answers = Vec::new();
 		let mut response_code = DNSResponseCode::NoError;
 		for question in &request.questions {
+			if let Some(cached_response) = self.check_cache(question).await {
+				answers.extend(cached_response.answers);
+				if cached_response.header.flags.response_code != DNSResponseCode::NoError {
+					response_code = cached_response.header.flags.response_code;
+				}
+				continue;
+			}
+
 			if let Some(resp) = self
 				.resolver
 				.resolve(question.clone(), &self.config.upstream_resolvers)
 				.await
 			{
+				// Cache the response with the appropriate TTL
+				self.cache_result(question, &resp).await;
+
 				answers.extend(resp.answers);
 				if resp.header.flags.response_code != DNSResponseCode::NoError {
 					response_code = resp.header.flags.response_code;

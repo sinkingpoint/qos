@@ -50,7 +50,7 @@ use flags::*;
 
 const MAX_LABEL_RECURSION_DEPTH: u8 = 10;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DNSMessage {
 	pub header: DNSMessageHeader,
 	pub questions: Vec<DNSQuestion>,
@@ -490,7 +490,7 @@ impl RawLabels {
 }
 
 int_enum! {
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum QType: u16 {
 	/// Host address (IPv4)
 	A = 0x0001,
