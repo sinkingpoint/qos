@@ -148,9 +148,13 @@ impl<R: Read, W: Write> Buffer<R, W> {
 			self.buffer.remove(self.position - 1);
 		}
 
-		write!(self.writer, "{}", CursorBack(2)).expect("Failed to write to stdout");
 		self.position -= 1;
-		self.rerender();
+		write!(self.writer, "{}{}", CursorBack(1), EraseInLine(0)).expect("Failed to write to stdout");
+		write!(self.writer, "{}", &self.buffer[self.position..]).expect("Failed to write to stdout");
+		if self.buffer.len() > self.position {
+			write!(self.writer, "{}", CursorBack((self.buffer.len() - self.position) as u8))
+				.expect("Failed to write to stdout");
+		}
 	}
 
 	// Rewrite the current line, starting from the current position.
