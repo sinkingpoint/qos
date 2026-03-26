@@ -79,7 +79,7 @@ impl Shell {
 		}
 	}
 
-	/// Update the working directory in the environment.
+	/// Update the PWD environment variable to the current working directory, this is called before each prompt is printed to ensure that it's always up to date.
 	fn update_working_directory(&mut self) {
 		let path = std::env::current_dir().unwrap();
 		self.environment

@@ -17,6 +17,9 @@ pub struct Buffer<R: Read, W: Write> {
 	position: usize,
 	reader: R,
 	writer: W,
+
+	history: Vec<String>,
+	history_position: usize,
 }
 
 impl<R: Read, W: Write> Buffer<R, W> {
@@ -26,7 +29,18 @@ impl<R: Read, W: Write> Buffer<R, W> {
 			position: 0,
 			reader,
 			writer,
+			history: Vec::new(),
+			history_position: 0,
 		}
+	}
+
+	fn push_history(&mut self, line: String) {
+		if line.is_empty() {
+			return;
+		}
+
+		self.history.push(line);
+		self.history_position = self.history.len();
 	}
 
 	/// Read a line from the buffer.
@@ -36,14 +50,34 @@ impl<R: Read, W: Write> Buffer<R, W> {
 			let c = self.read_char()?;
 			if c == '\n' {
 				writeln!(self.writer).expect("Failed to write to stdout");
+				self.push_history(self.buffer.clone());
 				return Ok(self.flush());
 			} else if c == DELETE_CHAR {
 				self.backspace();
 			} else if c == ESC {
 				self.handle_escape_sequence()?;
+			} else if c == '\t' {
+				// Handle tab completion here in the future. For now, just ignore it.
+				continue;
 			} else {
 				self.push_char(c);
 			}
+		}
+	}
+
+	fn handle_history_navigation(&mut self, direction: isize) {
+		if self.history.is_empty() {
+			return;
+		}
+
+		let new_position =
+			(self.history_position as isize + direction).clamp(0, self.history.len() as isize - 1) as usize;
+		if new_position != self.history_position {
+			self.history_position = new_position;
+			self.move_cursor(-(self.position as isize));
+			self.buffer = self.history[self.history_position].clone();
+			self.position = self.buffer.len();
+			write!(self.writer, "{}{}", EraseInLine(0), &self.buffer).expect("Failed to write to stdout");
 		}
 	}
 
@@ -59,6 +93,8 @@ impl<R: Read, W: Write> Buffer<R, W> {
 		match escape {
 			ANSIEscapeSequence::CursorForward(amt) => self.move_cursor(amt.0 as isize),
 			ANSIEscapeSequence::CursorBack(amt) => self.move_cursor(-(amt.0 as isize)),
+			ANSIEscapeSequence::CursorUp(amt) => self.handle_history_navigation(-(amt.0 as isize)),
+			ANSIEscapeSequence::CursorDown(amt) => self.handle_history_navigation(amt.0 as isize),
 			_ => (),
 		}
 
