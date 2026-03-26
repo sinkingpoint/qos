@@ -44,7 +44,7 @@ impl Shell {
 		loop {
 			self.update_working_directory();
 			let prompt = format!(
-				"{} {}",
+				"{}{}",
 				self.environment.get("PWD").unwrap(),
 				self.environment.get("PS1").unwrap()
 			);
