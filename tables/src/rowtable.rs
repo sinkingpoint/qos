@@ -62,6 +62,14 @@ impl RowTable {
 		self.chunk_size = self.find_new_chunk_size();
 		Ok(())
 	}
+
+	pub fn num_rows(&self) -> usize {
+		(self.values.len() + self.chunk_size - 1) / self.chunk_size
+	}
+
+	pub fn num_cols(&self) -> usize {
+		self.chunk_size
+	}
 }
 
 impl Display for RowTable {
