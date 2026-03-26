@@ -34,6 +34,7 @@ impl<R: Read, W: Write> Buffer<R, W> {
 		}
 	}
 
+	// Add a line to the history buffer, so that it can be navigated with the up and down arrow keys.
 	fn push_history(&mut self, line: String) {
 		if line.is_empty() {
 			return;
@@ -41,6 +42,42 @@ impl<R: Read, W: Write> Buffer<R, W> {
 
 		self.history.push(line);
 		self.history_position = self.history.len();
+	}
+
+	// Returns a list of candidates for tab completion based on the current buffer.
+	fn tab_completion_candidates(&self) -> Vec<String> {
+		let last_word = self.buffer[..self.position].split_whitespace().last().unwrap_or("");
+		std::fs::read_dir(".")
+			.unwrap()
+			.filter_map(|entry| entry.ok())
+			.filter_map(|entry| entry.file_name().into_string().ok())
+			.filter(|name| name.starts_with(last_word))
+			.collect()
+	}
+
+	fn auto_complete_to(&mut self, completion: &str) {
+		let last_word = self.buffer[..self.position].split_whitespace().last().unwrap_or("");
+		let to_complete = &completion[last_word.len()..];
+		for char in to_complete.chars() {
+			self.push_char(char);
+		}
+	}
+
+	fn handle_tab_completion(&mut self) {
+		let candidates = self.tab_completion_candidates();
+		match candidates.len() {
+			0 => (), // No candidates to return
+			1 => {
+				// For the case of just one completion, complete it
+				self.auto_complete_to(&candidates[0]);
+			}
+			_ => {
+				if let Some(prefix) = common_prefix(&candidates) {
+					// They all have a common prefix, so just complete that
+					self.auto_complete_to(&prefix);
+				}
+			}
+		}
 	}
 
 	/// Read a line from the buffer.
@@ -57,8 +94,7 @@ impl<R: Read, W: Write> Buffer<R, W> {
 			} else if c == ESC {
 				self.handle_escape_sequence()?;
 			} else if c == '\t' {
-				// Handle tab completion here in the future. For now, just ignore it.
-				continue;
+				self.handle_tab_completion();
 			} else {
 				self.push_char(c);
 			}
@@ -183,4 +219,23 @@ impl<R: Read, W: Write> Buffer<R, W> {
 		self.reader.read_exact(&mut char_buffer)?;
 		Ok(char_buffer[0] as char)
 	}
+}
+
+// Returns the common prefix of the list of strings, if any.
+fn common_prefix(strs: &[String]) -> Option<String> {
+	if strs.is_empty() {
+		return None;
+	}
+
+	let substr = strs[0]
+		.char_indices()
+		.take_while(|(idx, c)| strs.iter().all(|s| s.chars().nth(*idx) == Some(*c)))
+		.map(|(_, c)| c)
+		.collect::<String>();
+
+	if substr.is_empty() {
+		return None;
+	}
+
+	Some(substr)
 }
