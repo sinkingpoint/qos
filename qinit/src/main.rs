@@ -8,7 +8,6 @@ use std::{
 	path::PathBuf,
 	process::ExitCode,
 	sync::Arc,
-	time::Duration,
 };
 
 use anyhow::{anyhow, Result};
@@ -19,7 +18,7 @@ use control::listen::{Action, ActionFactory, ControlSocket};
 use nix::unistd::Pid;
 use service::{Service, ServiceManager};
 use slog::{error, info};
-use tokio::{fs::create_dir_all, net::unix::UCred, time::sleep};
+use tokio::{fs::create_dir_all, net::unix::UCred};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -53,8 +52,6 @@ async fn main() -> ExitCode {
 	}
 
 	start_sphere(&logger, manager.clone(), &config, "user").await.unwrap();
-
-	sleep(Duration::from_secs(5)).await;
 
 	manager.reaper().await;
 	ExitCode::SUCCESS
