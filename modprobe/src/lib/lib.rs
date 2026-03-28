@@ -76,19 +76,23 @@ pub fn find_modules_to_load(
 	mod_deps_path: &Path,
 ) -> Result<Vec<String>, ModuleLoadError> {
 	let mut all_dependencies = load_mod_dependencies(logger, mod_deps_path)?;
-	let mut deps = HashMap::new();
+	let mut deps: HashMap<String, Vec<String>> = HashMap::new();
 	let mut mods_to_load = Vec::new();
-	let mut mods_to_scan = vec![mod_name];
+	let mut mods_to_scan = vec![mod_name.to_owned()];
 
 	while let Some(mod_name) = mods_to_scan.pop() {
-		if deps.contains_key(mod_name) {
+		if deps.contains_key(&mod_name) {
 			continue;
 		}
 
-		deps.insert(
-			mod_name.to_owned(),
-			all_dependencies.remove(mod_name).unwrap_or(Vec::new()),
-		);
+		let mod_deps = match all_dependencies.remove(&mod_name) {
+			Some(deps) => deps,
+			None => {
+				return Err(ModuleLoadError::UnknownModule(mod_name.clone()));
+			}
+		};
+		mods_to_scan.extend(mod_deps.iter().cloned());
+		deps.insert(mod_name, mod_deps);
 	}
 
 	// This is basically Kuhn's algorithm.

@@ -195,7 +195,7 @@ fn write_deps<W: Write>(modinfo: &ModInfo, mut writer: W) -> io::Result<()> {
 // Writes an entry into the module.name file. This is technically non standard - modprobe
 // etc will find modules themselves, but having this memoization helps make those simpler.
 fn write_name<W: Write>(path: &Path, modinfo: &ModInfo, mut writer: W) -> io::Result<()> {
-	writer.write_all(format!("{}:{}", modinfo.name, path.display()).as_bytes())
+	writer.write_all(format!("{}:{}\n", modinfo.name, path.display()).as_bytes())
 }
 
 fn write_symbols<T: Read + Seek, W: Write>(
