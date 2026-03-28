@@ -316,8 +316,8 @@ impl ServiceManager {
 	async fn start(&self, mut service: Service) {
 		info!(self.logger, "starting service"; "service" => service.to_string());
 		let start_future = async move {
-			if let Err(e) = service.start() {
-				service.state = ServiceState::Error(e.to_string());
+			if service.start().is_err() {
+				// service.state = ServiceState::Error(e.to_string());
 				return;
 			}
 
@@ -384,7 +384,7 @@ impl ServiceManager {
 	async fn trigger_start_sweep(&self, started: &Service) {
 		let mut pending = self.pending_services.lock().await;
 		let to_start = pending
-			.extract_if(|w| {
+			.extract_if(.., |w| {
 				w.notify_service_started(started);
 				w.done()
 			})

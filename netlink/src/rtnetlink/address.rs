@@ -238,7 +238,7 @@ impl TryFrom<&str> for IPAddress {
 				return Err(format!("found more than one compressed run in {:?}", try_ipv6));
 			} else {
 				let byte = u16::from_str_radix(byte_str, 16).map_err(|s| format!("failed to parse byte: {}", s))?;
-				if current_byte % 2 == 0 {
+				if current_byte.is_multiple_of(2) {
 					ipv6_bytes[current_byte] = ((byte & 0xFF00) >> 8) as u8;
 					ipv6_bytes[current_byte + 1] = (byte & 0x00FF) as u8;
 					current_byte += 2;

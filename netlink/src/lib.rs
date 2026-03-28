@@ -1,5 +1,3 @@
-#![feature(buf_read_has_data_left)]
-
 #[cfg(feature = "async")]
 mod async_socket;
 #[cfg(feature = "async")]
@@ -83,10 +81,7 @@ impl<T: NetlinkSockType> NetlinkSocket<T> {
 		};
 
 		if errcode != 0 {
-			return Err(io::Error::new(
-				ErrorKind::Other,
-				format!("failed to set NETLINK_EXT_ACK: {}", errcode),
-			));
+			return Err(io::Error::other(format!("failed to set NETLINK_EXT_ACK: {}", errcode)));
 		}
 
 		Ok(Arc::new(Self {
@@ -342,11 +337,7 @@ impl<T: NetlinkSockType> ReadHandle<T> {
 	}
 
 	pub fn read(&self) -> Option<RawMessage<T>> {
-		if let Ok(r) = self.reader.recv() {
-			Some(r)
-		} else {
-			None
-		}
+		self.reader.recv().ok()
 	}
 }
 

@@ -548,8 +548,6 @@ pub enum QType: u16 {
 	GPOS = 0x001D,
 	/// IPv6 address
 	AAAA = 0x001C,
-	/// Location information
-	LOC = 0x001D,
 	/// Next domain (obsolete)
 	NXT = 0x001E,
 	/// Service location record
@@ -594,8 +592,6 @@ pub enum QType: u16 {
 	CDS = 0x003B,
 	/// Child DNSKEY
 	CDNSKEY = 0x003C,
-	/// Child synchronization
-	CSYNC = 0x0032,
 	/// Sender policy framework (obsolete)
 	SPF = 0x0063,
 	/// Unspecified format

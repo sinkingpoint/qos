@@ -94,23 +94,6 @@ pub struct BlockHeader {
 	block_size: u64,
 }
 
-/// A block containing a hash of the log entries that occur before this block.
-#[derive(Debug, ByteStruct, Size)]
-#[little_endian]
-pub struct CheckpointBlock {
-	header: BlockHeader,
-
-	/// The SHA-256 hash of the log entries that occured between the previous checkpoint block and this one.
-	pub hash: u64,
-
-	/// The time that the checkpoint was created. Should be >= the last log before the checkpoint and <= the first log after the checkpoint.
-	pub time: DateTime<Utc>,
-
-	/// The offset of the next checkpoint block in the file, or 0 if this is the last checkpoint block.
-	pub next_checkpoint_block_offset: u64,
-	_unused: Padding<64>,
-}
-
 #[derive(Debug, ByteStruct, Size)]
 pub struct EntryBlockHeader {
 	/// The time of the first log entry in the block.

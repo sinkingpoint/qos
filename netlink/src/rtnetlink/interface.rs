@@ -269,7 +269,6 @@ int_enum! {
 		MCTP = 290,
 		Ppp = 512,
 		Cisco = 513,
-		Hdlc = 513,
 		LapB = 516,
 		Ddcmp = 517,
 		RawHDLC = 518,

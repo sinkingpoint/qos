@@ -1,4 +1,3 @@
-#![feature(hash_extract_if)]
 use lzma_rs::xz_decompress;
 use std::{
 	collections::HashMap,
@@ -106,7 +105,7 @@ pub fn find_modules_to_load(
 				v.retain(|s| s != mod_name);
 			}
 		}
-		mods_to_load.extend(ok_to_start.into_iter());
+		mods_to_load.extend(ok_to_start);
 	}
 
 	Ok(mods_to_load)

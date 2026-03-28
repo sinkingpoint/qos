@@ -252,10 +252,7 @@ pub fn derive_size(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 fn get_attribute_value(name: &str, attrs: &[syn::Attribute]) -> Option<syn::Expr> {
-	let ty = match attrs.iter().find(|attr| attr.path().is_ident(name)) {
-		Some(repr) => repr,
-		None => return None,
-	};
+	let ty = attrs.iter().find(|attr| attr.path().is_ident(name))?;
 
 	Some(ty.parse_args().unwrap())
 }

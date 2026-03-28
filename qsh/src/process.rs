@@ -81,16 +81,12 @@ impl Process {
 			.map(|arg| CString::new(arg.as_str()).unwrap())
 			.collect();
 
-		if let Err(e) = execvp(&filename, &args) {
-			if e == Errno::ENOENT {
-				std::process::exit(127);
-			}
-
-			std::process::exit(e as i32);
+		let Err(e) = execvp(&filename, &args);
+		if e == Errno::ENOENT {
+			std::process::exit(127);
 		}
 
-		// We can never reach this point (because we've `exec`ed), but the compiler doesn't know that.
-		panic!("BUG: exec failed");
+		std::process::exit(e as i32);
 	}
 
 	pub fn handle_wait_status(&mut self, status: WaitStatus) {

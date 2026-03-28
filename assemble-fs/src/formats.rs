@@ -28,6 +28,6 @@ pub fn write_ext4(path: &Path, out_path: &Path) -> io::Result<()> {
 
 	match status.success() {
 		true => Ok(()),
-		false => Err(io::Error::new(io::ErrorKind::Other, "mke2fs failed")),
+		false => Err(io::Error::other("mke2fs failed")),
 	}
 }

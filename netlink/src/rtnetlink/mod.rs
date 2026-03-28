@@ -184,6 +184,7 @@ pub struct Route {
 	pub attributes: RouteAttributes,
 }
 
+#[allow(clippy::result_large_err)]
 pub trait RTNetlink {
 	// Get all the links on the system.
 	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>>;
@@ -204,6 +205,7 @@ pub trait RTNetlink {
 	fn get_route(self: &Arc<Self>) -> io::Result<Vec<Route>>;
 }
 
+#[allow(clippy::result_large_err)]
 impl RTNetlink for NetlinkSocket<NetlinkRoute> {
 	fn get_links(self: &Arc<Self>) -> io::Result<Vec<Interface>> {
 		let header = NetlinkMessageHeader::<NetlinkRoute>::new(

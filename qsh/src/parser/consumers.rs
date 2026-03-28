@@ -154,17 +154,17 @@ impl<const QUOTE: char> Consumer for EscapedStringChar<QUOTE> {
 			}))
 		} else if has_available_chars(input, start, 2) && input[start] == '\\' {
 			if input[start + 1] == QUOTE {
-				return Ok(Some(Token {
+				Ok(Some(Token {
 					literal: input[start..start + 2].iter().collect::<String>(),
 					start,
 					length: 2,
 					token: EscapedStringChar { decoded: QUOTE },
-				}));
+				}))
 			} else {
-				return Err(ParserError::new(
+				Err(ParserError::new(
 					&format!("Invalid escape sequence: \\{}", input[start + 1]),
 					start,
-				));
+				))
 			}
 		} else {
 			Ok(None)

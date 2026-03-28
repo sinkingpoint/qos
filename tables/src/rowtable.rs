@@ -83,7 +83,7 @@ impl RowTable {
 	}
 
 	pub fn num_rows(&self) -> usize {
-		(self.values.len() + self.chunk_size - 1) / self.chunk_size
+		self.values.len().div_ceil(self.chunk_size)
 	}
 
 	pub fn num_cols(&self) -> usize {

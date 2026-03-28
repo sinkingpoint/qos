@@ -136,10 +136,8 @@ fn main() {
 		&CString::new(username.trim()).expect("username contains null bytes"),
 	];
 
-	if let Err(e) = execve::<_, &CStr>(&command, &args, &[]) {
-		eprintln!("Failed to execute {}: {}", login_program, e);
-		return;
-	}
+	let Err(e) = execve::<_, &CStr>(&command, &args, &[]);
+	eprintln!("Failed to execute {}: {}", login_program, e);
 
 	unreachable!("execve failed")
 }

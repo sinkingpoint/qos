@@ -7,8 +7,10 @@ use serde::Deserialize;
 /// service to be considered "started".
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum StartMode {
 	/// The service is considered started immediately once itsbeen exec'd.
+	#[default]
 	Run,
 
 	/// The service must manually notify the control socket that it has started.
@@ -17,12 +19,6 @@ pub enum StartMode {
 	/// The service must exit sucessfully before being considered started.
 	/// This is useful for "OneShot" type services.
 	Done,
-}
-
-impl Default for StartMode {
-	fn default() -> Self {
-		Self::Run
-	}
 }
 
 /// An argument to a service.

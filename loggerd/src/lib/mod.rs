@@ -189,8 +189,7 @@ impl OpenLogFile {
 			self.file.seek(SeekFrom::Start(offset))?;
 			block.write_to(&mut self.file)?;
 		} else {
-			return Err(io::Error::new(
-				io::ErrorKind::Other,
+			return Err(io::Error::other(
 				"no last entry block, even though the header block thinks there is",
 			));
 		}
