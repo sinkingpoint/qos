@@ -4,8 +4,8 @@ use std::{
 };
 
 use escapes::{
-	ANSIEscapeSequence, CursorBack, CursorDown, CursorForward, CursorHide, CursorRestore, CursorSave, CursorShow,
-	CursorUp, EraseInLine, ESC, GREEN, REVERSE,
+	ANSIEscapeSequence, CursorBack, CursorDown, CursorForward, CursorHide, CursorShow, CursorUp, EraseInLine, ESC,
+	GREEN, REVERSE,
 };
 use tables::RowTable;
 
@@ -315,6 +315,7 @@ impl TabCompletionBuffer {
 			let _ = rows.add_value(candidate.clone());
 		}
 
+		rows.style_value(0, vec![GREEN, REVERSE]);
 		TabCompletionBuffer {
 			current_selection: 0,
 			prompt_length,
