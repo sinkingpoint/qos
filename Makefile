@@ -17,9 +17,9 @@ run: initramfs rootfs
 		-m 2G \
 		-kernel /boot/vmlinuz-$(KERNEL_RELEASE) \
 		-initrd ./target/initramfs.cpio \
-		-echr 2 \
-		-display curses \
-		-append "console=ttyS0 root=/dev/sda" \
+		-display gtk \
+		-device virtio-vga \
+		-append "root=/dev/sda" \
 		-drive format=raw,file=./target/filesystem.ext4 \
 		-netdev user,id=net0,dhcpstart=10.0.2.15 \
 		-device e1000,netdev=net0,mac=00:12:34:56:78:9b \

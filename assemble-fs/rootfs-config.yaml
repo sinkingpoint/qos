@@ -31,5 +31,7 @@ files:
   /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 modules:
   - kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz
+  - kernel/drivers/virtio/virtio_dma_buf.ko.xz
+  - kernel/drivers/gpu/drm/virtio/virtio-gpu.ko.xz
   - config
 output_file: ./target/filesystem.ext4
