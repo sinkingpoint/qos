@@ -939,6 +939,7 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-json",
+ "tables",
  "thiserror",
 ]
 
@@ -1215,6 +1216,7 @@ dependencies = [
 name = "tables"
 version = "0.1.0"
 dependencies = [
+ "escapes",
  "thiserror",
 ]
 

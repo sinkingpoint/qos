@@ -3,7 +3,11 @@ use std::{
 	io::{self, Read, Write},
 };
 
-use escapes::{ANSIEscapeSequence, CursorBack, CursorForward, EraseInLine, ESC};
+use escapes::{
+	ANSIEscapeSequence, CursorBack, CursorDown, CursorForward, CursorHide, CursorRestore, CursorSave, CursorShow,
+	CursorUp, EraseInLine, ESC, GREEN, REVERSE,
+};
+use tables::RowTable;
 
 // The ASCII character for DEL.
 const DELETE_CHAR: char = '\u{7f}';
@@ -20,6 +24,9 @@ pub struct Buffer<R: Read, W: Write> {
 
 	history: Vec<String>,
 	history_position: usize,
+
+	prompt_length: usize,
+	current_tab_completion: Option<TabCompletionBuffer>,
 }
 
 impl<R: Read, W: Write> Buffer<R, W> {
@@ -31,7 +38,48 @@ impl<R: Read, W: Write> Buffer<R, W> {
 			writer,
 			history: Vec::new(),
 			history_position: 0,
+			prompt_length: 0,
+			current_tab_completion: None,
 		}
+	}
+
+	/// Read a line from the buffer.
+	pub fn read(&mut self, prompt: &str) -> io::Result<String> {
+		self.prompt_length = prompt.len();
+		write!(self.writer, "\r\n{}", prompt).expect("Failed to write to stdout");
+		loop {
+			let c = self.read_char()?;
+			if c == '\n' {
+				if let Some(cmd) = self.handle_newline() {
+					return Ok(cmd);
+				}
+			} else if c == DELETE_CHAR {
+				self.backspace();
+			} else if c == ESC {
+				self.handle_escape_sequence()?;
+			} else if c == '\t' {
+				self.handle_tab_completion();
+			} else {
+				self.push_char(c);
+			}
+		}
+	}
+
+	fn handle_newline(&mut self) -> Option<String> {
+		if let Some(tab_completion) = &mut self.current_tab_completion {
+			let selected_value = tab_completion.rows.value(tab_completion.current_selection)?.clone();
+			tab_completion
+				.wipe(&mut self.writer)
+				.expect("Failed to wipe tab completion buffer");
+			write!(self.writer, "{}", CursorShow).expect("Failed to write to stdout");
+			self.auto_complete_to(&selected_value);
+			self.current_tab_completion = None;
+			return None;
+		}
+
+		writeln!(self.writer).expect("Failed to write to stdout");
+		self.push_history(self.buffer.clone());
+		Some(self.flush())
 	}
 
 	// Add a line to the history buffer, so that it can be navigated with the up and down arrow keys.
@@ -64,6 +112,14 @@ impl<R: Read, W: Write> Buffer<R, W> {
 	}
 
 	fn handle_tab_completion(&mut self) {
+		if let Some(tab_completion) = &mut self.current_tab_completion {
+			tab_completion.move_selection_down();
+			tab_completion
+				.render(&mut self.writer)
+				.expect("Failed to render tab completion buffer");
+			return;
+		}
+
 		let candidates = self.tab_completion_candidates();
 		match candidates.len() {
 			0 => (), // No candidates to return
@@ -75,28 +131,17 @@ impl<R: Read, W: Write> Buffer<R, W> {
 				if let Some(prefix) = common_prefix(&candidates) {
 					// They all have a common prefix, so just complete that
 					self.auto_complete_to(&prefix);
+					return;
 				}
-			}
-		}
-	}
 
-	/// Read a line from the buffer.
-	pub fn read(&mut self, prompt: &str) -> io::Result<String> {
-		write!(self.writer, "{}", prompt).expect("Failed to write to stdout");
-		loop {
-			let c = self.read_char()?;
-			if c == '\n' {
-				writeln!(self.writer).expect("Failed to write to stdout");
-				self.push_history(self.buffer.clone());
-				return Ok(self.flush());
-			} else if c == DELETE_CHAR {
-				self.backspace();
-			} else if c == ESC {
-				self.handle_escape_sequence()?;
-			} else if c == '\t' {
-				self.handle_tab_completion();
-			} else {
-				self.push_char(c);
+				// Hide the cursor while the tab completion buffer is open, to avoid it being rendered in the middle of the buffer and looking weird.
+				write!(self.writer, "{}", CursorHide).expect("Failed to write to stdout");
+				self.current_tab_completion = Some(TabCompletionBuffer::new(candidates, self.prompt_length));
+				self.current_tab_completion
+					.as_ref()
+					.unwrap()
+					.render(&mut self.writer)
+					.expect("Failed to render tab completion buffer");
 			}
 		}
 	}
@@ -125,6 +170,22 @@ impl<R: Read, W: Write> Buffer<R, W> {
 				format!("Failed to parse ANSI escape sequence: {}", e),
 			)
 		})?;
+
+		// If we are currently showing a tab completion buffer, we want to handle the escape sequence in that buffer instead of the main input buffer.
+		if let Some(tab_completion) = &mut self.current_tab_completion {
+			match escape {
+				ANSIEscapeSequence::CursorUp(_) => tab_completion.move_selection_up(),
+				ANSIEscapeSequence::CursorDown(_) => tab_completion.move_selection_down(),
+				ANSIEscapeSequence::CursorForward(_) => tab_completion.move_selection_right(),
+				ANSIEscapeSequence::CursorBack(_) => tab_completion.move_selection_left(),
+				_ => (),
+			}
+
+			tab_completion
+				.render(&mut self.writer)
+				.expect("Failed to render tab completion buffer");
+			return Ok(());
+		}
 
 		match escape {
 			ANSIEscapeSequence::CursorForward(amt) => self.move_cursor(amt.0 as isize),
@@ -238,4 +299,83 @@ fn common_prefix(strs: &[String]) -> Option<String> {
 	}
 
 	Some(substr)
+}
+
+struct TabCompletionBuffer {
+	current_selection: usize,
+	prompt_length: usize,
+
+	rows: RowTable,
+}
+
+impl TabCompletionBuffer {
+	fn new(candidates: Vec<String>, prompt_length: usize) -> Self {
+		let mut rows = RowTable::new(211);
+		for candidate in &candidates {
+			let _ = rows.add_value(candidate.clone());
+		}
+
+		TabCompletionBuffer {
+			current_selection: 0,
+			prompt_length,
+			rows,
+		}
+	}
+
+	fn move_selection(&mut self, new_selection: usize) {
+		if new_selection >= self.rows.num_values() {
+			return;
+		}
+
+		self.rows.reset_value_style(self.current_selection);
+		self.current_selection = new_selection;
+		self.rows.style_value(self.current_selection, vec![GREEN, REVERSE]);
+	}
+
+	fn move_selection_left(&mut self) {
+		if self.current_selection > 0 {
+			self.move_selection(self.current_selection - 1);
+		}
+	}
+
+	fn move_selection_right(&mut self) {
+		if self.current_selection < self.rows.num_values() - 1 {
+			self.move_selection(self.current_selection + 1);
+		}
+	}
+
+	fn move_selection_up(&mut self) {
+		if self.current_selection >= self.rows.num_cols() {
+			self.move_selection(self.current_selection - self.rows.num_cols());
+		} else {
+			self.move_selection(self.current_selection % self.rows.num_cols() - 1);
+		}
+	}
+
+	fn move_selection_down(&mut self) {
+		if self.current_selection + self.rows.num_cols() < self.rows.num_values() {
+			self.move_selection(self.current_selection + self.rows.num_cols());
+		} else {
+			self.move_selection(self.current_selection % self.rows.num_cols() + 1);
+		}
+	}
+
+	fn render(&self, writer: &mut impl Write) -> io::Result<()> {
+		write!(writer, "\n{}{}", self.rows, CursorUp(self.rows.num_rows() as u8 + 1))?;
+		Ok(())
+	}
+
+	fn wipe(&self, writer: &mut impl Write) -> io::Result<()> {
+		write!(writer, "{}", CursorDown(1))?;
+		for _ in 0..self.rows.num_rows() {
+			write!(writer, "{}{}", EraseInLine(0), CursorDown(1))?;
+		}
+		write!(
+			writer,
+			"{}\r{}",
+			CursorUp(self.rows.num_rows() as u8 + 1),
+			CursorForward(self.prompt_length as u8)
+		)?;
+		Ok(())
+	}
 }
