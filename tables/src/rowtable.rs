@@ -1,5 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
+use escapes::{Color, RESET};
+
 use crate::TableError;
 
 /// RowTable is a table that prints values in aligned rows,
@@ -8,7 +10,7 @@ use crate::TableError;
 /// README.md src/ rowtable.rs
 /// foo       bar  baz
 pub struct RowTable {
-	values: Vec<String>,
+	values: Vec<(String, Option<Vec<Color>>)>,
 
 	/// The maximum width (in characters) of the table.
 	max_width: usize,
@@ -30,7 +32,7 @@ impl RowTable {
 	fn max_column_widths_with_chunk_size(&self, chunk_size: usize) -> Vec<usize> {
 		let mut max_column_widths = vec![0; chunk_size];
 		for chunk in self.values.chunks(chunk_size) {
-			for (i, value) in chunk.iter().enumerate() {
+			for (i, (value, _)) in chunk.iter().enumerate() {
 				max_column_widths[i] = max_column_widths[i].max(value.len());
 			}
 		}
@@ -58,9 +60,26 @@ impl RowTable {
 			return Err(TableError::ValueTooWide(self.max_width, value.len()));
 		}
 
-		self.values.push(value);
+		self.values.push((value, None));
 		self.chunk_size = self.find_new_chunk_size();
 		Ok(())
+	}
+
+	// Style a value in the table with the given ANSI escape sequences.
+	pub fn style_value(&mut self, index: usize, escapes: Vec<Color>) {
+		if index >= self.values.len() {
+			return;
+		}
+
+		self.values[index].1 = Some(escapes);
+	}
+
+	// Reset the style of a value in the table.
+	pub fn reset_value_style(&mut self, index: usize) {
+		if index >= self.values.len() {
+			return;
+		}
+		self.values[index].1 = None;
 	}
 
 	pub fn num_rows(&self) -> usize {
@@ -69,6 +88,14 @@ impl RowTable {
 
 	pub fn num_cols(&self) -> usize {
 		self.chunk_size
+	}
+
+	pub fn num_values(&self) -> usize {
+		self.values.len()
+	}
+
+	pub fn value(&self, index: usize) -> Option<&String> {
+		self.values.get(index).map(|(value, _)| value)
 	}
 }
 
@@ -80,8 +107,20 @@ impl Display for RowTable {
 
 		let max_column_widths = self.max_column_widths_with_chunk_size(self.chunk_size);
 		for chunks in self.values.chunks(self.chunk_size) {
-			for (i, chunk) in chunks.iter().enumerate() {
-				write!(f, "{:width$}", chunk, width = max_column_widths[i])?;
+			for (i, (value, escapes)) in chunks.iter().enumerate() {
+				let escapes_str = if let Some(escapes) = escapes {
+					escapes.iter().map(|e| e.to_string()).collect::<String>()
+				} else {
+					String::new()
+				};
+				write!(
+					f,
+					"{}{:width$}{}",
+					escapes_str,
+					value,
+					RESET,
+					width = max_column_widths[i]
+				)?;
 				if i != chunks.len() - 1 {
 					write!(f, " ")?;
 				}
