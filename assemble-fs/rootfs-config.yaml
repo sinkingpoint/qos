@@ -20,6 +20,7 @@ secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/modprobe
   - ./target/x86_64-unknown-linux-musl/debug/netd
   - ./target/x86_64-unknown-linux-musl/debug/dnsd
+  - ./target/x86_64-unknown-linux-musl/debug/compositor
 files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
