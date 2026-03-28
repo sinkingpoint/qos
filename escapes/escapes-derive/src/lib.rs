@@ -5,13 +5,14 @@ use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Lit};
 
 /// Generates a struct that implements the `EscapeSequence` trait and a `Display` implementation for it.
-#[proc_macro_derive(EscapeSequence, attributes(default, escape))]
+#[proc_macro_derive(EscapeSequence, attributes(default, escape, modifier))]
 pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
 	let input = parse_macro_input!(input as DeriveInput);
 
 	let name = input.ident;
 	let num_args;
 	let escape;
+	let mut modifier = None;
 	let mut idxs = vec![];
 	let mut defaults: Vec<u8> = vec![];
 
@@ -24,6 +25,19 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
 	} else {
 		panic!("Missing escape attribute");
 	}
+
+	if let Some(attr) = input.attrs.iter().find(|attr| attr.path().is_ident("modifier")) {
+		if let Lit::Str(c) = attr.parse_args().unwrap() {
+			modifier = Some(c.value());
+		} else {
+			panic!("Modifier attribute must be a str");
+		}
+	}
+
+	let modifier_token = match modifier {
+		Some(c) => quote! { #c },
+		None => quote! { "" },
+	};
 
 	if let Data::Struct(data) = &input.data {
 		num_args = data.fields.len();
@@ -48,32 +62,47 @@ pub fn derive_escape_sequence(input: TokenStream) -> TokenStream {
 		panic!("Only structs are supported");
 	}
 
-	let joined = if num_args > 1 {
-		quote! { [#(self.#idxs),*].map(|i| format!("{}", i)).join(";") }
+	let joined = match num_args {
+		0 => quote! { String::new() },
+		1 => quote! { format!("{}", self.0) },
+		_ => quote! { [#(self.#idxs),*].map(|i| format!("{}", i)).join(";") },
+	};
+
+	let parse_impl = if num_args == 0 {
+		quote! {
+			return Ok(Self);
+		}
+	} else if defaults.is_empty() {
+		quote! {
+			if params.len() != #num_args {
+				return Err(AnsiParserError::NumParams(#num_args, params.len()));
+			} else {
+				return Ok(Self(#(params[#idxs]),*));
+			}
+		}
 	} else {
-		quote! { format!("{}", self.0) }
+		quote! {
+			if params.len() != #num_args && params.len() != 0 {
+				return Err(AnsiParserError::NumParams(#num_args, params.len()));
+			} else if params.len() == 0 {
+				return Ok(Self(#(#defaults),*));
+			} else {
+				return Ok(Self(#(params[#idxs]),*));
+			}
+		}
 	};
 
 	let gen = quote! {
 		impl EscapeSequence for #name {
 			fn parse(params: &[u8]) -> Result<Self, AnsiParserError> {
-				let defaults: &[u8] = &[#(#defaults),*];
-				if params.len() != #num_args && defaults.len() == 0 {
-					return Err(AnsiParserError::NumParams(#num_args, 0));
-				} else if params.len() == 0 {
-					return Ok(Self(#(#defaults),*));
-				} else if params.len() != #num_args {
-					return Err(AnsiParserError::NumParams(#num_args, params.len()));
-				} else {
-					return Ok(Self(#(params[#idxs]),*));
-				}
+				#parse_impl
 			}
 		}
 
 		impl std::fmt::Display for #name {
 			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 				let joined = #joined;
-				write!(f, "{}{}{}{}", ESC, CSI, joined, #escape)
+				write!(f, "{}{}{}{}{}", ESC, CSI, #modifier_token, joined, #escape)
 			}
 		}
 	};

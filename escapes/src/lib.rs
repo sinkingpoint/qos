@@ -10,6 +10,36 @@ pub const ESC: char = '\x1b';
 /// The CSI (Control Sequence Introducer) character.
 pub const CSI: char = '[';
 
+// Styles
+pub const RESET: Color = Color(0);
+pub const BOLD: Color = Color(1);
+pub const DIM: Color = Color(2);
+pub const ITALIC: Color = Color(3);
+pub const UNDERLINE: Color = Color(4);
+pub const BLINK: Color = Color(5);
+pub const REVERSE: Color = Color(7);
+pub const HIDDEN: Color = Color(8);
+pub const STRIKETHROUGH: Color = Color(9);
+pub const DOUBLE_UNDERLINE: Color = Color(21);
+pub const NO_BOLD: Color = Color(22);
+pub const NO_DIM: Color = Color(22);
+pub const NO_ITALIC: Color = Color(23);
+pub const NO_UNDERLINE: Color = Color(24);
+pub const NO_BLINK: Color = Color(25);
+pub const NO_REVERSE: Color = Color(27);
+pub const NO_HIDDEN: Color = Color(28);
+pub const NO_STRIKETHROUGH: Color = Color(29);
+
+// Regular ANSI colors.
+pub const BLACK: Color = Color(30);
+pub const RED: Color = Color(31);
+pub const GREEN: Color = Color(32);
+pub const YELLOW: Color = Color(33);
+pub const BLUE: Color = Color(34);
+pub const MAGENTA: Color = Color(35);
+pub const CYAN: Color = Color(36);
+pub const WHITE: Color = Color(37);
+
 /// The error that can occur when parsing ANSI escape sequences.
 #[derive(Error, Debug)]
 pub enum AnsiParserError {
@@ -65,6 +95,32 @@ pub struct EraseInDisplay(#[default(0)] pub u8);
 #[escape('K')]
 pub struct EraseInLine(#[default(0)] pub u8);
 
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('m')]
+pub struct Color(#[default(37)] pub u8);
+
+/// Save the current cursor position.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('s')]
+pub struct CursorSave;
+
+/// Restore the previously saved cursor position.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('u')]
+pub struct CursorRestore;
+
+/// Hide the cursor.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('l')]
+#[modifier("?25")]
+pub struct CursorHide;
+
+/// Show the cursor.
+#[derive(Debug, PartialEq, EscapeSequence)]
+#[escape('h')]
+#[modifier("?25")]
+pub struct CursorShow;
+
 #[derive(Debug, PartialEq)]
 pub enum ANSIEscapeSequence {
 	CursorUp(CursorUp),
@@ -74,6 +130,9 @@ pub enum ANSIEscapeSequence {
 	EraseInLine(EraseInLine),
 	EraseInDisplay(EraseInDisplay),
 	CursorPosition(CursorPosition),
+	Color(Color),
+	CursorSave(CursorSave),
+	CursorRestore(CursorRestore),
 }
 
 impl ANSIEscapeSequence {
@@ -86,6 +145,9 @@ impl ANSIEscapeSequence {
 			'H' => Ok(ANSIEscapeSequence::CursorPosition(CursorPosition::parse(params)?)),
 			'J' => Ok(ANSIEscapeSequence::EraseInDisplay(EraseInDisplay::parse(params)?)),
 			'K' => Ok(ANSIEscapeSequence::EraseInLine(EraseInLine::parse(params)?)),
+			'm' => Ok(ANSIEscapeSequence::Color(Color::parse(params)?)),
+			's' => Ok(ANSIEscapeSequence::CursorSave(CursorSave::parse(params)?)),
+			'u' => Ok(ANSIEscapeSequence::CursorRestore(CursorRestore::parse(params)?)),
 			_ => Err(AnsiParserError::Unsupported(c)),
 		}
 	}
@@ -144,6 +206,9 @@ impl Display for ANSIEscapeSequence {
 			ANSIEscapeSequence::EraseInLine(c) => write!(f, "{}", c),
 			ANSIEscapeSequence::EraseInDisplay(c) => write!(f, "{}", c),
 			ANSIEscapeSequence::CursorPosition(c) => write!(f, "{}", c),
+			ANSIEscapeSequence::Color(c) => write!(f, "{}", c),
+			ANSIEscapeSequence::CursorSave(c) => write!(f, "{}", c),
+			ANSIEscapeSequence::CursorRestore(c) => write!(f, "{}", c),
 		}
 	}
 }
@@ -251,6 +316,26 @@ mod test {
 		assert_eq!(
 			ANSIEscapeSequence::read(&mut "[2K".as_bytes()).unwrap(),
 			ANSIEscapeSequence::EraseInLine(EraseInLine(2))
+		);
+	}
+
+	#[test]
+	fn test_cursor_save() {
+		assert_eq!(CursorSave.to_string(), "\x1b[s");
+		assert_eq!(ANSIEscapeSequence::CursorSave(CursorSave).to_string(), "\x1b[s");
+		assert_eq!(
+			ANSIEscapeSequence::read(&mut "[s".as_bytes()).unwrap(),
+			ANSIEscapeSequence::CursorSave(CursorSave)
+		);
+	}
+
+	#[test]
+	fn test_cursor_restore() {
+		assert_eq!(CursorRestore.to_string(), "\x1b[u");
+		assert_eq!(ANSIEscapeSequence::CursorRestore(CursorRestore).to_string(), "\x1b[u");
+		assert_eq!(
+			ANSIEscapeSequence::read(&mut "[u".as_bytes()).unwrap(),
+			ANSIEscapeSequence::CursorRestore(CursorRestore)
 		);
 	}
 }
