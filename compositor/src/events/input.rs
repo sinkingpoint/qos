@@ -1,12 +1,16 @@
 use std::{
 	fs::File,
 	io::{self, Read},
+	os::fd::AsRawFd,
 };
 
 use bytestruct::{ReadFromWithEndian, int_enum};
 use bytestruct_derive::ByteStruct;
+use nix::ioctl_write_int;
 
 use super::event_threads::EventSource;
+
+ioctl_write_int!(eviocgrab, b'E', 0x90);
 
 pub struct InputWatcher {
 	devices: Vec<File>,
@@ -41,12 +45,21 @@ impl InputWatcher {
 			let entry = entry?;
 			if entry.file_name().to_string_lossy().starts_with("event") {
 				let fd = std::fs::OpenOptions::new().read(true).open(entry.path())?;
+				unsafe { eviocgrab(fd.as_raw_fd(), 1) }?;
 
 				devices.push(fd);
 			}
 		}
 
 		Ok(Self { devices })
+	}
+}
+
+impl Drop for InputWatcher {
+	fn drop(&mut self) {
+		for device in &self.devices {
+			let _ = unsafe { eviocgrab(device.as_raw_fd(), 0) };
+		}
 	}
 }
 

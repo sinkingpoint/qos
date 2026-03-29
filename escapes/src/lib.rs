@@ -43,8 +43,8 @@ pub const WHITE: Color = Color(37);
 /// The error that can occur when parsing ANSI escape sequences.
 #[derive(Error, Debug)]
 pub enum AnsiParserError {
-	#[error("Unsupported ANSI escape sequence")]
-	Malformed,
+	#[error("Malformed ANSI escape sequence. Expected format: ESC [ parameters letter, found: {0}")]
+	Malformed(u8),
 
 	#[error("Expected {0} parameters but found {1}")]
 	NumParams(usize, usize),
@@ -159,7 +159,7 @@ impl ANSIEscapeSequence {
 
 		// All the escape sequences we care about start with CSI ('[').
 		if char_buffer[0] != CSI as u8 {
-			return Err(AnsiParserError::Malformed);
+			return Err(AnsiParserError::Malformed(char_buffer[0]));
 		}
 
 		// Parse the parameters.
