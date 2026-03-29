@@ -5,7 +5,6 @@ use crate::drm::ioctls::{drm_mode_get_connector, drm_mode_get_resources};
 mod cstructs;
 mod ioctls;
 use bitflags::bitflags;
-pub use ioctls::*;
 
 pub fn set_master(fd: impl AsFd) -> nix::Result<()> {
 	unsafe {
@@ -249,7 +248,7 @@ pub fn get_encoder(fd: impl AsFd, encoder_id: u32) -> nix::Result<EncoderInfo> {
 		..Default::default()
 	};
 
-	unsafe { drm_mode_get_encoder(fd.as_fd().as_raw_fd(), &mut res) }?;
+	unsafe { ioctls::drm_mode_get_encoder(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(EncoderInfo::from_cstruct(res))
 }
@@ -269,7 +268,7 @@ impl DumbBuffer {
 			..Default::default()
 		};
 
-		unsafe { drm_mode_create_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
+		unsafe { ioctls::drm_mode_create_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 		Ok(Self {
 			handle: res.handle,
@@ -286,7 +285,7 @@ pub fn map_dumb_buffer(fd: impl AsFd, buffer: &DumbBuffer) -> nix::Result<u64> {
 		..Default::default()
 	};
 
-	unsafe { drm_mode_map_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
+	unsafe { ioctls::drm_mode_map_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(res.offset)
 }
@@ -311,7 +310,7 @@ pub fn add_framebuffer(
 		fb_id: 0,
 	};
 
-	unsafe { drm_mode_add_fb(fd.as_fd().as_raw_fd(), &mut res) }?;
+	unsafe { ioctls::drm_mode_add_fb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(res.fb_id)
 }
@@ -346,7 +345,7 @@ pub fn set_crtc(fd: impl AsFd, crtc_id: u32, fb_id: u32, connectors: &[u32], mod
 		},
 	};
 
-	unsafe { drm_mode_set_crtc(fd.as_fd().as_raw_fd(), &mut res) }?;
+	unsafe { ioctls::drm_mode_set_crtc(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(())
 }
@@ -367,7 +366,7 @@ pub fn page_flip(fd: impl AsFd, crtc_id: u32, fd_id: u32, request_event: bool) -
 		..Default::default()
 	};
 
-	unsafe { drm_mode_page_flip(fd.as_fd().as_raw_fd(), &mut res) }?;
+	unsafe { ioctls::drm_mode_page_flip(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(())
 }

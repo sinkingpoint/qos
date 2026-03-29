@@ -1,18 +1,10 @@
-use std::{
-	num::NonZeroUsize,
-	os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd},
-};
+use std::{num::NonZeroUsize, os::fd::AsFd};
 
-use nix::{
-	fcntl::{OFlag, open},
-	libc::STDIN_FILENO,
-	sys::stat::Mode,
-};
 use thiserror::Error;
 
 use crate::drm::{
-	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drm_set_master, drop_master, get_drm_connector,
-	get_encoder, map_dumb_buffer, page_flip, set_crtc, set_master,
+	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector, get_encoder,
+	map_dumb_buffer, page_flip, set_crtc, set_master,
 };
 
 mod drm;
