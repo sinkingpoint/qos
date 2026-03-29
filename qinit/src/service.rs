@@ -444,7 +444,7 @@ impl ServiceManager {
 	pub async fn reaper(&self) {
 		self.new_service_notify.notified().await;
 		loop {
-			let pid = WaitFuture::new(Pid::from_raw(-1), WaitPidFlag::WNOHANG | WaitPidFlag::__WALL).await;
+			let pid = WaitFuture::new(Pid::from_raw(-1), WaitPidFlag::__WALL).await;
 			match pid {
 				Ok(status) => self.set_process_status(status).await,
 				Err(Errno::ECHILD) => self.new_service_notify.notified().await,
