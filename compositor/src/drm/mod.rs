@@ -5,7 +5,7 @@ use crate::drm::ioctls::{drm_mode_get_connector, drm_mode_get_resources};
 mod cstructs;
 mod ioctls;
 use bitflags::bitflags;
-use bytestruct::{LengthPrefixedVec, int_enum};
+use bytestruct::int_enum;
 use bytestruct_derive::ByteStruct;
 
 pub fn set_master(fd: impl AsFd) -> nix::Result<()> {
@@ -382,8 +382,8 @@ int_enum! {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
+#[derive(Debug, Clone)]
 pub struct DrmEvent {
 	pub event_type: DrmEventType,
-	pub data: LengthPrefixedVec<u8, u32>,
+	pub data: Vec<u8>,
 }

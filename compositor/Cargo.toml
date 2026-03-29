@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nix = { workspace = true, features = ["mman", "poll"] }
+nix = { workspace = true, features = ["mman", "poll", "event"] }
 bitflags = { workspace = true }
 thiserror = { workspace = true }
 bytestruct = { path = "../bytestruct" }
