@@ -270,6 +270,7 @@ impl DumbBuffer {
 	}
 }
 
+// Maps the given dumb buffer and returns the offset that can be used with mmap to access the buffer's pixels.
 pub fn map_dumb_buffer(fd: i32, buffer: &DumbBuffer) -> nix::Result<u64> {
 	let mut res = cstructs::DrmModeMapDumb {
 		handle: buffer.handle,
@@ -281,6 +282,7 @@ pub fn map_dumb_buffer(fd: i32, buffer: &DumbBuffer) -> nix::Result<u64> {
 	Ok(res.offset)
 }
 
+// Adds a framebuffer for the given dumb buffer and returns the framebuffer ID.
 pub fn add_framebuffer(
 	fd: i32,
 	width: u32,
@@ -305,6 +307,7 @@ pub fn add_framebuffer(
 	Ok(res.fb_id)
 }
 
+// Sets the CRTC to display the given framebuffer on the specified connectors with the given mode.
 pub fn set_crtc(fd: i32, crtc_id: u32, fb_id: u32, connectors: &[u32], mode: &DrmModeInfo) -> nix::Result<()> {
 	let mut res = cstructs::DrmModeSetCrtc {
 		crtc_id,
@@ -336,5 +339,12 @@ pub fn set_crtc(fd: i32, crtc_id: u32, fb_id: u32, connectors: &[u32], mode: &Dr
 
 	unsafe { drm_mode_set_crtc(fd, &mut res) }?;
 
+	Ok(())
+}
+
+pub fn drop_master(fd: i32) -> nix::Result<()> {
+	unsafe {
+		ioctls::drm_drop_master(fd)?;
+	}
 	Ok(())
 }

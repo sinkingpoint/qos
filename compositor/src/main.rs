@@ -7,8 +7,8 @@ use nix::{
 use thiserror::Error;
 
 use crate::drm::{
-	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drm_set_master, get_drm_connector, get_encoder,
-	map_dumb_buffer, set_crtc,
+	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drm_set_master, drop_master, get_drm_connector,
+	get_encoder, map_dumb_buffer, set_crtc,
 };
 
 mod drm;
@@ -99,7 +99,7 @@ fn main() {
 	let mut input = String::new();
 	std::io::stdin().read_line(&mut input).ok();
 
-	unsafe { drm::drm_drop_master(card0_fd) }.ok();
+	drop_master(card0_fd).unwrap();
 }
 
 fn find_drm_card() -> Option<String> {
@@ -125,6 +125,7 @@ struct VideoBuffer {
 	pitch: u32, // row stride in pixels (pitch_bytes / 4)
 
 	framebuffer_id: u32,
+	buffer_size: usize,
 }
 
 impl VideoBuffer {
@@ -159,16 +160,18 @@ impl VideoBuffer {
 			height,
 			dumb_buffer.pitch / 4,
 			fb_id,
+			dumb_buffer.size as usize,
 		))
 	}
 
-	pub fn new(pixels: *mut u32, width: u32, height: u32, pitch: u32, framebuffer_id: u32) -> Self {
+	pub fn new(pixels: *mut u32, width: u32, height: u32, pitch: u32, framebuffer_id: u32, buffer_size: usize) -> Self {
 		Self {
 			pixels,
 			width,
 			height,
 			pitch,
 			framebuffer_id,
+			buffer_size,
 		}
 	}
 
@@ -189,6 +192,14 @@ impl VideoBuffer {
 					*self.pixels.add(idx) = color;
 				}
 			}
+		}
+	}
+}
+
+impl Drop for VideoBuffer {
+	fn drop(&mut self) {
+		unsafe {
+			nix::sys::mman::munmap(self.pixels as *mut _, self.buffer_size).ok();
 		}
 	}
 }
