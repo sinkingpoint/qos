@@ -1,10 +1,15 @@
-use std::{num::NonZeroUsize, os::fd::AsFd};
+use std::{
+	io::Cursor,
+	num::NonZeroUsize,
+	os::fd::{AsFd, AsRawFd},
+};
 
+use bytestruct::ReadFromWithEndian;
 use thiserror::Error;
 
 use crate::drm::{
-	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector, get_encoder,
-	map_dumb_buffer, page_flip, set_crtc, set_master,
+	DrmConnection, DrmEvent, DrmEventType, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master,
+	get_drm_connector, get_encoder, map_dumb_buffer, page_flip, set_crtc, set_master,
 };
 
 mod drm;
@@ -70,9 +75,14 @@ fn main() {
 			return;
 		}
 	};
-	video_buffer.clear(0x000000FF); // Clear to blue
-	video_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
-	video_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
+
+	let mut video_buffer2 = match VideoBuffer::create(&card0_fd, mode.hdisplay as u32, mode.vdisplay as u32, 32, 24) {
+		Ok(buf) => buf,
+		Err(err) => {
+			eprintln!("Failed to create second video buffer: {:?}", err);
+			return;
+		}
+	};
 
 	let encoder = match get_encoder(&card0_fd, connector.encoder_id) {
 		Ok(enc) => enc,
@@ -91,11 +101,94 @@ fn main() {
 	)
 	.unwrap();
 
-	// Wait for Enter, then clean up
-	let mut input = String::new();
-	std::io::stdin().read_line(&mut input).ok();
+	let mut active_buffer = &mut video_buffer;
+	let mut inactive_buffer = &mut video_buffer2;
+
+	if let Err(err) = active_buffer.flip_to(&card0_fd, encoder.crtc_id) {
+		eprintln!("Failed to flip to initial buffer: {}", err);
+		return;
+	}
+
+	// Event loop to keep the program running and handle page flip events
+	loop {
+		let card0_fd = card0_fd.as_fd();
+		let stdin = std::io::stdin();
+		let stdin_fd = stdin.as_fd();
+		let mut fds = [
+			nix::poll::PollFd::new(&card0_fd, nix::poll::PollFlags::POLLIN),
+			nix::poll::PollFd::new(&stdin_fd, nix::poll::PollFlags::POLLIN),
+		];
+
+		if let Err(err) = nix::poll::poll(&mut fds, 10) {
+			eprintln!("Failed to poll fds: {}", err);
+			continue;
+		}
+
+		inactive_buffer.clear(0x000000FF); // Clear to blue
+		inactive_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
+		inactive_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
+
+		if fds[0]
+			.revents()
+			.unwrap_or(nix::poll::PollFlags::empty())
+			.contains(nix::poll::PollFlags::POLLIN)
+		{
+			let events = match process_events(card0_fd) {
+				Ok(events) => events,
+				Err(err) => {
+					eprintln!("Failed to process DRM events: {}", err);
+					continue;
+				}
+			};
+
+			if events
+				.iter()
+				.any(|event| event.event_type == DrmEventType::FlipComplete)
+			{
+				match inactive_buffer.flip_to(card0_fd, encoder.crtc_id) {
+					Ok(_) => std::mem::swap(&mut active_buffer, &mut inactive_buffer),
+					Err(err) => eprintln!("Failed to flip buffer: {}", err),
+				}
+			}
+		}
+
+		if fds[1]
+			.revents()
+			.unwrap_or(nix::poll::PollFlags::empty())
+			.contains(nix::poll::PollFlags::POLLIN)
+		{
+			println!("Input received, exiting...");
+			break;
+		}
+	}
 
 	drop_master(&card0_fd).unwrap();
+}
+
+// Process DRM events by reading from the DRM file descriptor and parsing the events into DrmEvent structs.
+fn process_events(fd: impl AsFd) -> nix::Result<Vec<DrmEvent>> {
+	let mut buff = [0u8; 4096];
+	let bytes_read = match nix::unistd::read(fd.as_fd().as_raw_fd(), &mut buff) {
+		Ok(bytes_read) => bytes_read,
+		Err(err) => {
+			eprintln!("Failed to read event from DRM: {}", err);
+			return Err(err);
+		}
+	};
+	let mut cursor = Cursor::new(&buff);
+	let mut events = Vec::new();
+	while (cursor.position() as usize) < bytes_read {
+		let event = match DrmEvent::read_from_with_endian(&mut cursor, bytestruct::Endian::Little) {
+			Ok(event) => event,
+			Err(err) => {
+				eprintln!("Failed to read DRM event: {}", err);
+				break;
+			}
+		};
+		events.push(event);
+	}
+
+	Ok(events)
 }
 
 fn find_drm_card() -> Option<String> {
@@ -142,7 +235,7 @@ impl VideoBuffer {
 		let pixels = unsafe {
 			nix::sys::mman::mmap(
 				None,
-				NonZeroUsize::new(dumb_buffer.size as usize).unwrap(),
+				NonZeroUsize::new(dumb_buffer.size as usize).expect("dumb buffer returned size of 0"),
 				nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
 				nix::sys::mman::MapFlags::MAP_SHARED,
 				Some(fdfd),

@@ -296,6 +296,8 @@ name = "compositor"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "bytestruct",
+ "bytestruct-derive",
  "nix",
  "thiserror",
 ]

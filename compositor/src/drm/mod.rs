@@ -5,6 +5,8 @@ use crate::drm::ioctls::{drm_mode_get_connector, drm_mode_get_resources};
 mod cstructs;
 mod ioctls;
 use bitflags::bitflags;
+use bytestruct::{LengthPrefixedVec, int_enum};
+use bytestruct_derive::ByteStruct;
 
 pub fn set_master(fd: impl AsFd) -> nix::Result<()> {
 	unsafe {
@@ -369,4 +371,19 @@ pub fn page_flip(fd: impl AsFd, crtc_id: u32, fd_id: u32, request_event: bool) -
 	unsafe { ioctls::drm_mode_page_flip(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(())
+}
+
+int_enum! {
+	#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+	pub enum DrmEventType: u32 {
+		VBlank = 0x01,
+		FlipComplete = 0x02,
+		Sequence = 0x03,
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct DrmEvent {
+	pub event_type: DrmEventType,
+	pub data: LengthPrefixedVec<u8, u32>,
 }

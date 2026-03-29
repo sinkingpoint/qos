@@ -7,3 +7,5 @@ edition = "2024"
 nix = { workspace = true, features = ["mman", "poll"] }
 bitflags = { workspace = true }
 thiserror = { workspace = true }
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
