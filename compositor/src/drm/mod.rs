@@ -1,9 +1,18 @@
+use std::os::fd::{AsFd, AsRawFd};
+
 use crate::drm::ioctls::{drm_mode_get_connector, drm_mode_get_resources};
 
 mod cstructs;
 mod ioctls;
 use bitflags::bitflags;
 pub use ioctls::*;
+
+pub fn set_master(fd: impl AsFd) -> nix::Result<()> {
+	unsafe {
+		ioctls::drm_set_master(fd.as_fd().as_raw_fd())?;
+	}
+	Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct DrmModeResources {
@@ -36,9 +45,9 @@ impl DrmModeResources {
 // Gets the DRM resources for the given file descriptor, along with the ids of the connectors, crtcs, encoders, and framebuffers.
 // SAFETY: The caller must ensure that `fd` is a valid file descriptor for a DRM device,
 // and that the caller has the necessary permissions to perform the ioctl operations.
-pub fn get_drm_resources(fd: i32) -> nix::Result<DrmModeResources> {
+pub fn get_drm_resources(fd: impl AsFd) -> nix::Result<DrmModeResources> {
 	let mut res = cstructs::DrmModeRes::default();
-	unsafe { drm_mode_get_resources(fd, &mut res) }?;
+	unsafe { drm_mode_get_resources(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	let mut resources = DrmModeResources::from_cstruct(&res);
 
@@ -47,7 +56,7 @@ pub fn get_drm_resources(fd: i32) -> nix::Result<DrmModeResources> {
 	res.encoder_id_ptr = resources.encoders.as_mut_ptr() as u64;
 	res.framebuffer_id_ptr = resources.framebuffers.as_mut_ptr() as u64;
 
-	unsafe { drm_mode_get_resources(fd, &mut res) }?;
+	unsafe { drm_mode_get_resources(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(resources)
 }
@@ -178,13 +187,13 @@ pub struct DrmModeConnector {
 	pub modes: Vec<DrmModeInfo>,
 }
 
-pub fn get_drm_connector(fd: i32, connector_id: u32) -> nix::Result<DrmModeConnector> {
+pub fn get_drm_connector(fd: impl AsFd, connector_id: u32) -> nix::Result<DrmModeConnector> {
 	let mut res = cstructs::DrmModeGetConnector {
 		connector_id,
 		..Default::default()
 	};
 
-	unsafe { drm_mode_get_connector(fd, &mut res) }?;
+	unsafe { drm_mode_get_connector(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	let mut modes = vec![cstructs::DrmModeInfo::default(); res.count_modes as usize];
 	res.modes_ptr = modes.as_mut_ptr() as u64;
@@ -193,7 +202,7 @@ pub fn get_drm_connector(fd: i32, connector_id: u32) -> nix::Result<DrmModeConne
 	res.count_props = 0;
 	res.count_encoders = 0;
 
-	unsafe { drm_mode_get_connector(fd, &mut res) }?;
+	unsafe { drm_mode_get_connector(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	let modes: Vec<_> = modes.into_iter().map(DrmModeInfo::from_cstruct).collect();
 
@@ -234,13 +243,13 @@ impl EncoderInfo {
 	}
 }
 
-pub fn get_encoder(fd: i32, encoder_id: u32) -> nix::Result<EncoderInfo> {
+pub fn get_encoder(fd: impl AsFd, encoder_id: u32) -> nix::Result<EncoderInfo> {
 	let mut res = cstructs::DrmModeGetEncoder {
 		encoder_id,
 		..Default::default()
 	};
 
-	unsafe { drm_mode_get_encoder(fd, &mut res) }?;
+	unsafe { drm_mode_get_encoder(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(EncoderInfo::from_cstruct(res))
 }
@@ -252,7 +261,7 @@ pub struct DumbBuffer {
 }
 
 impl DumbBuffer {
-	pub fn create(fd: i32, width: u32, height: u32, bpp: u32) -> nix::Result<Self> {
+	pub fn create(fd: impl AsFd, width: u32, height: u32, bpp: u32) -> nix::Result<Self> {
 		let mut res = cstructs::DrmModeCreateDumb {
 			width,
 			height,
@@ -260,7 +269,7 @@ impl DumbBuffer {
 			..Default::default()
 		};
 
-		unsafe { drm_mode_create_dumb(fd, &mut res) }?;
+		unsafe { drm_mode_create_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 		Ok(Self {
 			handle: res.handle,
@@ -271,20 +280,20 @@ impl DumbBuffer {
 }
 
 // Maps the given dumb buffer and returns the offset that can be used with mmap to access the buffer's pixels.
-pub fn map_dumb_buffer(fd: i32, buffer: &DumbBuffer) -> nix::Result<u64> {
+pub fn map_dumb_buffer(fd: impl AsFd, buffer: &DumbBuffer) -> nix::Result<u64> {
 	let mut res = cstructs::DrmModeMapDumb {
 		handle: buffer.handle,
 		..Default::default()
 	};
 
-	unsafe { drm_mode_map_dumb(fd, &mut res) }?;
+	unsafe { drm_mode_map_dumb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(res.offset)
 }
 
 // Adds a framebuffer for the given dumb buffer and returns the framebuffer ID.
 pub fn add_framebuffer(
-	fd: i32,
+	fd: impl AsFd,
 	width: u32,
 	height: u32,
 	bpp: u32,
@@ -302,13 +311,13 @@ pub fn add_framebuffer(
 		fb_id: 0,
 	};
 
-	unsafe { drm_mode_add_fb(fd, &mut res) }?;
+	unsafe { drm_mode_add_fb(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(res.fb_id)
 }
 
 // Sets the CRTC to display the given framebuffer on the specified connectors with the given mode.
-pub fn set_crtc(fd: i32, crtc_id: u32, fb_id: u32, connectors: &[u32], mode: &DrmModeInfo) -> nix::Result<()> {
+pub fn set_crtc(fd: impl AsFd, crtc_id: u32, fb_id: u32, connectors: &[u32], mode: &DrmModeInfo) -> nix::Result<()> {
 	let mut res = cstructs::DrmModeSetCrtc {
 		crtc_id,
 		fb_id,
@@ -337,14 +346,28 @@ pub fn set_crtc(fd: i32, crtc_id: u32, fb_id: u32, connectors: &[u32], mode: &Dr
 		},
 	};
 
-	unsafe { drm_mode_set_crtc(fd, &mut res) }?;
+	unsafe { drm_mode_set_crtc(fd.as_fd().as_raw_fd(), &mut res) }?;
 
 	Ok(())
 }
 
-pub fn drop_master(fd: i32) -> nix::Result<()> {
+pub fn drop_master(fd: impl AsFd) -> nix::Result<()> {
 	unsafe {
-		ioctls::drm_drop_master(fd)?;
+		ioctls::drm_drop_master(fd.as_fd().as_raw_fd())?;
 	}
+	Ok(())
+}
+
+// Flips the given CRTC to display the given framebuffer, optionally requesting an event when the flip is complete.
+pub fn page_flip(fd: impl AsFd, crtc_id: u32, fd_id: u32, request_event: bool) -> nix::Result<()> {
+	let mut res = cstructs::DrmModeCrtc {
+		crtc_id,
+		buffer_id: fd_id,
+		flags: if request_event { 1 } else { 0 },
+		..Default::default()
+	};
+
+	unsafe { drm_mode_page_flip(fd.as_fd().as_raw_fd(), &mut res) }?;
+
 	Ok(())
 }

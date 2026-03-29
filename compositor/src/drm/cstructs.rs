@@ -118,3 +118,13 @@ pub struct DrmModeSetCrtc {
 	pub mode_valid: u32,
 	pub mode: DrmModeInfo,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct DrmModeCrtc {
+	pub crtc_id: u32,
+	pub buffer_id: u32,
+	pub flags: u32,
+	pub reserved: u32,
+	pub userdata: u64,
+}

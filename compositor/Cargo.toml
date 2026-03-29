@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nix = { workspace = true, features = ["mman"] }
+nix = { workspace = true, features = ["mman", "poll"] }
 bitflags = { workspace = true }
 thiserror = { workspace = true }
