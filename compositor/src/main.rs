@@ -4,6 +4,7 @@ use nix::{
 	fcntl::{OFlag, open},
 	sys::stat::Mode,
 };
+use thiserror::Error;
 
 use crate::drm::{
 	DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drm_set_master, get_drm_connector, get_encoder,
@@ -66,45 +67,14 @@ fn main() {
 		}
 	};
 
-	let dumb_buffer = match DumbBuffer::create(card0_fd, mode.hdisplay as u32, mode.vdisplay as u32, 32) {
+	let mut video_buffer = match VideoBuffer::create(card0_fd, mode.hdisplay as u32, mode.vdisplay as u32, 32, 24) {
 		Ok(buf) => buf,
 		Err(err) => {
-			eprintln!("Failed to create dumb buffer: {}", err);
+			eprintln!("Failed to create video buffer: {:?}", err);
 			return;
 		}
 	};
-
-	let fb_id = add_framebuffer(
-		card0_fd,
-		mode.hdisplay as u32,
-		mode.vdisplay as u32,
-		32,
-		24,
-		dumb_buffer.pitch,
-		dumb_buffer.handle,
-	)
-	.unwrap();
-	let buffer_offset = map_dumb_buffer(card0_fd, &dumb_buffer).unwrap();
-
-	let pixels = unsafe {
-		nix::sys::mman::mmap(
-			None,
-			NonZeroUsize::new(dumb_buffer.size as usize).unwrap(),
-			nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
-			nix::sys::mman::MapFlags::MAP_SHARED,
-			Some(BorrowedFd::borrow_raw(card0_fd)),
-			buffer_offset as i64,
-		)
-		.unwrap()
-	};
-
-	let mut video_buffer = VideoBuffer::new(
-		pixels as *mut u32,
-		mode.hdisplay as u32,
-		mode.vdisplay as u32,
-		dumb_buffer.pitch / 4,
-	);
-	video_buffer.clear(0x000000FF); // Clear to red
+	video_buffer.clear(0x000000FF); // Clear to blue
 	video_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
 	video_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
 
@@ -116,7 +86,14 @@ fn main() {
 		}
 	};
 
-	set_crtc(card0_fd, encoder.crtc_id, fb_id, &[connector.connector_id], &mode).unwrap();
+	set_crtc(
+		card0_fd,
+		encoder.crtc_id,
+		video_buffer.framebuffer_id,
+		&[connector.connector_id],
+		&mode,
+	)
+	.unwrap();
 
 	// Wait for Enter, then clean up
 	let mut input = String::new();
@@ -135,20 +112,63 @@ fn find_drm_card() -> Option<String> {
 	None
 }
 
+#[derive(Error, Debug)]
+enum VideoBufferError {
+	#[error("Failed to create video buffer: {0}")]
+	NixError(nix::Error),
+}
+
 struct VideoBuffer {
 	pixels: *mut u32,
 	width: u32,
 	height: u32,
 	pitch: u32, // row stride in pixels (pitch_bytes / 4)
+
+	framebuffer_id: u32,
 }
 
 impl VideoBuffer {
-	pub fn new(pixels: *mut u32, width: u32, height: u32, pitch: u32) -> Self {
+	pub fn create(fd: i32, width: u32, height: u32, bpp: u32, depth: u32) -> Result<Self, VideoBufferError> {
+		let dumb_buffer = match DumbBuffer::create(fd, width, height, bpp) {
+			Ok(buf) => buf,
+			Err(err) => {
+				eprintln!("Failed to create dumb buffer: {}", err);
+				return Err(VideoBufferError::NixError(err));
+			}
+		};
+
+		let fb_id = add_framebuffer(fd, width, height, bpp, depth, dumb_buffer.pitch, dumb_buffer.handle)
+			.map_err(VideoBufferError::NixError)?;
+		let buffer_offset = map_dumb_buffer(fd, &dumb_buffer).map_err(VideoBufferError::NixError)?;
+
+		let pixels = unsafe {
+			nix::sys::mman::mmap(
+				None,
+				NonZeroUsize::new(dumb_buffer.size as usize).unwrap(),
+				nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
+				nix::sys::mman::MapFlags::MAP_SHARED,
+				Some(BorrowedFd::borrow_raw(fd)),
+				buffer_offset as i64,
+			)
+			.map_err(VideoBufferError::NixError)?
+		};
+
+		Ok(Self::new(
+			pixels as *mut u32,
+			width,
+			height,
+			dumb_buffer.pitch / 4,
+			fb_id,
+		))
+	}
+
+	pub fn new(pixels: *mut u32, width: u32, height: u32, pitch: u32, framebuffer_id: u32) -> Self {
 		Self {
 			pixels,
 			width,
 			height,
 			pitch,
+			framebuffer_id,
 		}
 	}
 

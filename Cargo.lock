@@ -297,6 +297,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "nix",
+ "thiserror",
 ]
 
 [[package]]
