@@ -7,7 +7,7 @@ pub mod input;
 #[derive(Debug)]
 pub enum CompositorEvent {
 	DrmEvent(crate::events::drm::DrmEvent),
-	InputEvent(crate::events::input::InputEvent),
+	InputEvent(crate::events::input::Event),
 }
 
 impl From<crate::events::drm::DrmEvent> for CompositorEvent {
@@ -16,8 +16,8 @@ impl From<crate::events::drm::DrmEvent> for CompositorEvent {
 	}
 }
 
-impl From<crate::events::input::InputEvent> for CompositorEvent {
-	fn from(event: crate::events::input::InputEvent) -> Self {
+impl From<crate::events::input::Event> for CompositorEvent {
+	fn from(event: crate::events::input::Event) -> Self {
 		Self::InputEvent(event)
 	}
 }

@@ -6,12 +6,17 @@ use crate::{
 	bmp::BMPImage,
 	drm::{
 		DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector, get_encoder,
-		map_dumb_buffer, move_cursor, page_flip, set_crtc, set_cursor_bitmap, set_master,
+		map_dumb_buffer, page_flip, set_crtc, set_cursor_bitmap, set_master,
 	},
-	events::{CompositorEvent, drm::DrmEventType, input::InputEventType},
+	events::{
+		CompositorEvent,
+		drm::DrmEventType,
+		input::{Event, KeyCode, KeyState},
+	},
 };
 
 mod bmp;
+mod cursor;
 mod drm;
 mod events;
 
@@ -130,7 +135,8 @@ fn main() {
 	)
 	.expect("Failed to set cursor bitmap");
 
-	let (mut cursor_x, mut cursor_y) = (0, 0);
+	let mut cursor = cursor::Cursor::new(mode.hdisplay as i32, mode.vdisplay as i32);
+	cursor.update_kernel(&card, encoder.crtc_id);
 
 	// Event loop to keep the program running and handle page flip events
 	'outer: loop {
@@ -156,30 +162,24 @@ fn main() {
 					eprintln!("Failed to flip buffer: {}", err);
 				}
 			}
-			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Absolute => {
-				if event.code == 0 {
-					cursor_x = event.value;
-				} else if event.code == 1 {
-					cursor_y = event.value;
-				}
-				move_cursor(&card, encoder.crtc_id, cursor_x, cursor_y).expect("Failed to move cursor");
+			CompositorEvent::InputEvent(event)
+				if matches!(
+					event,
+					Event::Absolute(_, _) | Event::Relative(_, _) | Event::Key(KeyCode::BtnTouch, _)
+				) =>
+			{
+				cursor.handle_input_event(&event);
 			}
-			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Relative => {
-				if event.code == 0 {
-					cursor_x += event.value;
-				} else if event.code == 1 {
-					cursor_y += event.value;
-				}
-				move_cursor(&card, encoder.crtc_id, cursor_x, cursor_y).expect("Failed to move cursor");
+			CompositorEvent::InputEvent(Event::Synchronise(_, _)) => {
+				cursor.update_kernel(&card, encoder.crtc_id);
 			}
-			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Key => {
-				println!("Received input event: {:?}", event);
-				if event.value == 1 && event.code == 1 {
-					println!("Key press event received, exiting...");
-					break 'outer;
-				}
+			CompositorEvent::InputEvent(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
+				println!("Key press event received, exiting...");
+				break 'outer;
 			}
-			_ => {}
+			_ => {
+				// Handle other events as needed
+			}
 		}
 	}
 
