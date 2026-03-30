@@ -1,7 +1,23 @@
 use std::io::{self, Read};
 
+use bytestruct::int_enum;
+
 use super::event_threads::EventSource;
-use crate::drm::{DrmEvent, DrmEventType};
+
+int_enum! {
+	#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+	pub enum DrmEventType: u32 {
+		VBlank = 0x01,
+		FlipComplete = 0x02,
+		Sequence = 0x03,
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct DrmEvent {
+	pub event_type: DrmEventType,
+	pub data: Vec<u8>,
+}
 
 pub struct DrmEventSource {
 	card: std::fs::File,

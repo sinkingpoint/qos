@@ -17,7 +17,7 @@ run: initramfs rootfs
 		-m 2G \
 		-kernel /boot/vmlinuz-$(KERNEL_RELEASE) \
 		-initrd ./target/initramfs.cpio \
-		-display gtk \
+		-display gtk,grab-on-hover=on \
 		-device virtio-vga \
 		-append "root=/dev/sda" \
 		-drive format=raw,file=./target/filesystem.ext4 \

@@ -1,3 +1,5 @@
+use bitflags::bitflags;
+
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct DrmModeGetConnector {
@@ -127,4 +129,27 @@ pub struct DrmModeCrtc {
 	pub flags: u32,
 	pub reserved: u32,
 	pub userdata: u64,
+}
+
+bitflags! {
+	#[repr(C)]
+	#[derive(Debug, Copy, Clone, Default)]
+	pub struct DrmCursorFlags: u32 {
+	const DRM_MODE_CURSOR_BO = 1; // Set the cursor using a framebuffer object handle instead of a dumb buffer handle
+	const DRM_MODE_CURSOR_MOVE = 2; // Move the cursor without changing the image
+	}
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct DrmModeCursor2 {
+	pub flags: DrmCursorFlags,
+	pub crtc_id: u32,
+	pub x: i32,
+	pub y: i32,
+	pub width: u32,
+	pub height: u32,
+	pub handle: u32,
+	pub hot_x: i32,
+	pub hot_y: i32,
 }

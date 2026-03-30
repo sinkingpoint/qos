@@ -373,17 +373,33 @@ pub fn page_flip(fd: impl AsFd, crtc_id: u32, fd_id: u32, request_event: bool) -
 	Ok(())
 }
 
-int_enum! {
-	#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-	pub enum DrmEventType: u32 {
-		VBlank = 0x01,
-		FlipComplete = 0x02,
-		Sequence = 0x03,
-	}
+// Sets the cursor image for the given CRTC using the provided GEM buffer handle, width, and height.
+pub fn set_cursor_bitmap(fd: impl AsFd, crtc_id: u32, width: u32, height: u32, handle: u32) -> nix::Result<()> {
+	let mut res = cstructs::DrmModeCursor2 {
+		flags: cstructs::DrmCursorFlags::DRM_MODE_CURSOR_BO,
+		crtc_id,
+		width,
+		height,
+		handle,
+		..Default::default()
+	};
+
+	unsafe { ioctls::drm_mode_cursor2(fd.as_fd().as_raw_fd(), &mut res) }?;
+
+	Ok(())
 }
 
-#[derive(Debug, Clone)]
-pub struct DrmEvent {
-	pub event_type: DrmEventType,
-	pub data: Vec<u8>,
+// Moves the cursor for the given CRTC to the specified (x, y) coordinates without changing the cursor image.
+pub fn move_cursor(fd: impl AsFd, crtc_id: u32, x: i32, y: i32) -> nix::Result<()> {
+	let mut res = cstructs::DrmModeCursor2 {
+		flags: cstructs::DrmCursorFlags::DRM_MODE_CURSOR_MOVE,
+		crtc_id,
+		x,
+		y,
+		..Default::default()
+	};
+
+	unsafe { ioctls::drm_mode_cursor2(fd.as_fd().as_raw_fd(), &mut res) }?;
+
+	Ok(())
 }

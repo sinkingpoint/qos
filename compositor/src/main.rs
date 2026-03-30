@@ -3,13 +3,15 @@ use std::{num::NonZeroUsize, os::fd::AsFd};
 use thiserror::Error;
 
 use crate::{
+	bmp::BMPImage,
 	drm::{
-		DrmConnection, DrmEventType, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector,
-		get_encoder, map_dumb_buffer, page_flip, set_crtc, set_master,
+		DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector, get_encoder,
+		map_dumb_buffer, move_cursor, page_flip, set_crtc, set_cursor_bitmap, set_master,
 	},
-	events::CompositorEvent,
+	events::{CompositorEvent, drm::DrmEventType, input::InputEventType},
 };
 
+mod bmp;
 mod drm;
 mod events;
 
@@ -118,6 +120,18 @@ fn main() {
 		return;
 	}
 
+	let (cursor_buffer, cursor_data) = create_cursor(&card);
+	set_cursor_bitmap(
+		&card,
+		encoder.crtc_id,
+		cursor_data.width,
+		cursor_data.height,
+		cursor_buffer.handle,
+	)
+	.expect("Failed to set cursor bitmap");
+
+	let (mut cursor_x, mut cursor_y) = (0, 0);
+
 	// Event loop to keep the program running and handle page flip events
 	'outer: loop {
 		let event = match input_event_receiver.recv() {
@@ -129,28 +143,43 @@ fn main() {
 		};
 
 		match event {
-			CompositorEvent::DrmEvent(drm_event) => {
-				if drm_event.event_type == DrmEventType::FlipComplete {
-					match inactive_buffer.flip_to(&card, encoder.crtc_id) {
-						Ok(_) => std::mem::swap(&mut active_buffer, &mut inactive_buffer),
-						Err(err) => eprintln!("Failed to flip buffer: {}", err),
-					}
+			CompositorEvent::DrmEvent(drm_event) if drm_event.event_type == DrmEventType::FlipComplete => {
+				// FlipComplete means inactive_buffer just became the displayed buffer.
+				// Swap so that inactive_buffer is the safe-to-write one (just came off screen).
+				std::mem::swap(&mut active_buffer, &mut inactive_buffer);
 
-					inactive_buffer.clear(0x000000FF); // Clear to blue
-					inactive_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
-					inactive_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
+				inactive_buffer.clear(0x000000FF); // Clear to blue
+				inactive_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
+				inactive_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
+
+				if let Err(err) = inactive_buffer.flip_to(&card, encoder.crtc_id) {
+					eprintln!("Failed to flip buffer: {}", err);
 				}
 			}
-			CompositorEvent::InputEvent(input_event) => {
-				println!("Received input event: {:?}", input_event);
-				if input_event.event_type == crate::events::input::InputEventType::Key
-					&& input_event.value == 1
-					&& input_event.code == 1
-				{
+			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Absolute => {
+				if event.code == 0 {
+					cursor_x = event.value;
+				} else if event.code == 1 {
+					cursor_y = event.value;
+				}
+				move_cursor(&card, encoder.crtc_id, cursor_x, cursor_y).expect("Failed to move cursor");
+			}
+			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Relative => {
+				if event.code == 0 {
+					cursor_x += event.value;
+				} else if event.code == 1 {
+					cursor_y += event.value;
+				}
+				move_cursor(&card, encoder.crtc_id, cursor_x, cursor_y).expect("Failed to move cursor");
+			}
+			CompositorEvent::InputEvent(event) if event.event_type == InputEventType::Key => {
+				println!("Received input event: {:?}", event);
+				if event.value == 1 && event.code == 1 {
 					println!("Key press event received, exiting...");
 					break 'outer;
 				}
 			}
+			_ => {}
 		}
 	}
 
@@ -167,6 +196,39 @@ fn find_drm_card() -> Option<String> {
 		}
 	}
 	None
+}
+
+// Loads a BMP image from the specified file path, creates a dumb buffer for the cursor, and uploads the image data to the buffer.
+// Returns the created dumb buffer and the loaded BMP image data.
+fn create_cursor(card: &std::fs::File) -> (DumbBuffer, BMPImage) {
+	let cursor_data = BMPImage::from_file("/home/colin/cursor.bmp").unwrap();
+	let cursor_buffer =
+		DumbBuffer::create(card, cursor_data.width, cursor_data.height, 32).expect("Failed to create cursor buffer");
+
+	let offset = map_dumb_buffer(card, &cursor_buffer).expect("Failed to map cursor buffer");
+
+	let cursor_pixels = unsafe {
+		nix::sys::mman::mmap(
+			None,
+			NonZeroUsize::new(cursor_buffer.size).expect("Cursor buffer returned size of 0"),
+			nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
+			nix::sys::mman::MapFlags::MAP_SHARED,
+			Some(card.as_fd()),
+			offset as i64,
+		)
+		.expect("Failed to mmap cursor buffer") as *mut u32
+	};
+
+	unsafe {
+		std::slice::from_raw_parts_mut(cursor_pixels, (cursor_data.width * cursor_data.height) as usize)
+			.copy_from_slice(&cursor_data.pixels);
+	}
+
+	unsafe {
+		nix::sys::mman::munmap(cursor_pixels as *mut _, cursor_buffer.size).expect("Failed to unmap cursor buffer")
+	};
+
+	(cursor_buffer, cursor_data)
 }
 
 #[derive(Error, Debug)]
