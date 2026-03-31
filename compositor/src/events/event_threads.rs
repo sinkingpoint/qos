@@ -24,7 +24,7 @@ pub struct EventThread<S: EventSource> {
 }
 
 pub struct EventThreadHandle {
-	killfd: OwnedFd,
+	pub(crate) killfd: OwnedFd,
 }
 
 impl EventThreadHandle {

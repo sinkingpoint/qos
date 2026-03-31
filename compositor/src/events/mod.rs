@@ -3,22 +3,30 @@ use std::thread;
 pub mod drm;
 mod event_threads;
 pub mod input;
+pub mod wayland;
 
 #[derive(Debug)]
 pub enum CompositorEvent {
-	DrmEvent(crate::events::drm::DrmEvent),
-	InputEvent(crate::events::input::Event),
+	Drm(crate::events::drm::DrmEvent),
+	Input(crate::events::input::Event),
+	Wayland(crate::events::wayland::WaylandEvent),
 }
 
 impl From<crate::events::drm::DrmEvent> for CompositorEvent {
 	fn from(event: crate::events::drm::DrmEvent) -> Self {
-		Self::DrmEvent(event)
+		Self::Drm(event)
 	}
 }
 
 impl From<crate::events::input::Event> for CompositorEvent {
 	fn from(event: crate::events::input::Event) -> Self {
-		Self::InputEvent(event)
+		Self::Input(event)
+	}
+}
+
+impl From<crate::events::wayland::WaylandEvent> for CompositorEvent {
+	fn from(event: crate::events::wayland::WaylandEvent) -> Self {
+		Self::Wayland(event)
 	}
 }
 
@@ -51,4 +59,12 @@ pub fn drm_event_thread(
 	});
 
 	drm_thread_handle
+}
+
+pub fn wayland_event_thread(
+	display_name: String,
+	sender: std::sync::mpsc::Sender<CompositorEvent>,
+) -> event_threads::EventThreadHandle {
+	let socket = wayland::WaylandSocket::new(display_name).expect("Failed to create Wayland socket");
+	socket.start(sender).expect("Failed to start Wayland event thread")
 }

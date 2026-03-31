@@ -19,6 +19,7 @@ mod bmp;
 mod cursor;
 mod drm;
 mod events;
+mod wayland;
 
 fn main() {
 	let card_path = match find_drm_card() {
@@ -29,7 +30,6 @@ fn main() {
 		}
 	};
 
-	println!("Using DRM card: {}", card_path);
 	let card = match std::fs::OpenOptions::new().read(true).write(true).open(&card_path) {
 		Ok(file) => file,
 		Err(err) => {
@@ -50,8 +50,6 @@ fn main() {
 			return;
 		}
 	};
-
-	println!("DRM Resources: {:#?}", resources);
 
 	let (connector, mode) = match resources.connectors.iter().find_map(|connector_id| {
 		let connector = get_drm_connector(&card, *connector_id).ok()?;
@@ -104,6 +102,7 @@ fn main() {
 		card.try_clone().expect("Failed to clone card file"),
 		input_event_sender.clone(),
 	);
+	let wayland_thread_handle = events::wayland_event_thread("wayland-0".to_string(), input_event_sender);
 
 	set_crtc(
 		&card,
@@ -149,7 +148,7 @@ fn main() {
 		};
 
 		match event {
-			CompositorEvent::DrmEvent(drm_event) if drm_event.event_type == DrmEventType::FlipComplete => {
+			CompositorEvent::Drm(drm_event) if drm_event.event_type == DrmEventType::FlipComplete => {
 				// FlipComplete means inactive_buffer just became the displayed buffer.
 				// Swap so that inactive_buffer is the safe-to-write one (just came off screen).
 				std::mem::swap(&mut active_buffer, &mut inactive_buffer);
@@ -162,7 +161,7 @@ fn main() {
 					eprintln!("Failed to flip buffer: {}", err);
 				}
 			}
-			CompositorEvent::InputEvent(event)
+			CompositorEvent::Input(event)
 				if matches!(
 					event,
 					Event::Absolute(_, _) | Event::Relative(_, _) | Event::Key(KeyCode::BtnTouch, _)
@@ -170,10 +169,10 @@ fn main() {
 			{
 				cursor.handle_input_event(&event);
 			}
-			CompositorEvent::InputEvent(Event::Synchronise(_, _)) => {
+			CompositorEvent::Input(Event::Synchronise(_, _)) => {
 				cursor.update_kernel(&card, encoder.crtc_id);
 			}
-			CompositorEvent::InputEvent(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
+			CompositorEvent::Input(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
 				println!("Key press event received, exiting...");
 				break 'outer;
 			}
@@ -185,6 +184,7 @@ fn main() {
 
 	input_thread_handle.kill().unwrap();
 	drm_thread_handle.kill().unwrap();
+	wayland_thread_handle.kill().unwrap();
 	drop_master(&card).unwrap();
 }
 
