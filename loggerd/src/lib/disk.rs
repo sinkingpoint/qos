@@ -2,7 +2,6 @@ use bytestruct::{LengthPrefixedString, Padding, Size, WriteTo, WriteToWithEndian
 use bytestruct_derive::{ByteStruct, Size};
 use chrono::{DateTime, Utc};
 
-const MAX_FIELD_SIZE: usize = 48000;
 const VERSION: u8 = 1;
 const MAGIC: &[u8; 8] = b"QLOGFILE";
 
@@ -142,18 +141,18 @@ pub struct FieldBlock {
 	header: BlockHeader,
 
 	/// The key of the field.
-	pub key: LengthPrefixedString<MAX_FIELD_SIZE>,
+	pub key: LengthPrefixedString<u16>,
 
 	/// The value of the field.
-	pub value: LengthPrefixedString<MAX_FIELD_SIZE>,
+	pub value: LengthPrefixedString<u16>,
 
 	_unused: Padding<64>,
 }
 
 impl FieldBlock {
 	pub fn new(key: String, value: String) -> Self {
-		let key = LengthPrefixedString(key);
-		let value = LengthPrefixedString(value);
+		let key = LengthPrefixedString::new(key);
+		let value = LengthPrefixedString::new(value);
 		let padding = Padding::new(key.size() + value.size());
 		Self {
 			header: BlockHeader {

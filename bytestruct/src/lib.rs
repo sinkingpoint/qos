@@ -280,48 +280,45 @@ impl<const MAX_SIZE: usize> WriteToWithEndian for NullTerminatedString<MAX_SIZE>
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LengthPrefixedString<const MAX_SIZE: usize>(pub String);
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LengthPrefixedString<L: UnsignedLength>(pub String, std::marker::PhantomData<L>);
 
-impl<const MAX_SIZE: usize> ReadFromWithEndian for LengthPrefixedString<MAX_SIZE> {
+impl<T: UnsignedLength> LengthPrefixedString<T> {
+	pub fn new(s: String) -> Self {
+		Self(s, std::marker::PhantomData)
+	}
+}
+
+impl<L: UnsignedLength> Deref for LengthPrefixedString<L> {
+	type Target = str;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl<L: UnsignedLength> ReadFromWithEndian for LengthPrefixedString<L> {
 	fn read_from_with_endian<T: Read>(source: &mut T, endian: Endian) -> io::Result<Self> {
-		let len = match MAX_SIZE {
-			0..=0xFF => u8::read_from_with_endian(source, endian)? as usize,
-			256..=0xFFFF => u16::read_from_with_endian(source, endian)? as usize,
-			65536..=0xFFFFFFFF => u32::read_from_with_endian(source, endian)? as usize,
-			_ => u64::read_from_with_endian(source, endian)? as usize,
-		};
+		let len = L::read_from_with_endian(source, endian)?.to_usize();
 
 		let mut buf = vec![0u8; len];
 		source.read_exact(&mut buf)?;
 		match std::str::from_utf8(&buf) {
-			Ok(s) => Ok(LengthPrefixedString(s.to_string())),
+			Ok(s) => Ok(LengthPrefixedString::<L>(s.to_string(), std::marker::PhantomData)),
 			Err(_) => Err(io::Error::new(io::ErrorKind::InvalidData, "String is not valid utf8")),
 		}
 	}
 }
 
-impl<const MAX_SIZE: usize> Size for LengthPrefixedString<MAX_SIZE> {
+impl<L: UnsignedLength> Size for LengthPrefixedString<L> {
 	fn size(&self) -> usize {
-		self.0.len()
-			+ match MAX_SIZE {
-				0..=0xFF => 1,
-				256..=0xFFFF => 2,
-				65536..=0xFFFFFFFF => 4,
-				_ => 8,
-			}
+		self.0.len() + L::size()
 	}
 }
 
-impl<const MAX_SIZE: usize> WriteToWithEndian for LengthPrefixedString<MAX_SIZE> {
+impl<L: UnsignedLength> WriteToWithEndian for LengthPrefixedString<L> {
 	fn write_to_with_endian<T: Write>(&self, target: &mut T, endian: Endian) -> io::Result<()> {
-		match MAX_SIZE {
-			0..=0xFF => (self.0.len() as u8).write_to_with_endian(target, endian)?,
-			256..=0xFFFF => (self.0.len() as u16).write_to_with_endian(target, endian)?,
-			65536..=0xFFFFFFFF => (self.0.len() as u32).write_to_with_endian(target, endian)?,
-			_ => (self.0.len() as u64).write_to_with_endian(target, endian)?,
-		}
-
+		L::from_usize(self.0.len()).write_to_with_endian(target, endian)?;
 		target.write_all(self.0.as_bytes())?;
 		Ok(())
 	}
@@ -505,6 +502,7 @@ impl<T> Deref for TLVVec<T> {
 pub trait UnsignedLength: ReadFromWithEndian + WriteToWithEndian + std::fmt::Debug {
 	fn to_usize(self) -> usize;
 	fn from_usize(val: usize) -> Self;
+	fn size() -> usize;
 }
 
 impl UnsignedLength for u8 {
@@ -514,6 +512,9 @@ impl UnsignedLength for u8 {
 	fn from_usize(val: usize) -> Self {
 		val as u8
 	}
+	fn size() -> usize {
+		1
+	}
 }
 impl UnsignedLength for u16 {
 	fn to_usize(self) -> usize {
@@ -521,6 +522,9 @@ impl UnsignedLength for u16 {
 	}
 	fn from_usize(val: usize) -> Self {
 		val as u16
+	}
+	fn size() -> usize {
+		2
 	}
 }
 impl UnsignedLength for u32 {
@@ -530,6 +534,9 @@ impl UnsignedLength for u32 {
 	fn from_usize(val: usize) -> Self {
 		val as u32
 	}
+	fn size() -> usize {
+		4
+	}
 }
 impl UnsignedLength for u64 {
 	fn to_usize(self) -> usize {
@@ -537,6 +544,9 @@ impl UnsignedLength for u64 {
 	}
 	fn from_usize(val: usize) -> Self {
 		val as u64
+	}
+	fn size() -> usize {
+		8
 	}
 }
 
