@@ -1,0 +1,8 @@
+name = "compositor"
+description = "Wayland compositor"
+
+[service]
+command = "/sbin/compositor"
+
+[[needs]]
+name = "udev-wait-drm"

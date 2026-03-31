@@ -24,3 +24,9 @@ name = "depmod"
 
 [[services]]
 name = "netd"
+
+[[services]]
+name = "udev-wait-drm"
+
+[[services]]
+name = "compositor"

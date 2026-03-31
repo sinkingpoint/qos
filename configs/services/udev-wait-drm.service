@@ -1,0 +1,9 @@
+name = "udev-wait-drm"
+description = "Wait for a DRM device to appear"
+start_mode = "notify"
+
+[service]
+command = "/sbin/udev --wait-for-device SUBSYSTEM=drm"
+
+[[needs]]
+name = "udev"

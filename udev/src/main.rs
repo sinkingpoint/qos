@@ -39,9 +39,27 @@ async fn main() -> ExitCode {
 				.action(ArgAction::Set)
 				.help("the path to scan for modules"),
 		)
+		.arg(
+			Arg::new("wait_for_device")
+				.long("wait-for-device")
+				.action(ArgAction::Set)
+				.value_name("KEY=VALUE")
+				.help("subscribe to udev events, signal ready when an event matching KEY=VALUE is seen, then exit"),
+		)
 		.get_matches();
 
 	let logger = assemble_logger(stderr());
+
+	let topic = matches
+		.get_one::<String>("topic")
+		.expect("missing topic, even though it has a default");
+
+	// --wait-for-device mode: block until the named device appears, signal ready, exit.
+	// Useful for oneshot services that just need to wait for a specific device to be available before starting, like the compositor waiting for a DRM device.
+	if let Some(condition) = matches.get_one::<String>("wait_for_device") {
+		return wait_for_device(&logger, topic, condition).await;
+	}
+
 	let name = match uname() {
 		Ok(n) => n,
 		Err(e) => {
@@ -56,9 +74,6 @@ async fn main() -> ExitCode {
 		.map(PathBuf::from)
 		.unwrap_or(default_module_path);
 
-	let topic = matches
-		.get_one::<String>("topic")
-		.expect("missing topic, even though it has a default");
 	let mut bus_socket = match BusClient::new().await.unwrap().subscribe(topic).await {
 		Ok(s) => s,
 		Err(e) => {
@@ -98,6 +113,31 @@ async fn main() -> ExitCode {
 	}
 
 	ExitCode::SUCCESS
+}
+
+async fn wait_for_device(logger: &slog::Logger, topic: &str, condition: &str) -> ExitCode {
+	let Some((key, value)) = condition.split_once('=') else {
+		error!(logger, "--wait-for-device requires KEY=VALUE format"; "got" => condition);
+		return ExitCode::FAILURE;
+	};
+	let mut bus_socket = match BusClient::new().await.unwrap().subscribe(topic).await {
+		Ok(s) => s,
+		Err(e) => {
+			error!(logger, "failed to open bus connection"; "error" => e.to_string());
+			return ExitCode::FAILURE;
+		}
+	};
+	while let Ok(line) = bus_socket.read_message().await {
+		if let Ok(line) = String::from_utf8(line) {
+			if let Ok(event) = serde_json::from_str::<HashMap<String, String>>(&line) {
+				if event.get(key).map(|v| v == value).unwrap_or(false) {
+					mark_running().expect("failed to mark udev-wait as running");
+					return ExitCode::SUCCESS;
+				}
+			}
+		}
+	}
+	ExitCode::FAILURE
 }
 
 struct ModuleLoader {
