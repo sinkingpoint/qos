@@ -6,11 +6,11 @@ macro_rules! wayland_interface {
         }
 
         impl $crate::wayland::types::CommandRegistry for $enum_name {
-            fn parse(opcode: u16, args: &[u8]) -> Option<Self> {
-                match opcode {
+            fn parse(command: $crate::wayland::types::WaylandPacket) -> Option<Self> {
+                match command.opcode {
                     $($opcode => Some(Self::$variant(
                         <$ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(
-                            &mut ::std::io::Cursor::new(args),
+                            &mut ::std::io::Cursor::new(command.payload),
                             ::bytestruct::Endian::Little,
                         ).ok()?
                     )),)*
@@ -20,9 +20,13 @@ macro_rules! wayland_interface {
         }
 
         impl $crate::wayland::types::Command<$subsystem> for $enum_name {
-            fn handle(&self, client: &mut $crate::wayland::types::Client, subsystem: &mut $subsystem) -> $crate::wayland::types::WaylandResult<()> {
+            fn handle(
+                &self,
+                connection: &::std::sync::Arc<::std::os::unix::net::UnixStream>,
+                subsystem: &mut $subsystem,
+            ) -> $crate::wayland::types::WaylandResult<::std::option::Option<(u32, $crate::wayland::types::SubsystemType)>> {
                 match self {
-                    $(Self::$variant(cmd) => cmd.handle(client, subsystem),)*
+                    $(Self::$variant(cmd) => cmd.handle(connection, subsystem),)*
                 }
             }
         }

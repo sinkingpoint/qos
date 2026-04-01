@@ -1,7 +1,11 @@
 use std::{
 	collections::HashMap,
+	fs::set_permissions,
 	io::{self, BufReader},
-	os::unix::net::{UnixListener, UnixStream},
+	os::unix::{
+		fs::{PermissionsExt, chown},
+		net::{UnixListener, UnixStream},
+	},
 	sync::Arc,
 	thread,
 };
@@ -20,26 +24,27 @@ const KILL_ID: u64 = u64::MAX;
 #[derive(Debug)]
 pub struct WaylandEvent {
 	pub client_id: u32,
-	pub packet: WaylandPacket<Vec<u8>>,
+	pub packet: WaylandPacket,
 	pub client: Arc<UnixStream>,
 }
 
 pub struct WaylandSocket {
 	pub socket: UnixListener,
-	pub display_name: String,
 
 	client_id_counter: u32,
 }
 
 impl WaylandSocket {
 	pub fn new(display_name: String) -> io::Result<Self> {
-		let socket_path = format!("/run/user/{}/wayland-{}", Uid::current(), display_name);
+		let socket_path = format!("/run/user/{}/{}", Uid::current(), display_name);
+		println!("Creating Wayland socket at {}", socket_path);
 		let parent_dir = std::path::Path::new(&socket_path).parent().unwrap();
 		std::fs::create_dir_all(parent_dir)?; // TODO: Move this to a more appropriate place, and handle permissions properly.
-		let socket = UnixListener::bind(socket_path)?;
+		let socket = UnixListener::bind(&socket_path)?;
+		chown(&socket_path, None, Some(101))?; // chown the socket to the video group so that non-root users in the video group can access it.
+		set_permissions(&socket_path, std::fs::Permissions::from_mode(0o660))?;
 		Ok(Self {
 			socket,
-			display_name,
 			client_id_counter: 1,
 		})
 	}
@@ -110,10 +115,8 @@ impl WaylandSocket {
 					let (read_client, write_client) = clients.get_mut(&client_id).unwrap();
 
 					loop {
-						let packet = match WaylandPacket::<Vec<u8>>::read_from_with_endian(
-							read_client,
-							bytestruct::Endian::Little,
-						) {
+						let packet = match WaylandPacket::read_from_with_endian(read_client, bytestruct::Endian::Little)
+						{
 							Ok(packet) => packet,
 							Err(e) if e.kind() == io::ErrorKind::WouldBlock => break, // no more data right now
 							Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {

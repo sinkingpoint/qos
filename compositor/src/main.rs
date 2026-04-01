@@ -13,6 +13,7 @@ use crate::{
 		drm::DrmEventType,
 		input::{Event, KeyCode, KeyState},
 	},
+	wayland::WaylandCompositor,
 };
 
 mod bmp;
@@ -104,6 +105,8 @@ fn main() {
 	);
 	let wayland_thread_handle = events::wayland_event_thread("wayland-0".to_string(), input_event_sender);
 
+	let mut wayland = WaylandCompositor::new();
+
 	set_crtc(
 		&card,
 		encoder.crtc_id,
@@ -175,6 +178,9 @@ fn main() {
 			CompositorEvent::Input(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
 				println!("Key press event received, exiting...");
 				break 'outer;
+			}
+			CompositorEvent::Wayland(event) => {
+				wayland.handle_event(event);
 			}
 			_ => {
 				// Handle other events as needed

@@ -1,10 +1,10 @@
-use std::io::Write;
+use std::{io::Write, os::unix::net::UnixStream, sync::Arc};
 
 use bytestruct::WriteToWithEndian;
 use bytestruct_derive::ByteStruct;
 
 use crate::{
-	wayland::types::{Command, SubSystem, WaylandError, WaylandPacket, WaylandResult},
+	wayland::types::{Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
 	wayland_interface,
 };
 
@@ -25,13 +25,21 @@ pub struct SyncCommand {
 }
 
 impl Command<Display> for SyncCommand {
-	fn handle(&self, client: &mut super::types::Client, display: &mut Display) -> WaylandResult<()> {
-		let mut data = Vec::new();
-		WaylandPacket::new(self.callback_id, 0, 0)
-			.write_to_with_endian(&mut data, bytestruct::Endian::Little)
+	fn handle(
+		&self,
+		connection: &Arc<UnixStream>,
+		_display: &mut Display,
+	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+		let mut payload = Vec::new();
+		0u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)
 			.map_err(WaylandError::IOError)?;
-
-		client.connection.write_all(&data).map_err(WaylandError::IOError)
+		let packet = WaylandPacket::new(self.callback_id, 0, payload);
+		let mut buf = Vec::new();
+		packet
+			.write_to_with_endian(&mut buf, bytestruct::Endian::Little)
+			.map_err(WaylandError::IOError)?;
+		connection.as_ref().write_all(&buf).map_err(WaylandError::IOError)?;
+		Ok(None)
 	}
 }
 
@@ -41,12 +49,14 @@ pub struct GetRegistry {
 }
 
 impl Command<Display> for GetRegistry {
-	fn handle(&self, client: &mut super::types::Client, display: &mut Display) -> WaylandResult<()> {
-		client.register_object(
+	fn handle(
+		&self,
+		_connection: &Arc<UnixStream>,
+		_display: &mut Display,
+	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+		Ok(Some((
 			self.registry_id,
-			super::types::SubsystemType::Registry(super::registry::Registry),
-		);
-
-		Ok(())
+			SubsystemType::Registry(super::registry::Registry),
+		)))
 	}
 }

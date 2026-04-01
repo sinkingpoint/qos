@@ -1,7 +1,9 @@
+use std::{os::unix::net::UnixStream, sync::Arc};
+
 use bytestruct::{LengthPrefixedString, Padding};
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{Command, SubSystem};
+use crate::wayland::types::{Command, SubSystem, SubsystemType, WaylandResult};
 
 pub struct Registry;
 
@@ -23,13 +25,12 @@ pub struct BindCommand {
 }
 
 impl Command<Registry> for BindCommand {
-	fn handle(&self, client: &mut super::types::Client, registry: &mut Registry) -> super::types::WaylandResult<()> {
-		match &*self.interface {
-			_ => {
-				// For now, just ignore unknown interfaces. In the future, we might want to send an error back to the client.
-				eprintln!("Unknown interface requested: {}", self.interface.0);
-			}
-		}
-		Ok(())
+	fn handle(
+		&self,
+		_connection: &Arc<UnixStream>,
+		_registry: &mut Registry,
+	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+		eprintln!("Unknown interface requested: {}", self.interface.0);
+		Ok(None)
 	}
 }
