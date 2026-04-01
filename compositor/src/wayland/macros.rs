@@ -24,7 +24,7 @@ macro_rules! wayland_interface {
                 &self,
                 connection: &::std::sync::Arc<::std::os::unix::net::UnixStream>,
                 subsystem: &mut $subsystem,
-            ) -> $crate::wayland::types::WaylandResult<::std::option::Option<(u32, $crate::wayland::types::SubsystemType)>> {
+            ) -> $crate::wayland::types::WaylandResult<::std::option::Option<$crate::wayland::types::ClientEffect>> {
                 match self {
                     $(Self::$variant(cmd) => cmd.handle(connection, subsystem),)*
                 }

@@ -1,7 +1,10 @@
 mod display;
 #[macro_use]
 mod macros;
+mod compositor;
 mod registry;
+mod shm;
+mod surface;
 mod types;
 
 use std::collections::HashMap;

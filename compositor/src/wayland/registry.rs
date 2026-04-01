@@ -3,7 +3,7 @@ use std::{os::unix::net::UnixStream, sync::Arc};
 use bytestruct::{LengthPrefixedString, Padding};
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{Command, SubSystem, SubsystemType, WaylandResult};
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct Registry;
 
@@ -25,11 +25,7 @@ pub struct BindCommand {
 }
 
 impl Command<Registry> for BindCommand {
-	fn handle(
-		&self,
-		_connection: &Arc<UnixStream>,
-		_registry: &mut Registry,
-	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+	fn handle(&self, _connection: &Arc<UnixStream>, _registry: &mut Registry) -> WaylandResult<Option<ClientEffect>> {
 		eprintln!("Unknown interface requested: {}", self.interface.0);
 		Ok(None)
 	}

@@ -4,7 +4,7 @@ use bytestruct::WriteToWithEndian;
 use bytestruct_derive::ByteStruct;
 
 use crate::{
-	wayland::types::{Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
+	wayland::types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
 	wayland_interface,
 };
 
@@ -25,11 +25,7 @@ pub struct SyncCommand {
 }
 
 impl Command<Display> for SyncCommand {
-	fn handle(
-		&self,
-		connection: &Arc<UnixStream>,
-		_display: &mut Display,
-	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+	fn handle(&self, connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
 		let mut payload = Vec::new();
 		0u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)
 			.map_err(WaylandError::IOError)?;
@@ -39,7 +35,7 @@ impl Command<Display> for SyncCommand {
 			.write_to_with_endian(&mut buf, bytestruct::Endian::Little)
 			.map_err(WaylandError::IOError)?;
 		connection.as_ref().write_all(&buf).map_err(WaylandError::IOError)?;
-		Ok(None)
+		Ok(Some(ClientEffect::Unregister(self.callback_id)))
 	}
 }
 
@@ -49,12 +45,8 @@ pub struct GetRegistry {
 }
 
 impl Command<Display> for GetRegistry {
-	fn handle(
-		&self,
-		_connection: &Arc<UnixStream>,
-		_display: &mut Display,
-	) -> WaylandResult<Option<(u32, SubsystemType)>> {
-		Ok(Some((
+	fn handle(&self, _connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
+		Ok(Some(ClientEffect::Register(
 			self.registry_id,
 			SubsystemType::Registry(super::registry::Registry),
 		)))

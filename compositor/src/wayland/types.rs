@@ -3,7 +3,7 @@ use std::{collections::HashMap, os::unix::net::UnixStream, sync::Arc};
 use bytestruct::{Endian, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::{display::Display, registry::Registry};
+use crate::wayland::{compositor::Compositor, display::Display, registry::Registry, surface::Surface};
 
 pub trait SubSystem {
 	type Request: CommandRegistry;
@@ -19,11 +19,17 @@ pub enum WaylandError {
 
 pub type WaylandResult<T> = Result<T, WaylandError>;
 
+pub enum ClientEffect {
+	Register(u32, SubsystemType),
+	Unregister(u32),
+	DestroySelf,
+}
+
 pub trait Command<T: SubSystem>
 where
 	Self: Sized,
 {
-	fn handle(&self, connection: &Arc<UnixStream>, subsystem: &mut T) -> WaylandResult<Option<(u32, SubsystemType)>>;
+	fn handle(&self, connection: &Arc<UnixStream>, subsystem: &mut T) -> WaylandResult<Option<ClientEffect>>;
 }
 
 pub trait CommandRegistry {
@@ -44,17 +50,22 @@ impl Client {
 		Self { connection, objects }
 	}
 
-	pub fn register_object(&mut self, object_id: u32, subsystem: SubsystemType) {
-		self.objects.insert(object_id, subsystem);
-	}
-
 	pub fn handle_command(&mut self, command: WaylandPacket) -> WaylandResult<()> {
 		let object_id = command.object_id;
 		let Some(subsystem) = self.objects.get_mut(&object_id) else {
 			return Err(WaylandError::UnrecognisedObject);
 		};
-		if let Some((new_id, new_obj)) = subsystem.handle_command(&self.connection, command)? {
-			self.objects.insert(new_id, new_obj);
+		match subsystem.handle_command(&self.connection, command)? {
+			Some(ClientEffect::Register(id, obj)) => {
+				self.objects.insert(id, obj);
+			}
+			Some(ClientEffect::Unregister(id)) => {
+				self.objects.remove(&id);
+			}
+			Some(ClientEffect::DestroySelf) => {
+				self.objects.remove(&object_id);
+			}
+			None => {}
 		}
 		Ok(())
 	}
@@ -63,6 +74,8 @@ impl Client {
 pub enum SubsystemType {
 	Display(Display),
 	Registry(Registry),
+	Compositor(Compositor),
+	Surface(Surface),
 }
 
 // TODO: Macro this
@@ -71,7 +84,7 @@ impl SubsystemType {
 		&mut self,
 		connection: &Arc<UnixStream>,
 		command: WaylandPacket,
-	) -> WaylandResult<Option<(u32, SubsystemType)>> {
+	) -> WaylandResult<Option<ClientEffect>> {
 		match self {
 			SubsystemType::Display(display) => {
 				if let Some(cmd) = display.parse_command(command) {
@@ -83,6 +96,20 @@ impl SubsystemType {
 			SubsystemType::Registry(registry) => {
 				if let Some(cmd) = registry.parse_command(command) {
 					cmd.handle(connection, registry)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::Compositor(compositor) => {
+				if let Some(cmd) = compositor.parse_command(command) {
+					cmd.handle(connection, compositor)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::Surface(surface) => {
+				if let Some(cmd) = surface.parse_command(command) {
+					cmd.handle(connection, surface)
 				} else {
 					Ok(None)
 				}
