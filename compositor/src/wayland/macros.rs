@@ -9,10 +9,7 @@ macro_rules! wayland_interface {
             fn parse(command: $crate::wayland::types::WaylandPacket) -> Option<Self> {
                 match command.opcode {
                     $($opcode => Some(Self::$variant(
-                        <$ty as ::bytestruct::ReadFromWithEndian>::read_from_with_endian(
-                            &mut ::std::io::Cursor::new(command.payload),
-                            ::bytestruct::Endian::Little,
-                        ).ok()?
+                        <$ty as $crate::wayland::types::FromPacket>::from_packet(command)?
                     )),)*
                     _ => None,
                 }

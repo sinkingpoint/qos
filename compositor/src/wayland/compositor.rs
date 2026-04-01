@@ -8,6 +8,8 @@ pub struct Compositor;
 
 impl SubSystem for Compositor {
 	type Request = CompositorRequest;
+	const NAME: &'static str = "wl_compositor";
+	const VERSION: u32 = 1;
 }
 
 wayland_interface!(Compositor, CompositorRequest {
@@ -27,7 +29,7 @@ impl Command<Compositor> for CreateSurfaceCommand {
 	) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::Register(
 			self.new_id,
-			crate::wayland::types::SubsystemType::Surface(crate::wayland::surface::Surface),
+			crate::wayland::types::SubsystemType::Surface(crate::wayland::surface::Surface::new()),
 		)))
 	}
 }

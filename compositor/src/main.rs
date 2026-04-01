@@ -118,9 +118,6 @@ fn main() {
 
 	let mut active_buffer = &mut video_buffer;
 	let mut inactive_buffer = &mut video_buffer2;
-	active_buffer.clear(0x000000FF); // Clear to blue
-	active_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
-	active_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
 
 	if let Err(err) = active_buffer.flip_to(&card, encoder.crtc_id) {
 		eprintln!("Failed to flip to initial buffer: {}", err);
@@ -155,11 +152,7 @@ fn main() {
 				// FlipComplete means inactive_buffer just became the displayed buffer.
 				// Swap so that inactive_buffer is the safe-to-write one (just came off screen).
 				std::mem::swap(&mut active_buffer, &mut inactive_buffer);
-
-				inactive_buffer.clear(0x000000FF); // Clear to blue
-				inactive_buffer.draw_rect(100, 100, 200, 150, 0x0000FFFF); // Draw a blue rectangle
-				inactive_buffer.draw_rect(200, 100, 200, 150, 0x00FF00FF); // Draw a green rectangle
-
+				wayland.repaint(inactive_buffer);
 				if let Err(err) = inactive_buffer.flip_to(&card, encoder.crtc_id) {
 					eprintln!("Failed to flip buffer: {}", err);
 				}
@@ -245,9 +238,9 @@ enum VideoBufferError {
 
 struct VideoBuffer {
 	pixels: *mut u32,
-	width: u32,
-	height: u32,
-	pitch: u32, // row stride in pixels (pitch_bytes / 4)
+	pub width: u32,
+	pub height: u32,
+	pub pitch: u32, // row stride in pixels (pitch_bytes / 4)
 
 	framebuffer_id: u32,
 	buffer_size: usize,

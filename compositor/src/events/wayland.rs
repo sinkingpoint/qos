@@ -1,7 +1,7 @@
 use std::{
 	collections::HashMap,
 	fs::set_permissions,
-	io::{self, BufReader},
+	io,
 	os::unix::{
 		fs::{PermissionsExt, chown},
 		net::{UnixListener, UnixStream},
@@ -10,13 +10,9 @@ use std::{
 	thread,
 };
 
-use bytestruct::ReadFromWithEndian;
 use nix::{sys::epoll, unistd::Uid};
 
-use crate::{
-	events::{CompositorEvent, event_threads::EventThreadHandle},
-	wayland::WaylandPacket,
-};
+use crate::events::{CompositorEvent, event_threads::EventThreadHandle, scm_bufreader::ScmBufReader};
 
 const LISTENER_ID: u64 = 0;
 const KILL_ID: u64 = u64::MAX;
@@ -24,7 +20,7 @@ const KILL_ID: u64 = u64::MAX;
 #[derive(Debug)]
 pub struct WaylandEvent {
 	pub client_id: u32,
-	pub packet: WaylandPacket,
+	pub packet: crate::wayland::WaylandPacket,
 	pub client: Arc<UnixStream>,
 }
 
@@ -106,7 +102,7 @@ impl WaylandSocket {
 								continue;
 							}
 
-							clients.insert(client_id, (BufReader::new(stream), Arc::new(write)));
+							clients.insert(client_id, (ScmBufReader::new(stream), Arc::new(write)));
 						}
 						Err(e) => eprintln!("Failed to accept client: {}", e),
 					}
@@ -115,13 +111,12 @@ impl WaylandSocket {
 					let (read_client, write_client) = clients.get_mut(&client_id).unwrap();
 
 					loop {
-						let packet = match WaylandPacket::read_from_with_endian(read_client, bytestruct::Endian::Little)
-						{
+						let packet = match read_client.read_packet() {
 							Ok(packet) => packet,
 							Err(e) if e.kind() == io::ErrorKind::WouldBlock => break, // no more data right now
 							Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
 								if let Some((reader, _)) = clients.remove(&client_id)
-									&& let Err(e) = epoll.delete(reader.get_ref())
+									&& let Err(e) = epoll.delete(reader.socket())
 								{
 									eprintln!("Failed to remove client {} from epoll: {}", client_id, e);
 								}
