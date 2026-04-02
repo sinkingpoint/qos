@@ -25,8 +25,8 @@ impl WaylandCompositor {
 		}
 	}
 
-	pub fn repaint(&self, framebuffer: &mut VideoBuffer) {
-		for client in self.clients.values() {
+	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
+		for client in self.clients.values_mut() {
 			client.repaint(framebuffer);
 		}
 	}

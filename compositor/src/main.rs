@@ -152,6 +152,8 @@ fn main() {
 				// FlipComplete means inactive_buffer just became the displayed buffer.
 				// Swap so that inactive_buffer is the safe-to-write one (just came off screen).
 				std::mem::swap(&mut active_buffer, &mut inactive_buffer);
+				inactive_buffer.sync_from(active_buffer);
+				active_buffer.damaged.clear(); // we've just synced, so no more damage
 				wayland.repaint(inactive_buffer);
 				if let Err(err) = inactive_buffer.flip_to(&card, encoder.crtc_id) {
 					eprintln!("Failed to flip buffer: {}", err);
@@ -244,6 +246,7 @@ struct VideoBuffer {
 
 	framebuffer_id: u32,
 	buffer_size: usize,
+	damaged: Vec<(u32, u32, u32, u32)>, // list of damaged rectangles (x, y, width, height)
 }
 
 impl VideoBuffer {
@@ -291,26 +294,54 @@ impl VideoBuffer {
 			pitch,
 			framebuffer_id,
 			buffer_size,
+			damaged: Vec::new(),
 		}
 	}
 
-	pub fn clear(&mut self, color: u32) {
-		for y in 0..self.height {
+	pub fn blit_and_mark_dirty(
+		&mut self,
+		src_pixels: *const u32,
+		src_stride_pixels: u32,
+		x: u32,
+		y: u32,
+		width: u32,
+		height: u32,
+	) {
+		self.blit_from(src_pixels, src_stride_pixels, x, y, width, height);
+		self.damaged.push((x, y, width, height));
+	}
+
+	fn blit_from(&mut self, src_pixels: *const u32, src_stride_pixels: u32, x: u32, y: u32, width: u32, height: u32) {
+		if x.saturating_add(width) > self.width {
+			eprintln!(
+				"blit_from: x+width ({}) exceeds width ({}), skipping",
+				x.saturating_add(width),
+				self.width
+			);
+			return;
+		}
+		if y.saturating_add(height) > self.height {
+			eprintln!(
+				"blit_from: y+height ({}) exceeds framebuffer height ({}), skipping",
+				y.saturating_add(height),
+				self.height
+			);
+			return;
+		}
+		for row in 0..height {
 			unsafe {
-				std::slice::from_raw_parts_mut(self.pixels.add((y * self.pitch) as usize), self.width as usize)
-					.fill(color);
+				std::ptr::copy_nonoverlapping(
+					src_pixels.add(row as usize * src_stride_pixels as usize),
+					self.pixels.add(((y + row) * self.pitch + x) as usize),
+					width as usize,
+				);
 			}
 		}
 	}
 
-	pub fn draw_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32) {
-		for j in 0..height {
-			for i in 0..width {
-				let idx = ((y + j) * self.pitch + (x + i)) as usize;
-				unsafe {
-					*self.pixels.add(idx) = color;
-				}
-			}
+	pub fn sync_from(&mut self, other: &VideoBuffer) {
+		for &(x, y, width, height) in &other.damaged {
+			self.blit_from(other.pixels, other.pitch, x, y, width, height);
 		}
 	}
 

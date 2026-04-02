@@ -1,5 +1,6 @@
 use std::{
 	collections::HashMap,
+	io::Write,
 	os::{fd::OwnedFd, unix::net::UnixStream},
 	sync::Arc,
 };
@@ -95,9 +96,10 @@ impl Client {
 		Self { connection, objects }
 	}
 
-	pub fn repaint(&self, framebuffer: &mut VideoBuffer) {
+	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
+		let mut blitted: Vec<(u32, u32)> = Vec::new(); // (surface_id, buffer_id)
 		// For each surface with a committed buffer, blit the buffer to the framebuffer.
-		for subsystem in self.objects.values() {
+		for (surface_id, subsystem) in self.objects.iter() {
 			if let SubsystemType::Surface(surface) = subsystem
 				&& surface.committed
 				&& let Some((buffer_id, _, _)) = surface.attached_buffer
@@ -112,7 +114,30 @@ impl Client {
 					_ => continue, // skip if pool doesn't exist or isn't a shared memory pool
 				};
 
+				if surface.blitted {
+					continue; // skip if we've already blitted this surface since the last commit
+				}
+
 				mem_pool.blit_onto(buffer, framebuffer);
+				blitted.push((*surface_id, buffer_id));
+			}
+		}
+
+		for (surface_id, buffer_id) in blitted {
+			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
+				surface.blitted = true;
+			}
+			// wl_buffer.release — opcode 0, no payload
+			let packet = WaylandPacket::new(buffer_id, 0, vec![]);
+			let mut buf = Vec::new();
+			if let Err(e) = packet.write_to_with_endian(&mut buf, Endian::Little) {
+				eprintln!("Failed to write wl_buffer.release packet: {}", e);
+				continue;
+			}
+
+			if let Err(e) = self.connection.as_ref().write_all(&buf) {
+				eprintln!("Failed to send wl_buffer.release packet: {}", e);
+				continue;
 			}
 		}
 	}

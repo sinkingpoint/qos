@@ -66,18 +66,19 @@ impl SharedMemoryPool {
 	}
 
 	pub fn blit_onto(&self, buffer: &Buffer, framebuffer: &mut VideoBuffer) {
-		let blit_width = buffer.width.min(framebuffer.width as i32);
-		let blit_height = buffer.height.min(framebuffer.height as i32);
-		for y in 0..blit_height {
-			for x in 0..blit_width {
-				let src_offset = (y * buffer.stride + x * 4) as usize;
-				let dst_offset = (y * framebuffer.pitch as i32 + x) as usize;
-				unsafe {
-					let pixel = std::ptr::read_unaligned(self.ptr.add(src_offset) as *const u32);
-					std::ptr::write_unaligned(framebuffer.pixels.add(dst_offset), pixel);
-				}
-			}
+		if buffer.offset < 0 {
+			eprintln!("blit_onto: negative buffer offset {}", buffer.offset);
+			return;
 		}
+		let end = (buffer.offset as u64)
+			.saturating_add((buffer.height as u64).saturating_mul(buffer.stride as u64));
+		if end > self.size as u64 {
+			eprintln!("blit_onto: buffer region ({} bytes) exceeds pool size ({})", end, self.size);
+			return;
+		}
+		let src = unsafe { self.ptr.add(buffer.offset as usize) } as *const u32;
+		let src_stride_pixels = buffer.stride as u32 / 4;
+		framebuffer.blit_and_mark_dirty(src, src_stride_pixels, 0, 0, buffer.width as u32, buffer.height as u32);
 	}
 }
 
@@ -109,6 +110,16 @@ impl Command<SharedMemoryPool> for CreateBufferCommand {
 		_connection: &Arc<UnixStream>,
 		pool: &mut SharedMemoryPool,
 	) -> WaylandResult<Option<ClientEffect>> {
+		if self.offset < 0 || self.width <= 0 || self.height <= 0 || self.stride < self.width.saturating_mul(4) {
+			eprintln!("create_buffer: invalid dimensions (offset={}, width={}, height={}, stride={})", self.offset, self.width, self.height, self.stride);
+			return Ok(None);
+		}
+		let end = (self.offset as u64)
+			.saturating_add((self.height as u64).saturating_mul(self.stride as u64));
+		if end > pool.size as u64 {
+			eprintln!("create_buffer: region ({} bytes) exceeds pool size ({})", end, pool.size);
+			return Ok(None);
+		}
 		let buffer = Buffer::new(
 			pool.pool_id,
 			self.offset,

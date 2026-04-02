@@ -7,6 +7,7 @@ use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 pub struct Surface {
 	pub attached_buffer: Option<(u32, i32, i32)>,
 	pub committed: bool,
+	pub blitted: bool,
 }
 
 impl Surface {
@@ -14,6 +15,7 @@ impl Surface {
 		Self {
 			attached_buffer: None,
 			committed: false,
+			blitted: false,
 		}
 	}
 }
@@ -49,6 +51,7 @@ impl Command<Surface> for AttachCommand {
 	fn handle(&self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		surface.attached_buffer = Some((self.buffer_id, self.x, self.y));
 		surface.committed = false;
+		surface.blitted = false;
 		Ok(None)
 	}
 }
@@ -60,6 +63,7 @@ impl Command<Surface> for CommitCommand {
 	fn handle(&self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		if surface.attached_buffer.is_some() {
 			surface.committed = true;
+			surface.blitted = false;
 		}
 
 		Ok(None)
