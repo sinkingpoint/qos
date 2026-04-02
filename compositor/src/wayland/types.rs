@@ -18,6 +18,9 @@ use crate::{
 		registry::Registry,
 		shm::{SharedMemory, SharedMemoryPool},
 		surface::Surface,
+		xdg_surface::XDGSurface,
+		xdg_toplevel::XdgTopLevel,
+		xdg_wm_base::XdgWmBase,
 	},
 };
 
@@ -104,6 +107,16 @@ impl Client {
 				&& surface.committed
 				&& let Some((buffer_id, _, _)) = surface.attached_buffer
 			{
+				if let Some(xdg_surface) = self
+					.objects
+					.values()
+					.find(|v| matches!(v, SubsystemType::XdgSurface(x) if x.surface_id == *surface_id))
+					&& let SubsystemType::XdgSurface(xdg_surface) = xdg_surface
+					&& !xdg_surface.configured
+				{
+					continue; // skip if the surface isn't configured yet
+				}
+
 				let buffer = match self.objects.get(&buffer_id) {
 					Some(SubsystemType::Buffer(buffer)) => buffer,
 					_ => continue, // skip if attached buffer doesn't exist or isn't a buffer
@@ -171,6 +184,9 @@ pub enum SubsystemType {
 	SharedMemory(SharedMemory),
 	SharedMemoryPool(SharedMemoryPool),
 	Buffer(Buffer),
+	XdgWmBase(XdgWmBase),
+	XdgSurface(XDGSurface),
+	XdgTopLevel(XdgTopLevel),
 }
 
 // TODO: Macro this
@@ -184,6 +200,9 @@ impl SubsystemType {
 			Self::SharedMemory(_) => SharedMemory::NAME,
 			Self::SharedMemoryPool(_) => SharedMemoryPool::NAME,
 			Self::Buffer(_) => Buffer::NAME,
+			Self::XdgWmBase(_) => XdgWmBase::NAME,
+			Self::XdgSurface(_) => XDGSurface::NAME,
+			Self::XdgTopLevel(_) => XdgTopLevel::NAME,
 		}
 	}
 
@@ -196,6 +215,9 @@ impl SubsystemType {
 			Self::SharedMemory(_) => SharedMemory::VERSION,
 			Self::SharedMemoryPool(_) => SharedMemoryPool::VERSION,
 			Self::Buffer(_) => Buffer::VERSION,
+			Self::XdgWmBase(_) => XdgWmBase::VERSION,
+			Self::XdgSurface(_) => XDGSurface::VERSION,
+			Self::XdgTopLevel(_) => XdgTopLevel::VERSION,
 		}
 	}
 
@@ -250,6 +272,27 @@ impl SubsystemType {
 			SubsystemType::Buffer(buffer) => {
 				if let Some(cmd) = buffer.parse_command(command) {
 					cmd.handle(connection, buffer)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::XdgWmBase(xdg_wm_base) => {
+				if let Some(cmd) = xdg_wm_base.parse_command(command) {
+					cmd.handle(connection, xdg_wm_base)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::XdgSurface(xdg_surface) => {
+				if let Some(cmd) = xdg_surface.parse_command(command) {
+					cmd.handle(connection, xdg_surface)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::XdgTopLevel(xdg_toplevel) => {
+				if let Some(cmd) = xdg_toplevel.parse_command(command) {
+					cmd.handle(connection, xdg_toplevel)
 				} else {
 					Ok(None)
 				}

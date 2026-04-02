@@ -7,6 +7,9 @@ mod registry;
 mod shm;
 mod surface;
 mod types;
+mod xdg_surface;
+mod xdg_toplevel;
+mod xdg_wm_base;
 
 use std::collections::HashMap;
 

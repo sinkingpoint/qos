@@ -49,6 +49,10 @@ impl Command<Registry> for BindCommand {
 					crate::wayland::types::SubsystemType::SharedMemory(crate::wayland::shm::SharedMemory),
 				)))
 			}
+			"xdg_wm_base" => Ok(Some(ClientEffect::Register(
+				self.new_id,
+				crate::wayland::types::SubsystemType::XdgWmBase(crate::wayland::xdg_wm_base::XdgWmBase),
+			))),
 			_ => Ok(None), // unrecognised interface, ignore for now
 		}
 	}
