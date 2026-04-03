@@ -13,7 +13,7 @@ use crate::{
 		drm::DrmEventType,
 		input::{Event, KeyCode, KeyState},
 	},
-	wayland::WaylandCompositor,
+	wayland::{DisplayGeometry, WaylandCompositor},
 };
 
 mod bmp;
@@ -105,7 +105,14 @@ fn main() {
 	);
 	let wayland_thread_handle = events::wayland_event_thread("wayland-0".to_string(), input_event_sender);
 
-	let mut wayland = WaylandCompositor::new();
+	let display_geometry = DisplayGeometry::new(
+		mode.hdisplay,
+		mode.vdisplay,
+		mode.vrefresh,
+		connector.mm_width,
+		connector.mm_height,
+	);
+	let mut wayland = WaylandCompositor::new(display_geometry);
 
 	set_crtc(
 		&card,

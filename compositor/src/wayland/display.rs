@@ -4,18 +4,36 @@ use bytestruct::WriteToWithEndian;
 use bytestruct_derive::ByteStruct;
 
 use crate::{
-	wayland::types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
+	wayland::{
+		compositor::Compositor,
+		output::{DisplayGeometry, Output},
+		registry::Registry,
+		seat::Seat,
+		shm::SharedMemory,
+		types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
+		xdg_wm_base::XdgWmBase,
+	},
 	wayland_interface,
 };
+pub struct Display {
+	globals: Vec<SubsystemType>,
+	display_geometry: DisplayGeometry,
+}
 
-const GLOBALS_TO_ADVERTISE: &[SubsystemType] = &[
-	SubsystemType::Compositor(crate::wayland::compositor::Compositor),
-	SubsystemType::SharedMemory(crate::wayland::shm::SharedMemory),
-	SubsystemType::XdgWmBase(crate::wayland::xdg_wm_base::XdgWmBase),
-	SubsystemType::Seat(crate::wayland::seat::Seat),
-];
-
-pub struct Display {}
+impl Display {
+	pub fn new(display_geometry: DisplayGeometry) -> Self {
+		Self {
+			globals: vec![
+				SubsystemType::Compositor(Compositor),
+				SubsystemType::SharedMemory(SharedMemory),
+				SubsystemType::XdgWmBase(XdgWmBase),
+				SubsystemType::Seat(Seat),
+				SubsystemType::Output(Output),
+			],
+			display_geometry,
+		}
+	}
+}
 
 impl SubSystem for Display {
 	type Request = DisplayRequest;
@@ -53,8 +71,8 @@ pub struct GetRegistry {
 }
 
 impl Command<Display> for GetRegistry {
-	fn handle(&self, connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
-		for (i, global) in GLOBALS_TO_ADVERTISE.iter().enumerate() {
+	fn handle(&self, connection: &Arc<UnixStream>, display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
+		for (i, global) in display.globals.iter().enumerate() {
 			let name = global.name();
 			let version = global.version();
 			let mut payload = Vec::new();
@@ -79,7 +97,7 @@ impl Command<Display> for GetRegistry {
 
 		Ok(Some(ClientEffect::Register(
 			self.registry_id,
-			SubsystemType::Registry(super::registry::Registry),
+			SubsystemType::Registry(Registry::new(display.display_geometry.clone())),
 		)))
 	}
 }

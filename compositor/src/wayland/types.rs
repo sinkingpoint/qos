@@ -1,6 +1,7 @@
 use std::{
 	collections::HashMap,
 	io::Write,
+	ops::Deref,
 	os::{fd::OwnedFd, unix::net::UnixStream},
 	sync::Arc,
 };
@@ -16,7 +17,7 @@ use crate::{
 		compositor::Compositor,
 		display::Display,
 		keyboard::Keyboard,
-		output::Output,
+		output::{DisplayGeometry, Output},
 		pointer::Pointer,
 		registry::Registry,
 		seat::Seat,
@@ -97,9 +98,9 @@ pub struct Client {
 }
 
 impl Client {
-	pub fn new(connection: Arc<UnixStream>) -> Self {
+	pub fn new(connection: Arc<UnixStream>, display_geometry: DisplayGeometry) -> Self {
 		let mut objects = HashMap::new();
-		objects.insert(1, SubsystemType::Display(Display {}));
+		objects.insert(1, SubsystemType::Display(Display::new(display_geometry)));
 		Self { connection, objects }
 	}
 
@@ -251,5 +252,58 @@ impl ReadFromWithEndian for WaylandPacket {
 		let mut payload = vec![0u8; header.data_length as usize - 8];
 		reader.read_exact(&mut payload)?;
 		Ok(Self::new(header.object_id, header.opcode, payload))
+	}
+}
+
+#[derive(Debug)]
+pub struct WaylandEncodedString(pub String);
+
+impl Deref for WaylandEncodedString {
+	type Target = String;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl WriteToWithEndian for WaylandEncodedString {
+	fn write_to_with_endian<W: std::io::Write>(&self, writer: &mut W, _endian: Endian) -> std::io::Result<()> {
+		writer.write_all(&(self.0.len() as u32 + 1).to_le_bytes())?;
+		writer.write_all(self.0.as_bytes())?;
+		writer.write_all(&[0])?; // null terminator
+		let padding = (4 - (self.0.len() + 1) % 4) % 4;
+		writer.write_all(&vec![0; padding])?; // padding to 4 bytes
+		Ok(())
+	}
+}
+
+impl ReadFromWithEndian for WaylandEncodedString {
+	fn read_from_with_endian<R: std::io::Read>(reader: &mut R, _endian: Endian) -> std::io::Result<Self> {
+		let mut len_bytes = [0u8; 4];
+		reader.read_exact(&mut len_bytes)?;
+		let len = u32::from_le_bytes(len_bytes);
+		let mut string_bytes = vec![0u8; len as usize];
+		reader.read_exact(&mut string_bytes)?;
+		// Strip the null byte
+		if string_bytes.last() == Some(&0) {
+			string_bytes.pop();
+		} else {
+			return Err(std::io::Error::new(
+				std::io::ErrorKind::InvalidData,
+				"Wayland string is not null-terminated",
+			));
+		}
+
+		let padding = (4 - (len % 4)) % 4;
+		let mut padding_bytes = vec![0u8; padding as usize];
+		reader.read_exact(&mut padding_bytes)?;
+
+		let string = String::from_utf8(string_bytes).map_err(|e| {
+			std::io::Error::new(
+				std::io::ErrorKind::InvalidData,
+				format!("Invalid UTF-8 in Wayland string: {}", e),
+			)
+		})?;
+		Ok(Self(string))
 	}
 }

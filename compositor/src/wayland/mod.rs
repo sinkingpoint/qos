@@ -4,6 +4,7 @@ mod macros;
 mod buffer;
 mod compositor;
 mod keyboard;
+mod output;
 mod pointer;
 mod registry;
 mod seat;
@@ -16,18 +17,21 @@ mod xdg_wm_base;
 
 use std::collections::HashMap;
 
+pub use output::DisplayGeometry;
 pub use types::WaylandPacket;
 
 use crate::{VideoBuffer, events::wayland::WaylandEvent, wayland::types::Client};
 
 pub struct WaylandCompositor {
 	pub clients: HashMap<u32, types::Client>,
+	pub display_geometry: DisplayGeometry,
 }
 
 impl WaylandCompositor {
-	pub fn new() -> Self {
+	pub fn new(display_geometry: DisplayGeometry) -> Self {
 		Self {
 			clients: HashMap::new(),
+			display_geometry,
 		}
 	}
 
@@ -41,7 +45,7 @@ impl WaylandCompositor {
 		let client = self
 			.clients
 			.entry(event.client_id)
-			.or_insert_with(|| Client::new(event.client.clone()));
+			.or_insert_with(|| Client::new(event.client.clone(), self.display_geometry.clone()));
 		if let Err(e) = client.handle_command(event.packet) {
 			match e {
 				types::WaylandError::IOError(e) => eprintln!("Wayland IO error: {}", e),
