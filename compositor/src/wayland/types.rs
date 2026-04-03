@@ -16,6 +16,7 @@ use crate::{
 		compositor::Compositor,
 		display::Display,
 		keyboard::Keyboard,
+		output::Output,
 		pointer::Pointer,
 		registry::Registry,
 		seat::Seat,
@@ -179,7 +180,7 @@ impl Client {
 	}
 }
 
-pub enum SubsystemType {
+subsystem_type! {
 	Display(Display),
 	Registry(Registry),
 	Compositor(Compositor),
@@ -193,145 +194,7 @@ pub enum SubsystemType {
 	Seat(Seat),
 	Pointer(Pointer),
 	Keyboard(Keyboard),
-}
-
-// TODO: Macro this
-impl SubsystemType {
-	pub fn name(&self) -> &'static str {
-		match self {
-			Self::Display(_) => Display::NAME,
-			Self::Registry(_) => Registry::NAME,
-			Self::Compositor(_) => Compositor::NAME,
-			Self::Surface(_) => Surface::NAME,
-			Self::SharedMemory(_) => SharedMemory::NAME,
-			Self::SharedMemoryPool(_) => SharedMemoryPool::NAME,
-			Self::Buffer(_) => Buffer::NAME,
-			Self::XdgWmBase(_) => XdgWmBase::NAME,
-			Self::XdgSurface(_) => XDGSurface::NAME,
-			Self::XdgTopLevel(_) => XdgTopLevel::NAME,
-			Self::Seat(_) => Seat::NAME,
-			Self::Pointer(_) => Pointer::NAME,
-			Self::Keyboard(_) => Keyboard::NAME,
-		}
-	}
-
-	pub fn version(&self) -> u32 {
-		match self {
-			Self::Display(_) => Display::VERSION,
-			Self::Registry(_) => Registry::VERSION,
-			Self::Compositor(_) => Compositor::VERSION,
-			Self::Surface(_) => Surface::VERSION,
-			Self::SharedMemory(_) => SharedMemory::VERSION,
-			Self::SharedMemoryPool(_) => SharedMemoryPool::VERSION,
-			Self::Buffer(_) => Buffer::VERSION,
-			Self::XdgWmBase(_) => XdgWmBase::VERSION,
-			Self::XdgSurface(_) => XDGSurface::VERSION,
-			Self::XdgTopLevel(_) => XdgTopLevel::VERSION,
-			Self::Seat(_) => Seat::VERSION,
-			Self::Pointer(_) => Pointer::VERSION,
-			Self::Keyboard(_) => Keyboard::VERSION,
-		}
-	}
-
-	fn handle_command(
-		&mut self,
-		connection: &Arc<UnixStream>,
-		command: WaylandPacket,
-	) -> WaylandResult<Option<ClientEffect>> {
-		match self {
-			SubsystemType::Display(display) => {
-				if let Some(cmd) = display.parse_command(command) {
-					cmd.handle(connection, display)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Registry(registry) => {
-				if let Some(cmd) = registry.parse_command(command) {
-					cmd.handle(connection, registry)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Compositor(compositor) => {
-				if let Some(cmd) = compositor.parse_command(command) {
-					cmd.handle(connection, compositor)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Surface(surface) => {
-				if let Some(cmd) = surface.parse_command(command) {
-					cmd.handle(connection, surface)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::SharedMemory(shared_memory) => {
-				if let Some(cmd) = shared_memory.parse_command(command) {
-					cmd.handle(connection, shared_memory)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::SharedMemoryPool(shared_memory_pool) => {
-				if let Some(cmd) = shared_memory_pool.parse_command(command) {
-					cmd.handle(connection, shared_memory_pool)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Buffer(buffer) => {
-				if let Some(cmd) = buffer.parse_command(command) {
-					cmd.handle(connection, buffer)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::XdgWmBase(xdg_wm_base) => {
-				if let Some(cmd) = xdg_wm_base.parse_command(command) {
-					cmd.handle(connection, xdg_wm_base)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::XdgSurface(xdg_surface) => {
-				if let Some(cmd) = xdg_surface.parse_command(command) {
-					cmd.handle(connection, xdg_surface)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::XdgTopLevel(xdg_toplevel) => {
-				if let Some(cmd) = xdg_toplevel.parse_command(command) {
-					cmd.handle(connection, xdg_toplevel)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Seat(seat) => {
-				if let Some(cmd) = seat.parse_command(command) {
-					cmd.handle(connection, seat)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Pointer(pointer) => {
-				if let Some(cmd) = pointer.parse_command(command) {
-					cmd.handle(connection, pointer)
-				} else {
-					Ok(None)
-				}
-			}
-			SubsystemType::Keyboard(keyboard) => {
-				if let Some(cmd) = keyboard.parse_command(command) {
-					cmd.handle(connection, keyboard)
-				} else {
-					Ok(None)
-				}
-			}
-		}
-	}
+	Output(Output),
 }
 
 #[derive(Debug, ByteStruct)]

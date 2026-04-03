@@ -29,3 +29,41 @@ macro_rules! wayland_interface {
         }
     };
 }
+
+macro_rules! subsystem_type {
+	($($variant:ident($ty:ty)),* $(,)?) => {
+		pub enum SubsystemType {
+			$($variant($ty),)*
+		}
+
+		impl SubsystemType {
+			pub fn name(&self) -> &'static str {
+				match self {
+					$(Self::$variant(_) => <$ty>::NAME,)*
+				}
+			}
+
+			pub fn version(&self) -> u32 {
+				match self {
+					$(Self::$variant(_) => <$ty>::VERSION,)*
+				}
+			}
+
+			fn handle_command(
+				&mut self,
+				connection: &Arc<UnixStream>,
+				command: WaylandPacket,
+			) -> WaylandResult<Option<ClientEffect>> {
+				match self {
+					$(SubsystemType::$variant(inner) => {
+						if let Some(cmd) = inner.parse_command(command) {
+							cmd.handle(connection, inner)
+						} else {
+							Ok(None)
+						}
+					})*
+				}
+			}
+		}
+	};
+}
