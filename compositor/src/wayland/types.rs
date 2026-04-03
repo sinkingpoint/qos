@@ -148,7 +148,7 @@ impl Client {
 
 		for (surface_id, buffer_id) in blitted {
 			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
-				surface.blitted = true;
+				surface.mark_blitted(&self.connection);
 			}
 			// wl_buffer.release — opcode 0, no payload
 			let packet = WaylandPacket::new(buffer_id, 0, vec![]);
