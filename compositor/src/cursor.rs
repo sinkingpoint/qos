@@ -43,46 +43,54 @@ impl Cursor {
 	}
 
 	// Handle an input event to update the cursor position.
-	pub fn handle_input_event(&mut self, event: &Event) {
+	pub fn handle_input_event(&mut self, event: &Event) -> Option<CursorEvent> {
 		match event {
-			Event::Relative(code, value) => match code {
-				// For relative events, we simply add the value to the current position and clamp it within the screen bounds.
-				MouseCode::X => self.x = (self.x + *value).clamp(0, self.max_x),
-				MouseCode::Y => self.y = (self.y + *value).clamp(0, self.max_y),
-			},
-			Event::Absolute(code, value) => match code {
-				// For absolute events, we need to calculate the movement delta from the last
-				// absolute position, and then apply that delta to the current position. This
-				// is because absolute events give us the absolute position of the input
-				// (like a touch), but we want to move the cursor relative to its current
-				// position based on how much the input has moved since the last event.
-				MouseCode::X => {
-					// If we were just touched, ignore this event.
-					if self.was_just_touched.0 {
-						self.was_just_touched.0 = false;
+			Event::Relative(code, value) => {
+				match code {
+					// For relative events, we simply add the value to the current position and clamp it within the screen bounds.
+					MouseCode::X => self.x = (self.x + *value).clamp(0, self.max_x),
+					MouseCode::Y => self.y = (self.y + *value).clamp(0, self.max_y),
+				};
+
+				return Some(CursorEvent::Move(self.x, self.y));
+			}
+			Event::Absolute(code, value) => {
+				match code {
+					// For absolute events, we need to calculate the movement delta from the last
+					// absolute position, and then apply that delta to the current position. This
+					// is because absolute events give us the absolute position of the input
+					// (like a touch), but we want to move the cursor relative to its current
+					// position based on how much the input has moved since the last event.
+					MouseCode::X => {
+						// If we were just touched, ignore this event.
+						if self.was_just_touched.0 {
+							self.was_just_touched.0 = false;
+							self.last_abs_x = Some(*value);
+							return None;
+						}
+
+						self.x = self
+							.last_abs_x
+							.map_or(self.x, |last| (self.x + (*value - last)).clamp(0, self.max_x));
 						self.last_abs_x = Some(*value);
-						return;
 					}
+					MouseCode::Y => {
+						// If we were just touched, ignore this event.
+						if self.was_just_touched.1 {
+							self.was_just_touched.1 = false;
+							self.last_abs_y = Some(*value);
+							return None;
+						}
 
-					self.x = self
-						.last_abs_x
-						.map_or(self.x, |last| (self.x + (*value - last)).clamp(0, self.max_x));
-					self.last_abs_x = Some(*value);
-				}
-				MouseCode::Y => {
-					// If we were just touched, ignore this event.
-					if self.was_just_touched.1 {
-						self.was_just_touched.1 = false;
+						self.y = self
+							.last_abs_y
+							.map_or(self.y, |last| (self.y + (*value - last)).clamp(0, self.max_y));
 						self.last_abs_y = Some(*value);
-						return;
 					}
-
-					self.y = self
-						.last_abs_y
-						.map_or(self.y, |last| (self.y + (*value - last)).clamp(0, self.max_y));
-					self.last_abs_y = Some(*value);
 				}
-			},
+
+				return Some(CursorEvent::Move(self.x, self.y));
+			}
 			Event::Key(KeyCode::BtnTouch, KeyState::Pressed) => {
 				// Store that we were just touched, so we should ignore the first absolute event that follows this,
 				// which is an ABS call with the position of the touch, which we don't want to use as a movement event,
@@ -91,5 +99,13 @@ impl Cursor {
 			}
 			_ => {}
 		}
+
+		None
 	}
+}
+
+pub enum CursorEvent {
+	Move(i32, i32),
+	ButtonDown(i32),
+	ButtonUp(i32),
 }

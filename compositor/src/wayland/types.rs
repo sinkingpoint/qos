@@ -18,7 +18,7 @@ use crate::{
 		display::Display,
 		keyboard::Keyboard,
 		output::{DisplayGeometry, Output},
-		pointer::Pointer,
+		pointer::{EnterEvent, LeaveEvent, MoveEvent, Pointer},
 		registry::Registry,
 		seat::Seat,
 		shm::{SharedMemory, SharedMemoryPool},
@@ -163,6 +163,198 @@ impl Client {
 				continue;
 			}
 		}
+	}
+
+	// Returns the ID of the surface at the given coordinates, if any.
+	pub fn surface_at(&self, x: i32, y: i32) -> Option<u32> {
+		for (obj_id, obj) in self.objects.iter() {
+			if let SubsystemType::XdgTopLevel(xdg_toplevel) = obj
+				&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&xdg_toplevel.xdg_surface)
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
+				&& let Some((buffer_id, subsurface_x, subsurface_y)) = surface.attached_buffer
+				&& let Some(SubsystemType::Buffer(buffer)) = self.objects.get(&buffer_id)
+			{
+				let surface_x = subsurface_x + xdg_toplevel.x;
+				let surface_y = subsurface_y + xdg_toplevel.y;
+				if x >= surface_x && x < surface_x + buffer.width && y >= surface_y && y < surface_y + buffer.height {
+					return Some(*obj_id);
+				}
+			}
+		}
+		None
+	}
+
+	// send_enter_event needs to be its own thing, because it needs to transform the global
+	// coordinates of the pointer into surface-local coordinates, which requires looking up the
+	// position of the surface and the position of the buffer attached to the surface.
+	pub fn send_enter_event(&self, serial: u32, top_level_id: u32, x: i32, y: i32) -> WaylandResult<()> {
+		let pointer_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Pointer(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let top_level = self
+			.objects
+			.get(&top_level_id)
+			.and_then(|s| {
+				if let SubsystemType::XdgTopLevel(xdg_toplevel) = s {
+					Some(xdg_toplevel)
+				} else {
+					None
+				}
+			})
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		// Make the enter_event relative to the surface's position
+		let surface_id = self
+			.derive_surface_id_from_top_level_id(top_level_id)
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface = self
+			.objects
+			.get(&surface_id)
+			.and_then(|s| {
+				if let SubsystemType::Surface(surface) = s {
+					Some(surface)
+				} else {
+					None
+				}
+			})
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface_x = surface
+			.attached_buffer
+			.map(|(_, subsurface_x, _)| subsurface_x)
+			.unwrap_or(0)
+			+ top_level.x;
+		let surface_y = surface
+			.attached_buffer
+			.map(|(_, _, subsurface_y)| subsurface_y)
+			.unwrap_or(0)
+			+ top_level.y;
+		let relative_x = x - surface_x;
+		let relative_y = y - surface_y;
+
+		let enter_event = EnterEvent::new(serial, surface_id, relative_x, relative_y);
+
+		let mut event_bytes = Vec::new();
+		enter_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
+
+		let packet = WaylandPacket::new(pointer_id, 0, event_bytes); // opcode 0 is enter
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+
+		self.connection.as_ref().write_all(&buf)?;
+
+		// wl_pointer.frame — opcode 5, no payload
+		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+
+		self.connection.as_ref().write_all(&buf)?;
+
+		Ok(())
+	}
+
+	pub fn send_leave_event(&self, serial: u32, top_level_id: u32) -> WaylandResult<()> {
+		let pointer_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Pointer(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface_id = self
+			.derive_surface_id_from_top_level_id(top_level_id)
+			.ok_or(WaylandError::UnrecognisedObject)?;
+		let leave_event = LeaveEvent { serial, surface_id };
+		let mut event_bytes = Vec::new();
+		leave_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
+		let packet = WaylandPacket::new(pointer_id, 1, event_bytes); // opcode 1 is leave
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+		// wl_pointer.frame — opcode 5, no payload
+		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+
+		Ok(())
+	}
+
+	pub fn send_move_event(&self, top_level_id: u32, x: i32, y: i32) -> WaylandResult<()> {
+		let pointer_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Pointer(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+		let top_level = self
+			.objects
+			.get(&top_level_id)
+			.and_then(|s| {
+				if let SubsystemType::XdgTopLevel(xdg_toplevel) = s {
+					Some(xdg_toplevel)
+				} else {
+					None
+				}
+			})
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		// Make the move_event relative to the surface's position
+		let surface_id = self
+			.derive_surface_id_from_top_level_id(top_level_id)
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface = self
+			.objects
+			.get(&surface_id)
+			.and_then(|s| {
+				if let SubsystemType::Surface(surface) = s {
+					Some(surface)
+				} else {
+					None
+				}
+			})
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface_x = surface
+			.attached_buffer
+			.map(|(_, subsurface_x, _)| subsurface_x)
+			.unwrap_or(0)
+			+ top_level.x;
+		let surface_y = surface
+			.attached_buffer
+			.map(|(_, _, subsurface_y)| subsurface_y)
+			.unwrap_or(0)
+			+ top_level.y;
+		let relative_x = x - surface_x;
+		let relative_y = y - surface_y;
+
+		let move_event = MoveEvent::new(relative_x, relative_y);
+		let mut event_bytes = Vec::new();
+		move_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
+		let packet = WaylandPacket::new(pointer_id, 2, event_bytes); // opcode 2 is move
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+		// wl_pointer.frame — opcode 5, no payload
+		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+		Ok(())
+	}
+
+	// Returns the surface ID associated with the given top level ID, if it exists.
+	fn derive_surface_id_from_top_level_id(&self, top_level_id: u32) -> Option<u32> {
+		if let Some(SubsystemType::XdgTopLevel(top_level)) = self.objects.get(&top_level_id)
+			&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&top_level.xdg_surface)
+			&& let Some(SubsystemType::Surface(_)) = self.objects.get(&xdg_surface.surface_id)
+		{
+			return Some(xdg_surface.surface_id);
+		}
+		None
 	}
 
 	pub fn handle_event(&mut self, command: WaylandPacket, fds: Vec<OwnedFd>) -> WaylandResult<()> {

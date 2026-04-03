@@ -5,15 +5,17 @@ use bytestruct_derive::ByteStruct;
 use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandEncodedString, WaylandResult};
 
 pub struct XdgTopLevel {
-	x: i32,
-	y: i32,
-	dragging: bool,
+	pub xdg_surface: u32,
+	pub x: i32,
+	pub y: i32,
+	pub dragging: bool,
 	title: Option<String>,
 }
 
 impl XdgTopLevel {
-	pub fn new() -> Self {
+	pub fn new(xdg_surface: u32) -> Self {
 		Self {
+			xdg_surface,
 			x: 0,
 			y: 0,
 			dragging: false,

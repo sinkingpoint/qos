@@ -60,7 +60,7 @@ pub struct GetTopLevelSurfaceCommand {
 
 impl Command<XDGSurface> for GetTopLevelSurfaceCommand {
 	fn handle(self, connection: &Arc<UnixStream>, xdg_surface: &mut XDGSurface) -> WaylandResult<Option<ClientEffect>> {
-		let new_surface = SubsystemType::XdgTopLevel(XdgTopLevel::new());
+		let new_surface = SubsystemType::XdgTopLevel(XdgTopLevel::new(xdg_surface.id));
 
 		// xdg_toplevel.configure
 		let mut configure_args = Vec::new();

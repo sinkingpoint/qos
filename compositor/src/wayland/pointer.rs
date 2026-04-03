@@ -1,6 +1,7 @@
 use std::{os::unix::net::UnixStream, sync::Arc};
 
 use bytestruct_derive::ByteStruct;
+use nix::time::{ClockId, clock_gettime};
 
 use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
@@ -36,5 +37,49 @@ pub struct DestroyCommand;
 impl Command<Pointer> for DestroyCommand {
 	fn handle(self, _connection: &Arc<UnixStream>, _pointer: &mut Pointer) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct EnterEvent {
+	pub serial: u32,
+	pub surface_id: u32,
+	pub x: i32,
+	pub y: i32,
+}
+
+impl EnterEvent {
+	pub fn new(serial: u32, surface_id: u32, x: i32, y: i32) -> Self {
+		Self {
+			serial,
+			surface_id,
+			x: x * 256,
+			y: y * 256,
+		}
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct LeaveEvent {
+	pub serial: u32,
+	pub surface_id: u32,
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct MoveEvent {
+	pub time: u32,
+	pub x: i32,
+	pub y: i32,
+}
+
+impl MoveEvent {
+	pub fn new(x: i32, y: i32) -> Self {
+		let time = clock_gettime(ClockId::CLOCK_MONOTONIC).expect("Failed to get time");
+		let ms = time.tv_sec() * 1000 + time.tv_nsec() / 1_000_000;
+		Self {
+			time: ms as u32,
+			x: x * 256,
+			y: y * 256,
+		}
 	}
 }

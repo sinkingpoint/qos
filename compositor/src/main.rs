@@ -172,7 +172,10 @@ fn main() {
 					Event::Absolute(_, _) | Event::Relative(_, _) | Event::Key(KeyCode::BtnTouch, _)
 				) =>
 			{
-				cursor.handle_input_event(&event);
+				let cursor_event = cursor.handle_input_event(&event);
+				if let Some(cursor_event) = cursor_event {
+					wayland.handle_cursor_event(cursor_event);
+				}
 			}
 			CompositorEvent::Input(Event::Synchronise(_, _)) => {
 				cursor.update_kernel(&card, encoder.crtc_id);
