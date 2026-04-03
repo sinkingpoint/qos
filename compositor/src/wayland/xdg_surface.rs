@@ -5,7 +5,7 @@ use bytestruct_derive::ByteStruct;
 
 use crate::wayland::{
 	WaylandPacket,
-	types::{Command, SubSystem, SubsystemType},
+	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandResult},
 	xdg_toplevel::XdgTopLevel,
 };
 
@@ -48,8 +48,8 @@ impl Command<XDGSurface> for DestroyRequest {
 		&self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_surface: &mut XDGSurface,
-	) -> crate::wayland::types::WaylandResult<Option<crate::wayland::types::ClientEffect>> {
-		Ok(Some(crate::wayland::types::ClientEffect::DestroySelf))
+	) -> WaylandResult<Option<ClientEffect>> {
+		Ok(Some(ClientEffect::DestroySelf))
 	}
 }
 
@@ -63,7 +63,7 @@ impl Command<XDGSurface> for GetTopLevelSurfaceCommand {
 		&self,
 		connection: &Arc<UnixStream>,
 		xdg_surface: &mut XDGSurface,
-	) -> crate::wayland::types::WaylandResult<Option<crate::wayland::types::ClientEffect>> {
+	) -> WaylandResult<Option<ClientEffect>> {
 		let new_surface = SubsystemType::XdgTopLevel(XdgTopLevel::new());
 
 		// xdg_toplevel.configure
@@ -86,10 +86,7 @@ impl Command<XDGSurface> for GetTopLevelSurfaceCommand {
 		surface_configure_event.write_to_with_endian(&mut surface_configure_event_bytes, bytestruct::Endian::Little)?;
 		connection.as_ref().write_all(&surface_configure_event_bytes)?;
 
-		Ok(Some(crate::wayland::types::ClientEffect::Register(
-			self.new_id,
-			new_surface,
-		)))
+		Ok(Some(ClientEffect::Register(self.new_id, new_surface)))
 	}
 }
 
@@ -101,9 +98,9 @@ pub struct AckConfigureCommand {
 impl Command<XDGSurface> for AckConfigureCommand {
 	fn handle(
 		&self,
-		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
+		_connection: &Arc<UnixStream>,
 		xdg_surface: &mut XDGSurface,
-	) -> crate::wayland::types::WaylandResult<Option<crate::wayland::types::ClientEffect>> {
+	) -> WaylandResult<Option<ClientEffect>> {
 		if Some(self.serial) == xdg_surface.pending_configure {
 			xdg_surface.pending_configure = None;
 			xdg_surface.configured = true;

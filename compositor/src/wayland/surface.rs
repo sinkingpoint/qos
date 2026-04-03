@@ -4,7 +4,10 @@ use bytestruct::WriteToWithEndian;
 use bytestruct_derive::ByteStruct;
 use nix::time::{ClockId, clock_gettime};
 
-use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
+use crate::wayland::{
+	WaylandPacket,
+	types::{ClientEffect, Command, SubSystem, WaylandResult},
+};
 
 pub struct Surface {
 	pub attached_buffer: Option<(u32, i32, i32)>,
@@ -32,7 +35,7 @@ impl Surface {
 			response
 				.write_to_with_endian(&mut payload, bytestruct::Endian::Little)
 				.unwrap();
-			let packet = crate::wayland::WaylandPacket::new(callback_id, 0, payload);
+			let packet = WaylandPacket::new(callback_id, 0, payload);
 			let mut packet_bytes = Vec::new();
 			packet
 				.write_to_with_endian(&mut packet_bytes, bytestruct::Endian::Little)

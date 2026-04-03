@@ -2,7 +2,10 @@ use std::{os::unix::net::UnixStream, sync::Arc};
 
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
+use crate::wayland::{
+	surface::Surface,
+	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandResult},
+};
 
 pub struct Compositor;
 
@@ -29,7 +32,7 @@ impl Command<Compositor> for CreateSurfaceCommand {
 	) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::Register(
 			self.new_id,
-			crate::wayland::types::SubsystemType::Surface(crate::wayland::surface::Surface::new()),
+			SubsystemType::Surface(Surface::new()),
 		)))
 	}
 }

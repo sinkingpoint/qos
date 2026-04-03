@@ -1,6 +1,8 @@
+use std::{os::unix::net::UnixStream, sync::Arc};
+
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{Command, SubSystem};
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct XdgTopLevel {}
 
@@ -25,9 +27,9 @@ pub struct DestroyCommand;
 impl Command<XdgTopLevel> for DestroyCommand {
 	fn handle(
 		&self,
-		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
+		_connection: &Arc<UnixStream>,
 		_xdg_toplevel: &mut XdgTopLevel,
-	) -> crate::wayland::types::WaylandResult<Option<crate::wayland::types::ClientEffect>> {
-		Ok(Some(crate::wayland::types::ClientEffect::DestroySelf))
+	) -> WaylandResult<Option<ClientEffect>> {
+		Ok(Some(ClientEffect::DestroySelf))
 	}
 }

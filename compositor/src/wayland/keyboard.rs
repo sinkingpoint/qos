@@ -50,10 +50,9 @@ impl KeyMapCommand {
 
 	pub fn write_as_packet(&self, object_id: u32, connection: &Arc<UnixStream>) -> WaylandResult<()> {
 		// TODO: If we have a keyboard_path, we should mmap it and send the fd instead of sending an empty keymap
-		let memfd = memfd_create(c"wl-keymap", MemFdCreateFlag::empty())
-			.map_err(crate::wayland::types::WaylandError::NixError)?;
+		let memfd = memfd_create(c"wl-keymap", MemFdCreateFlag::empty())?;
 
-		nix::unistd::ftruncate(&memfd, 1).map_err(crate::wayland::types::WaylandError::NixError)?;
+		nix::unistd::ftruncate(&memfd, 1)?;
 
 		let mut payload = Vec::new();
 		// format: 0 = no keymap
@@ -68,8 +67,7 @@ impl KeyMapCommand {
 		let raw_fd = memfd.as_raw_fd();
 		let iov = [IoSlice::new(&buf)];
 		let cmsg = [ControlMessage::ScmRights(&[raw_fd])];
-		sendmsg::<()>(connection.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)
-			.map_err(crate::wayland::types::WaylandError::NixError)?;
+		sendmsg::<()>(connection.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)?;
 
 		Ok(())
 	}

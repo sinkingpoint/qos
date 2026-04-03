@@ -15,7 +15,10 @@ use std::{
 
 use nix::{sys::epoll, unistd::Uid};
 
-use crate::events::{CompositorEvent, event_threads::EventThreadHandle, scm_bufreader::ScmBufReader};
+use crate::{
+	events::{CompositorEvent, event_threads::EventThreadHandle, scm_bufreader::ScmBufReader},
+	wayland::WaylandPacket,
+};
 
 const LISTENER_ID: u64 = 0;
 const KILL_ID: u64 = u64::MAX;
@@ -23,7 +26,7 @@ const KILL_ID: u64 = u64::MAX;
 #[derive(Debug)]
 pub struct WaylandEvent {
 	pub client_id: u32,
-	pub packet: crate::wayland::WaylandPacket,
+	pub packet: WaylandPacket,
 	pub client: Arc<UnixStream>,
 	pub fds: Vec<OwnedFd>,
 }

@@ -6,7 +6,7 @@ use crate::{
 	VideoBuffer,
 	wayland::{
 		buffer::Buffer,
-		types::{ClientEffect, Command, SubSystem, WaylandResult, WithFd},
+		types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandResult, WithFd},
 	},
 };
 
@@ -44,7 +44,7 @@ impl Command<SharedMemory> for WithFd<CreatePoolCommand> {
 		let pool = SharedMemoryPool::new(self.cmd.pool_id, self.cmd.size, ptr as *mut u8);
 		Ok(Some(ClientEffect::Register(
 			self.cmd.pool_id,
-			crate::wayland::types::SubsystemType::SharedMemoryPool(pool),
+			SubsystemType::SharedMemoryPool(pool),
 		)))
 	}
 }
@@ -70,10 +70,12 @@ impl SharedMemoryPool {
 			eprintln!("blit_onto: negative buffer offset {}", buffer.offset);
 			return;
 		}
-		let end = (buffer.offset as u64)
-			.saturating_add((buffer.height as u64).saturating_mul(buffer.stride as u64));
+		let end = (buffer.offset as u64).saturating_add((buffer.height as u64).saturating_mul(buffer.stride as u64));
 		if end > self.size as u64 {
-			eprintln!("blit_onto: buffer region ({} bytes) exceeds pool size ({})", end, self.size);
+			eprintln!(
+				"blit_onto: buffer region ({} bytes) exceeds pool size ({})",
+				end, self.size
+			);
 			return;
 		}
 		let src = unsafe { self.ptr.add(buffer.offset as usize) } as *const u32;
@@ -111,13 +113,18 @@ impl Command<SharedMemoryPool> for CreateBufferCommand {
 		pool: &mut SharedMemoryPool,
 	) -> WaylandResult<Option<ClientEffect>> {
 		if self.offset < 0 || self.width <= 0 || self.height <= 0 || self.stride < self.width.saturating_mul(4) {
-			eprintln!("create_buffer: invalid dimensions (offset={}, width={}, height={}, stride={})", self.offset, self.width, self.height, self.stride);
+			eprintln!(
+				"create_buffer: invalid dimensions (offset={}, width={}, height={}, stride={})",
+				self.offset, self.width, self.height, self.stride
+			);
 			return Ok(None);
 		}
-		let end = (self.offset as u64)
-			.saturating_add((self.height as u64).saturating_mul(self.stride as u64));
+		let end = (self.offset as u64).saturating_add((self.height as u64).saturating_mul(self.stride as u64));
 		if end > pool.size as u64 {
-			eprintln!("create_buffer: region ({} bytes) exceeds pool size ({})", end, pool.size);
+			eprintln!(
+				"create_buffer: region ({} bytes) exceeds pool size ({})",
+				end, pool.size
+			);
 			return Ok(None);
 		}
 		let buffer = Buffer::new(
@@ -130,7 +137,7 @@ impl Command<SharedMemoryPool> for CreateBufferCommand {
 		);
 		Ok(Some(ClientEffect::Register(
 			self.buffer_id,
-			crate::wayland::types::SubsystemType::Buffer(buffer),
+			SubsystemType::Buffer(buffer),
 		)))
 	}
 }

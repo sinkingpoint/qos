@@ -1,6 +1,6 @@
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{Command, SubSystem};
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct Buffer {
 	pub pool_id: u32,
@@ -41,7 +41,7 @@ impl Command<Buffer> for DestroyCommand {
 		&self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_buffer: &mut Buffer,
-	) -> crate::wayland::types::WaylandResult<Option<crate::wayland::types::ClientEffect>> {
-		Ok(Some(crate::wayland::types::ClientEffect::DestroySelf))
+	) -> WaylandResult<Option<ClientEffect>> {
+		Ok(Some(ClientEffect::DestroySelf))
 	}
 }
