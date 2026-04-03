@@ -10,7 +10,10 @@ use crate::{
 		registry::Registry,
 		seat::Seat,
 		shm::SharedMemory,
-		types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandError, WaylandPacket, WaylandResult},
+		types::{
+			ClientEffect, Command, SubSystem, SubsystemType, WaylandEncodedString, WaylandError, WaylandPacket,
+			WaylandResult,
+		},
 		xdg_wm_base::XdgWmBase,
 	},
 	wayland_interface,
@@ -78,15 +81,7 @@ impl Command<Display> for GetRegistry {
 			let mut payload = Vec::new();
 
 			(i as u32).write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-			(name.len() as u32 + 1).write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-			payload.extend_from_slice(name.as_bytes());
-			// Null Terminator
-			0u8.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-			// Pad to 4 bytes
-			let padding = (4 - ((name.len() as u32 + 1) % 4)) % 4; // calculate padding needed to align to 4 bytes
-			for _ in 0..padding {
-				0u8.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-			}
+			WaylandEncodedString(name.to_string()).write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
 			version.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
 
 			let packet = WaylandPacket::new(self.registry_id, 0, payload);

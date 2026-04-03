@@ -61,11 +61,11 @@ impl KeyMapCommand {
 		// size: 1 (minimal memfd)
 		1u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
 
-		let packet = WaylandPacket::new_with_fds(object_id, 0, payload, vec![memfd]);
+		let packet = WaylandPacket::new(object_id, 0, payload);
 		let mut buf = Vec::new();
 		packet.write_to_with_endian(&mut buf, bytestruct::Endian::Little)?;
 
-		let raw_fd = packet.fds[0].as_raw_fd();
+		let raw_fd = memfd.as_raw_fd();
 		let iov = [IoSlice::new(&buf)];
 		let cmsg = [ControlMessage::ScmRights(&[raw_fd])];
 		sendmsg::<()>(connection.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)

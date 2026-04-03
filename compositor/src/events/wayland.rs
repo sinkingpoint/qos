@@ -2,9 +2,12 @@ use std::{
 	collections::HashMap,
 	fs::set_permissions,
 	io,
-	os::unix::{
-		fs::{PermissionsExt, chown},
-		net::{UnixListener, UnixStream},
+	os::{
+		fd::OwnedFd,
+		unix::{
+			fs::{PermissionsExt, chown},
+			net::{UnixListener, UnixStream},
+		},
 	},
 	sync::Arc,
 	thread,
@@ -22,6 +25,7 @@ pub struct WaylandEvent {
 	pub client_id: u32,
 	pub packet: crate::wayland::WaylandPacket,
 	pub client: Arc<UnixStream>,
+	pub fds: Vec<OwnedFd>,
 }
 
 pub struct WaylandSocket {
@@ -108,10 +112,16 @@ impl WaylandSocket {
 					}
 				} else {
 					let client_id = event.data() as u32;
-					let (read_client, write_client) = clients.get_mut(&client_id).unwrap();
+					let (read_client, write_client) = match clients.get_mut(&client_id) {
+						Some(c) => c,
+						None => {
+							eprintln!("Received event for unknown client ID: {}", client_id);
+							continue;
+						}
+					};
 
 					loop {
-						let packet = match read_client.read_packet() {
+						let (packet, fds) = match read_client.read_packet() {
 							Ok(packet) => packet,
 							Err(e) if e.kind() == io::ErrorKind::WouldBlock => break, // no more data right now
 							Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
@@ -131,6 +141,7 @@ impl WaylandSocket {
 							.send(CompositorEvent::Wayland(WaylandEvent {
 								client_id,
 								packet,
+								fds,
 								client: Arc::clone(write_client),
 							}))
 							.unwrap_or_else(|e| {

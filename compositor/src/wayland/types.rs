@@ -1,5 +1,5 @@
 use std::{
-	collections::HashMap,
+	collections::{HashMap, VecDeque},
 	io::Write,
 	ops::Deref,
 	os::{fd::OwnedFd, unix::net::UnixStream},
@@ -33,8 +33,8 @@ pub trait SubSystem {
 	type Request: CommandRegistry;
 	const NAME: &'static str;
 	const VERSION: u32 = 1;
-	fn parse_command(&self, command: WaylandPacket) -> Option<Self::Request> {
-		Self::Request::parse(command)
+	fn parse_command(&self, command: WaylandPacket, fds: &mut VecDeque<OwnedFd>) -> Option<Self::Request> {
+		Self::Request::parse(command, fds)
 	}
 }
 
@@ -64,17 +64,17 @@ where
 }
 
 pub trait CommandRegistry {
-	fn parse(command: WaylandPacket) -> Option<Self>
+	fn parse(command: WaylandPacket, fds: &mut VecDeque<OwnedFd>) -> Option<Self>
 	where
 		Self: std::marker::Sized;
 }
 
 pub trait FromPacket: Sized {
-	fn from_packet(packet: WaylandPacket) -> Option<Self>;
+	fn from_packet(packet: WaylandPacket, fds: &mut VecDeque<OwnedFd>) -> Option<Self>;
 }
 
 impl<T: ReadFromWithEndian> FromPacket for T {
-	fn from_packet(packet: WaylandPacket) -> Option<Self> {
+	fn from_packet(packet: WaylandPacket, _fds: &mut VecDeque<OwnedFd>) -> Option<Self> {
 		T::read_from_with_endian(&mut std::io::Cursor::new(packet.payload), Endian::Little).ok()
 	}
 }
@@ -85,9 +85,9 @@ pub struct WithFd<T> {
 }
 
 impl<T: ReadFromWithEndian> FromPacket for WithFd<T> {
-	fn from_packet(mut packet: WaylandPacket) -> Option<Self> {
+	fn from_packet(packet: WaylandPacket, fds: &mut VecDeque<OwnedFd>) -> Option<Self> {
 		let cmd = T::read_from_with_endian(&mut std::io::Cursor::new(packet.payload), Endian::Little).ok()?;
-		let fd = packet.fds.drain(..1).next()?;
+		let fd = fds.pop_front()?;
 		Some(Self { cmd, fd })
 	}
 }
@@ -95,13 +95,18 @@ impl<T: ReadFromWithEndian> FromPacket for WithFd<T> {
 pub struct Client {
 	pub connection: Arc<UnixStream>,
 	pub objects: HashMap<u32, SubsystemType>,
+	fds: VecDeque<OwnedFd>,
 }
 
 impl Client {
 	pub fn new(connection: Arc<UnixStream>, display_geometry: DisplayGeometry) -> Self {
 		let mut objects = HashMap::new();
 		objects.insert(1, SubsystemType::Display(Display::new(display_geometry)));
-		Self { connection, objects }
+		Self {
+			connection,
+			objects,
+			fds: VecDeque::new(),
+		}
 	}
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
@@ -160,12 +165,13 @@ impl Client {
 		}
 	}
 
-	pub fn handle_command(&mut self, command: WaylandPacket) -> WaylandResult<()> {
+	pub fn handle_event(&mut self, command: WaylandPacket, fds: Vec<OwnedFd>) -> WaylandResult<()> {
+		self.fds.extend(fds);
 		let object_id = command.object_id;
 		let Some(subsystem) = self.objects.get_mut(&object_id) else {
 			return Err(WaylandError::UnrecognisedObject);
 		};
-		match subsystem.handle_command(&self.connection, command)? {
+		match subsystem.handle_command(&self.connection, command, &mut self.fds)? {
 			Some(ClientEffect::Register(id, obj)) => {
 				self.objects.insert(id, obj);
 			}
@@ -210,7 +216,6 @@ pub struct WaylandPacket {
 	pub object_id: u32,
 	pub opcode: u16,
 	pub payload: Vec<u8>,
-	pub fds: Vec<OwnedFd>,
 }
 
 impl WaylandPacket {
@@ -219,16 +224,6 @@ impl WaylandPacket {
 			object_id,
 			opcode,
 			payload,
-			fds: Vec::new(),
-		}
-	}
-
-	pub fn new_with_fds(object_id: u32, opcode: u16, payload: Vec<u8>, fds: Vec<OwnedFd>) -> Self {
-		Self {
-			object_id,
-			opcode,
-			payload,
-			fds,
 		}
 	}
 }

@@ -42,11 +42,12 @@ impl WaylandCompositor {
 	}
 
 	pub fn handle_event(&mut self, event: WaylandEvent) {
+		println!("Handling Wayland event: {:?}", event);
 		let client = self
 			.clients
 			.entry(event.client_id)
 			.or_insert_with(|| Client::new(event.client.clone(), self.display_geometry.clone()));
-		if let Err(e) = client.handle_command(event.packet) {
+		if let Err(e) = client.handle_event(event.packet, event.fds) {
 			match e {
 				types::WaylandError::IOError(e) => eprintln!("Wayland IO error: {}", e),
 				types::WaylandError::NixError(e) => eprintln!("Wayland Nix error: {}", e),

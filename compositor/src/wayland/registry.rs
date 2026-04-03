@@ -1,6 +1,6 @@
 use std::{io::Write, os::unix::net::UnixStream, sync::Arc};
 
-use bytestruct::{Endian, LengthPrefixedString, Padding, WriteToWithEndian};
+use bytestruct::{Endian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
 
 use crate::wayland::{
@@ -9,7 +9,7 @@ use crate::wayland::{
 	output::{Output, geometry_command_packet, mode_command_packet},
 	seat::{CapabilitiesCommand, Seat, SeatCapabilities},
 	shm::SharedMemory,
-	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandError, WaylandResult},
+	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandEncodedString, WaylandError, WaylandResult},
 	xdg_wm_base::XdgWmBase,
 };
 
@@ -35,8 +35,7 @@ wayland_interface!(Registry, RegistryRequest {
 #[derive(Debug, ByteStruct)]
 pub struct BindCommand {
 	pub name: u32,
-	pub interface: LengthPrefixedString<u32>,
-	pub padding: Padding<4>,
+	pub interface: WaylandEncodedString,
 	pub version: u32,
 	pub new_id: u32,
 }
@@ -49,10 +48,15 @@ impl Command<Registry> for BindCommand {
 				SubsystemType::Compositor(Compositor),
 			))),
 			"wl_shm" => {
+				println!("Client bound to wl_shm, sending supported formats");
 				// Write the wl_shm.format event immediately, since the client expects it to be sent as part of the bind request.
-				let packet = WaylandPacket::new(self.new_id, 0, 0_u32.to_le_bytes().to_vec());
+				let argb_packet = WaylandPacket::new(self.new_id, 0, 0u32.to_le_bytes().to_vec());
+				let xrgb_packet = WaylandPacket::new(self.new_id, 0, 1u32.to_le_bytes().to_vec());
 				let mut buf = Vec::new();
-				packet
+				argb_packet
+					.write_to_with_endian(&mut buf, Endian::Little)
+					.map_err(WaylandError::IOError)?;
+				xrgb_packet
 					.write_to_with_endian(&mut buf, Endian::Little)
 					.map_err(WaylandError::IOError)?;
 				connection.as_ref().write_all(&buf).map_err(WaylandError::IOError)?;

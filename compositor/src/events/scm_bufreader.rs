@@ -24,7 +24,7 @@ impl ScmBufReader {
 		&self.socket
 	}
 
-	pub fn read_packet(&mut self) -> io::Result<WaylandPacket> {
+	pub fn read_packet(&mut self) -> io::Result<(WaylandPacket, Vec<OwnedFd>)> {
 		let mut fds = Vec::new();
 
 		let mut header = [0u8; 8];
@@ -39,7 +39,7 @@ impl ScmBufReader {
 		let object_id = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
 		let opcode = u16::from_le_bytes([header[4], header[5]]);
 
-		Ok(WaylandPacket::new_with_fds(object_id, opcode, payload, fds))
+		Ok((WaylandPacket::new(object_id, opcode, payload), fds))
 	}
 
 	fn read_exact_collecting_fds(&mut self, buf: &mut [u8], fds: &mut Vec<OwnedFd>) -> io::Result<()> {
