@@ -2,13 +2,23 @@ use std::{os::unix::net::UnixStream, sync::Arc};
 
 use bytestruct_derive::ByteStruct;
 
-use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandEncodedString, WaylandResult};
 
-pub struct XdgTopLevel {}
+pub struct XdgTopLevel {
+	x: i32,
+	y: i32,
+	dragging: bool,
+	title: Option<String>,
+}
 
 impl XdgTopLevel {
 	pub fn new() -> Self {
-		Self {}
+		Self {
+			x: 0,
+			y: 0,
+			dragging: false,
+			title: None,
+		}
 	}
 }
 
@@ -19,6 +29,8 @@ impl SubSystem for XdgTopLevel {
 
 wayland_interface!(XdgTopLevel, XdgTopLevelRequest {
   0 => Destroy(DestroyCommand),
+	2 => SetTitle(SetTitleCommand),
+	6 => Move(MoveCommand),
 });
 
 #[derive(Debug, ByteStruct)]
@@ -31,5 +43,38 @@ impl Command<XdgTopLevel> for DestroyCommand {
 		_xdg_toplevel: &mut XdgTopLevel,
 	) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct SetTitleCommand {
+	pub title: WaylandEncodedString,
+}
+
+impl Command<XdgTopLevel> for SetTitleCommand {
+	fn handle(
+		&self,
+		_connection: &Arc<UnixStream>,
+		xdg_toplevel: &mut XdgTopLevel,
+	) -> WaylandResult<Option<ClientEffect>> {
+		xdg_toplevel.title = Some(self.title.0.clone());
+		Ok(None)
+	}
+}
+
+#[derive(Debug, ByteStruct)]
+pub struct MoveCommand {
+	pub seat_id: u32,
+	pub serial: u32,
+}
+
+impl Command<XdgTopLevel> for MoveCommand {
+	fn handle(
+		&self,
+		_connection: &Arc<UnixStream>,
+		xdg_toplevel: &mut XdgTopLevel,
+	) -> WaylandResult<Option<ClientEffect>> {
+		xdg_toplevel.dragging = true;
+		Ok(None)
 	}
 }
