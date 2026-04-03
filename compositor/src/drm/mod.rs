@@ -5,8 +5,6 @@ use crate::drm::ioctls::{drm_mode_get_connector, drm_mode_get_resources};
 mod cstructs;
 mod ioctls;
 use bitflags::bitflags;
-use bytestruct::int_enum;
-use bytestruct_derive::ByteStruct;
 
 pub fn set_master(fd: impl AsFd) -> nix::Result<()> {
 	unsafe {

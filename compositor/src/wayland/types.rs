@@ -15,7 +15,10 @@ use crate::{
 		buffer::Buffer,
 		compositor::Compositor,
 		display::Display,
+		keyboard::Keyboard,
+		pointer::Pointer,
 		registry::Registry,
+		seat::Seat,
 		shm::{SharedMemory, SharedMemoryPool},
 		surface::Surface,
 		xdg_surface::XDGSurface,
@@ -187,6 +190,9 @@ pub enum SubsystemType {
 	XdgWmBase(XdgWmBase),
 	XdgSurface(XDGSurface),
 	XdgTopLevel(XdgTopLevel),
+	Seat(Seat),
+	Pointer(Pointer),
+	Keyboard(Keyboard),
 }
 
 // TODO: Macro this
@@ -203,6 +209,9 @@ impl SubsystemType {
 			Self::XdgWmBase(_) => XdgWmBase::NAME,
 			Self::XdgSurface(_) => XDGSurface::NAME,
 			Self::XdgTopLevel(_) => XdgTopLevel::NAME,
+			Self::Seat(_) => Seat::NAME,
+			Self::Pointer(_) => Pointer::NAME,
+			Self::Keyboard(_) => Keyboard::NAME,
 		}
 	}
 
@@ -218,6 +227,9 @@ impl SubsystemType {
 			Self::XdgWmBase(_) => XdgWmBase::VERSION,
 			Self::XdgSurface(_) => XDGSurface::VERSION,
 			Self::XdgTopLevel(_) => XdgTopLevel::VERSION,
+			Self::Seat(_) => Seat::VERSION,
+			Self::Pointer(_) => Pointer::VERSION,
+			Self::Keyboard(_) => Keyboard::VERSION,
 		}
 	}
 
@@ -293,6 +305,27 @@ impl SubsystemType {
 			SubsystemType::XdgTopLevel(xdg_toplevel) => {
 				if let Some(cmd) = xdg_toplevel.parse_command(command) {
 					cmd.handle(connection, xdg_toplevel)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::Seat(seat) => {
+				if let Some(cmd) = seat.parse_command(command) {
+					cmd.handle(connection, seat)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::Pointer(pointer) => {
+				if let Some(cmd) = pointer.parse_command(command) {
+					cmd.handle(connection, pointer)
+				} else {
+					Ok(None)
+				}
+			}
+			SubsystemType::Keyboard(keyboard) => {
+				if let Some(cmd) = keyboard.parse_command(command) {
+					cmd.handle(connection, keyboard)
 				} else {
 					Ok(None)
 				}

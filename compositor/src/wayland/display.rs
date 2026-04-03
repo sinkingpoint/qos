@@ -12,6 +12,7 @@ const GLOBALS_TO_ADVERTISE: &[SubsystemType] = &[
 	SubsystemType::Compositor(crate::wayland::compositor::Compositor),
 	SubsystemType::SharedMemory(crate::wayland::shm::SharedMemory),
 	SubsystemType::XdgWmBase(crate::wayland::xdg_wm_base::XdgWmBase),
+	SubsystemType::Seat(crate::wayland::seat::Seat),
 ];
 
 pub struct Display {}
