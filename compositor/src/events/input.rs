@@ -6,14 +6,34 @@ use std::{
 
 use bytestruct::{ReadFromWithEndian, int_enum};
 use bytestruct_derive::ByteStruct;
-use nix::ioctl_write_int;
+use nix::{ioctl_read, ioctl_write_int};
 
 use super::event_threads::EventSource;
 
 ioctl_write_int!(eviocgrab, b'E', 0x90);
+ioctl_read!(eviocgabs_x, b'E', 0x40, input_absinfo);
+ioctl_read!(eviocgabs_y, b'E', 0x41, input_absinfo);
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct input_absinfo {
+	pub value: i32,
+	pub minimum: i32,
+	pub maximum: i32,
+	pub fuzz: i32,
+	pub flat: i32,
+	pub resolution: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceInfo {
+	pub abs_x_info: Option<input_absinfo>,
+	pub abs_y_info: Option<input_absinfo>,
+}
 
 pub struct InputWatcher {
-	devices: Vec<File>,
+	devices: Vec<DeviceInfo>,
+	files: Vec<File>,
 }
 
 impl EventSource for InputWatcher {
@@ -21,19 +41,24 @@ impl EventSource for InputWatcher {
 	type EventType = Event;
 
 	fn get_fds(&self) -> &[Self::Reader] {
-		&self.devices
+		&self.files
 	}
 
 	fn read_event(&mut self, index: usize) -> std::io::Result<Self::EventType> {
 		let mut buf = [0u8; 24]; // Size of input_event struct
 		let reader = self
-			.devices
+			.files
 			.get_mut(index)
 			.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Device not found"))?;
 		match reader.read_exact(&mut buf) {
 			Ok(_) => {
 				let input_event = InputEvent::read_from_with_endian(&mut &buf[..], bytestruct::Endian::Little)?;
-				Ok(Event::from_input_event(input_event))
+				let device = self
+					.devices
+					.get(index)
+					.cloned()
+					.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Device not found"))?;
+				Ok(Event::from_input_event(input_event, device))
 			}
 			Err(e) => Err(e),
 		}
@@ -43,6 +68,7 @@ impl EventSource for InputWatcher {
 impl InputWatcher {
 	pub fn new() -> io::Result<Self> {
 		let mut devices = Vec::new();
+		let mut files = Vec::new();
 
 		for entry in std::fs::read_dir("/dev/input")? {
 			let entry = entry?;
@@ -50,18 +76,42 @@ impl InputWatcher {
 				let fd = std::fs::OpenOptions::new().read(true).open(entry.path())?;
 				unsafe { eviocgrab(fd.as_raw_fd(), 1) }?;
 
-				devices.push(fd);
+				let mut abs_info_x = input_absinfo {
+					value: 0,
+					minimum: 0,
+					maximum: 0,
+					fuzz: 0,
+					flat: 0,
+					resolution: 0,
+				};
+				unsafe { eviocgabs_x(fd.as_raw_fd(), &mut abs_info_x).ok() };
+
+				let mut abs_info_y = input_absinfo {
+					value: 0,
+					minimum: 0,
+					maximum: 0,
+					fuzz: 0,
+					flat: 0,
+					resolution: 0,
+				};
+				unsafe { eviocgabs_y(fd.as_raw_fd(), &mut abs_info_y).ok() };
+
+				devices.push(DeviceInfo {
+					abs_x_info: (abs_info_x.maximum > 0).then_some(abs_info_x),
+					abs_y_info: (abs_info_y.maximum > 0).then_some(abs_info_y),
+				});
+				files.push(fd);
 			}
 		}
 
-		Ok(Self { devices })
+		Ok(Self { devices, files })
 	}
 }
 
 impl Drop for InputWatcher {
 	fn drop(&mut self) {
-		for device in &self.devices {
-			let _ = unsafe { eviocgrab(device.as_raw_fd(), 0) };
+		for file in &self.files {
+			let _ = unsafe { eviocgrab(file.as_raw_fd(), 0) };
 		}
 	}
 }
@@ -95,30 +145,30 @@ struct InputEvent {
 
 #[derive(Debug, Clone)]
 pub enum Event {
-	Relative(MouseCode, i32),
-	Absolute(MouseCode, i32),
+	Relative(MouseCode, i32, DeviceInfo),
+	Absolute(MouseCode, i32, DeviceInfo),
 	Key(KeyCode, KeyState),
 	Synchronise(u16, i32),
 	Other(InputEventType, u16, i32),
 }
 
 impl Event {
-	fn from_input_event(ev: InputEvent) -> Self {
+	fn from_input_event(ev: InputEvent, device: DeviceInfo) -> Self {
 		match ev.event_type {
 			InputEventType::Relative => {
 				if ev.code == 0 {
-					Event::Relative(MouseCode::X, ev.value)
+					Event::Relative(MouseCode::X, ev.value, device)
 				} else if ev.code == 1 {
-					Event::Relative(MouseCode::Y, ev.value)
+					Event::Relative(MouseCode::Y, ev.value, device)
 				} else {
 					Event::Other(ev.event_type, ev.code, ev.value)
 				}
 			}
 			InputEventType::Absolute => {
 				if ev.code == 0 {
-					Event::Absolute(MouseCode::X, ev.value)
+					Event::Absolute(MouseCode::X, ev.value, device)
 				} else if ev.code == 1 {
-					Event::Absolute(MouseCode::Y, ev.value)
+					Event::Absolute(MouseCode::Y, ev.value, device)
 				} else {
 					Event::Other(ev.event_type, ev.code, ev.value)
 				}

@@ -7,8 +7,8 @@ use crate::{
 
 pub struct Cursor {
 	// The current position of the cursor
-	x: i32,
-	y: i32,
+	pub x: i32,
+	pub y: i32,
 
 	// The maximum allowed position of the cursor, based on the screen resolution
 	max_x: i32,
@@ -43,18 +43,40 @@ impl Cursor {
 	}
 
 	// Handle an input event to update the cursor position.
-	pub fn handle_input_event(&mut self, event: &Event) -> Option<CursorEvent> {
+	pub fn handle_input_event(&mut self, event: &Event) {
 		match event {
-			Event::Relative(code, value) => {
-				match code {
-					// For relative events, we simply add the value to the current position and clamp it within the screen bounds.
-					MouseCode::X => self.x = (self.x + *value).clamp(0, self.max_x),
-					MouseCode::Y => self.y = (self.y + *value).clamp(0, self.max_y),
+			Event::Relative(code, value, device) => {
+				let scaled_x = if let Some(abs_info) = &device.abs_x_info {
+					// Scale the relative value based on the absolute axis range to get a more consistent cursor movement across different devices.
+					(*value as f32 / (abs_info.maximum - abs_info.minimum) as f32 * self.max_x as f32) as i32
+				} else {
+					*value
 				};
 
-				return Some(CursorEvent::Move(self.x, self.y));
+				let scaled_y = if let Some(abs_info) = &device.abs_y_info {
+					(*value as f32 / (abs_info.maximum - abs_info.minimum) as f32 * self.max_y as f32) as i32
+				} else {
+					*value
+				};
+				match code {
+					// For relative events, we simply add the value to the current position and clamp it within the screen bounds.
+					MouseCode::X => self.x = (self.x + scaled_x).clamp(0, self.max_x),
+					MouseCode::Y => self.y = (self.y + scaled_y).clamp(0, self.max_y),
+				};
 			}
-			Event::Absolute(code, value) => {
+			Event::Absolute(code, value, device) => {
+				let scaled_x = if let Some(abs_info) = &device.abs_x_info {
+					// Scale the relative value based on the absolute axis range to get a more consistent cursor movement across different devices.
+					(*value as f32 / (abs_info.maximum - abs_info.minimum) as f32 * self.max_x as f32) as i32
+				} else {
+					*value
+				};
+
+				let scaled_y = if let Some(abs_info) = &device.abs_y_info {
+					(*value as f32 / (abs_info.maximum - abs_info.minimum) as f32 * self.max_y as f32) as i32
+				} else {
+					*value
+				};
 				match code {
 					// For absolute events, we need to calculate the movement delta from the last
 					// absolute position, and then apply that delta to the current position. This
@@ -65,31 +87,29 @@ impl Cursor {
 						// If we were just touched, ignore this event.
 						if self.was_just_touched.0 {
 							self.was_just_touched.0 = false;
-							self.last_abs_x = Some(*value);
-							return None;
+							self.last_abs_x = Some(scaled_x);
+							return;
 						}
 
 						self.x = self
 							.last_abs_x
-							.map_or(self.x, |last| (self.x + (*value - last)).clamp(0, self.max_x));
-						self.last_abs_x = Some(*value);
+							.map_or(scaled_x, |last| (self.x + (scaled_x - last)).clamp(0, self.max_x));
+						self.last_abs_x = Some(scaled_x);
 					}
 					MouseCode::Y => {
 						// If we were just touched, ignore this event.
 						if self.was_just_touched.1 {
 							self.was_just_touched.1 = false;
-							self.last_abs_y = Some(*value);
-							return None;
+							self.last_abs_y = Some(scaled_y);
+							return;
 						}
 
 						self.y = self
 							.last_abs_y
-							.map_or(self.y, |last| (self.y + (*value - last)).clamp(0, self.max_y));
-						self.last_abs_y = Some(*value);
+							.map_or(scaled_y, |last| (self.y + (scaled_y - last)).clamp(0, self.max_y));
+						self.last_abs_y = Some(scaled_y);
 					}
 				}
-
-				return Some(CursorEvent::Move(self.x, self.y));
 			}
 			Event::Key(KeyCode::BtnTouch, KeyState::Pressed) => {
 				// Store that we were just touched, so we should ignore the first absolute event that follows this,
@@ -99,11 +119,10 @@ impl Cursor {
 			}
 			_ => {}
 		}
-
-		None
 	}
 }
 
+#[derive(Debug)]
 pub enum CursorEvent {
 	Move(i32, i32),
 	ButtonDown(i32),

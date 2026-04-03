@@ -87,7 +87,6 @@ impl WaylandCompositor {
 	}
 
 	pub fn handle_event(&mut self, event: WaylandEvent) {
-		println!("Handling Wayland event: {:?}", event);
 		let client = self
 			.clients
 			.entry(event.client_id)

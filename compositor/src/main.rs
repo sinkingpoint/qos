@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use crate::{
 	bmp::BMPImage,
+	cursor::CursorEvent,
 	drm::{
 		DrmConnection, DrmModeInfoType, DumbBuffer, add_framebuffer, drop_master, get_drm_connector, get_encoder,
 		map_dumb_buffer, page_flip, set_crtc, set_cursor_bitmap, set_master,
@@ -165,20 +166,29 @@ fn main() {
 				if let Err(err) = inactive_buffer.flip_to(&card, encoder.crtc_id) {
 					eprintln!("Failed to flip buffer: {}", err);
 				}
+				// Re-assert cursor bitmap every flip — QEMU virtgpu resets KMS state
+				// (including the cursor BO) when switching display views, so we need to
+				// restore it on the next frame.
+				set_cursor_bitmap(
+					&card,
+					encoder.crtc_id,
+					cursor_data.width,
+					cursor_data.height,
+					cursor_buffer.handle,
+				)
+				.ok();
 			}
 			CompositorEvent::Input(event)
 				if matches!(
 					event,
-					Event::Absolute(_, _) | Event::Relative(_, _) | Event::Key(KeyCode::BtnTouch, _)
+					Event::Absolute(_, _, _) | Event::Relative(_, _, _) | Event::Key(KeyCode::BtnTouch, _)
 				) =>
 			{
-				let cursor_event = cursor.handle_input_event(&event);
-				if let Some(cursor_event) = cursor_event {
-					wayland.handle_cursor_event(cursor_event);
-				}
+				cursor.handle_input_event(&event);
 			}
 			CompositorEvent::Input(Event::Synchronise(_, _)) => {
 				cursor.update_kernel(&card, encoder.crtc_id);
+				wayland.handle_cursor_event(CursorEvent::Move(cursor.x, cursor.y));
 			}
 			CompositorEvent::Input(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
 				println!("Key press event received, exiting...");
