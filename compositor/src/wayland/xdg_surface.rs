@@ -45,7 +45,7 @@ pub struct DestroyRequest;
 
 impl Command<XDGSurface> for DestroyRequest {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_surface: &mut XDGSurface,
 	) -> WaylandResult<Option<ClientEffect>> {
@@ -59,11 +59,7 @@ pub struct GetTopLevelSurfaceCommand {
 }
 
 impl Command<XDGSurface> for GetTopLevelSurfaceCommand {
-	fn handle(
-		&self,
-		connection: &Arc<UnixStream>,
-		xdg_surface: &mut XDGSurface,
-	) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, connection: &Arc<UnixStream>, xdg_surface: &mut XDGSurface) -> WaylandResult<Option<ClientEffect>> {
 		let new_surface = SubsystemType::XdgTopLevel(XdgTopLevel::new());
 
 		// xdg_toplevel.configure
@@ -97,7 +93,7 @@ pub struct AckConfigureCommand {
 
 impl Command<XDGSurface> for AckConfigureCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &Arc<UnixStream>,
 		xdg_surface: &mut XDGSurface,
 	) -> WaylandResult<Option<ClientEffect>> {

@@ -60,7 +60,7 @@ pub trait Command<T: SubSystem>
 where
 	Self: Sized,
 {
-	fn handle(&self, connection: &Arc<UnixStream>, subsystem: &mut T) -> WaylandResult<Option<ClientEffect>>;
+	fn handle(self, connection: &Arc<UnixStream>, subsystem: &mut T) -> WaylandResult<Option<ClientEffect>>;
 }
 
 pub trait CommandRegistry {

@@ -31,7 +31,7 @@ wayland_interface!(Keyboard, KeyboardRequest {
 pub struct DestroyCommand;
 
 impl Command<Keyboard> for DestroyCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _keyboard: &mut Keyboard) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _keyboard: &mut Keyboard) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
 }

@@ -26,7 +26,7 @@ pub struct CreateSurfaceCommand {
 
 impl Command<Compositor> for CreateSurfaceCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &Arc<UnixStream>,
 		_compositor: &mut Compositor,
 	) -> WaylandResult<Option<ClientEffect>> {

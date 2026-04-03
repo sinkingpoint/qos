@@ -38,7 +38,7 @@ pub struct DestroyCommand;
 
 impl Command<Buffer> for DestroyCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_buffer: &mut Buffer,
 	) -> WaylandResult<Option<ClientEffect>> {

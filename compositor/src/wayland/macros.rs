@@ -18,7 +18,7 @@ macro_rules! wayland_interface {
 
         impl $crate::wayland::types::Command<$subsystem> for $enum_name {
             fn handle(
-                &self,
+                self,
                 connection: &::std::sync::Arc<::std::os::unix::net::UnixStream>,
                 subsystem: &mut $subsystem,
             ) -> $crate::wayland::types::WaylandResult<::std::option::Option<$crate::wayland::types::ClientEffect>> {

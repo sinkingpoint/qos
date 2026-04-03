@@ -38,7 +38,7 @@ pub struct DestroyCommand;
 
 impl Command<XdgTopLevel> for DestroyCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &Arc<UnixStream>,
 		_xdg_toplevel: &mut XdgTopLevel,
 	) -> WaylandResult<Option<ClientEffect>> {
@@ -53,11 +53,11 @@ pub struct SetTitleCommand {
 
 impl Command<XdgTopLevel> for SetTitleCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &Arc<UnixStream>,
 		xdg_toplevel: &mut XdgTopLevel,
 	) -> WaylandResult<Option<ClientEffect>> {
-		xdg_toplevel.title = Some(self.title.0.clone());
+		xdg_toplevel.title = Some(self.title.0);
 		Ok(None)
 	}
 }
@@ -70,7 +70,7 @@ pub struct MoveCommand {
 
 impl Command<XdgTopLevel> for MoveCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &Arc<UnixStream>,
 		xdg_toplevel: &mut XdgTopLevel,
 	) -> WaylandResult<Option<ClientEffect>> {

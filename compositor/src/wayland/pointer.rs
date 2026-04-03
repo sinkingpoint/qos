@@ -25,7 +25,7 @@ pub struct SetCursorCommand {
 }
 
 impl Command<Pointer> for SetCursorCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _pointer: &mut Pointer) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _pointer: &mut Pointer) -> WaylandResult<Option<ClientEffect>> {
 		Ok(None) // TODO: implement cursor setting
 	}
 }
@@ -34,7 +34,7 @@ impl Command<Pointer> for SetCursorCommand {
 pub struct DestroyCommand;
 
 impl Command<Pointer> for DestroyCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _pointer: &mut Pointer) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _pointer: &mut Pointer) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
 }

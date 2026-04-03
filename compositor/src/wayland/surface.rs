@@ -61,7 +61,7 @@ wayland_interface!(Surface, SurfaceRequest {
 pub struct DestroyCommand;
 
 impl Command<Surface> for DestroyCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
 }
@@ -74,7 +74,7 @@ pub struct AttachCommand {
 }
 
 impl Command<Surface> for AttachCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		surface.attached_buffer = Some((self.buffer_id, self.x, self.y));
 		surface.committed = false;
 		surface.blitted = false;
@@ -86,7 +86,7 @@ impl Command<Surface> for AttachCommand {
 pub struct CommitCommand;
 
 impl Command<Surface> for CommitCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		if surface.attached_buffer.is_some() {
 			surface.committed = true;
 			surface.blitted = false;
@@ -102,7 +102,7 @@ pub struct FrameCommand {
 }
 
 impl Command<Surface> for FrameCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		surface.pending_callbacks.push(self.callback_id);
 		Ok(None)
 	}

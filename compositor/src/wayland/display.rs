@@ -54,7 +54,7 @@ pub struct SyncCommand {
 }
 
 impl Command<Display> for SyncCommand {
-	fn handle(&self, connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
 		let mut payload = Vec::new();
 		0u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)
 			.map_err(WaylandError::IOError)?;
@@ -74,7 +74,7 @@ pub struct GetRegistry {
 }
 
 impl Command<Display> for GetRegistry {
-	fn handle(&self, connection: &Arc<UnixStream>, display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, connection: &Arc<UnixStream>, display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
 		for (i, global) in display.globals.iter().enumerate() {
 			let name = global.name();
 			let version = global.version();

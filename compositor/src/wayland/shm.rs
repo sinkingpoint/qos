@@ -29,7 +29,7 @@ pub struct CreatePoolCommand {
 }
 
 impl Command<SharedMemory> for WithFd<CreatePoolCommand> {
-	fn handle(&self, _connection: &Arc<UnixStream>, _shm: &mut SharedMemory) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _shm: &mut SharedMemory) -> WaylandResult<Option<ClientEffect>> {
 		let ptr = unsafe {
 			nix::sys::mman::mmap(
 				None,
@@ -107,11 +107,7 @@ pub struct CreateBufferCommand {
 }
 
 impl Command<SharedMemoryPool> for CreateBufferCommand {
-	fn handle(
-		&self,
-		_connection: &Arc<UnixStream>,
-		pool: &mut SharedMemoryPool,
-	) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, pool: &mut SharedMemoryPool) -> WaylandResult<Option<ClientEffect>> {
 		if self.offset < 0 || self.width <= 0 || self.height <= 0 || self.stride < self.width.saturating_mul(4) {
 			eprintln!(
 				"create_buffer: invalid dimensions (offset={}, width={}, height={}, stride={})",

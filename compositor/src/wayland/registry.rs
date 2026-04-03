@@ -41,7 +41,7 @@ pub struct BindCommand {
 }
 
 impl Command<Registry> for BindCommand {
-	fn handle(&self, connection: &Arc<UnixStream>, registry: &mut Registry) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, connection: &Arc<UnixStream>, registry: &mut Registry) -> WaylandResult<Option<ClientEffect>> {
 		match self.interface.as_ref() {
 			"wl_compositor" => Ok(Some(ClientEffect::Register(
 				self.new_id,

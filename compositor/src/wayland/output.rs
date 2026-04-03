@@ -23,7 +23,7 @@ wayland_interface!(Output, OutputCommand {
 pub struct ReleaseCommand;
 
 impl Command<Output> for ReleaseCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _output: &mut Output) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _output: &mut Output) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
 }

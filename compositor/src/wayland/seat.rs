@@ -29,7 +29,7 @@ pub struct GetPointerCommand {
 }
 
 impl Command<Seat> for GetPointerCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::Register(
 			self.new_id,
 			SubsystemType::Pointer(Pointer),
@@ -43,7 +43,7 @@ pub struct GetKeyboardCommand {
 }
 
 impl Command<Seat> for GetKeyboardCommand {
-	fn handle(&self, connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
 		let keymap = KeyMapCommand::new_no_keymap();
 		keymap.write_as_packet(self.new_id, connection)?;
 		Ok(Some(ClientEffect::Register(
@@ -57,7 +57,7 @@ impl Command<Seat> for GetKeyboardCommand {
 pub struct ReleaseCommand;
 
 impl Command<Seat> for ReleaseCommand {
-	fn handle(&self, _connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
+	fn handle(self, _connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
 }

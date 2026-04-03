@@ -25,7 +25,7 @@ pub struct DestroyCommand;
 
 impl Command<XdgWmBase> for DestroyCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_wm_base: &mut XdgWmBase,
 	) -> WaylandResult<Option<ClientEffect>> {
@@ -40,7 +40,7 @@ pub struct CreatePositionerCommand {
 
 impl Command<XdgWmBase> for CreatePositionerCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_wm_base: &mut XdgWmBase,
 	) -> WaylandResult<Option<ClientEffect>> {
@@ -56,7 +56,7 @@ pub struct GetXdgSurfaceCommand {
 
 impl Command<XdgWmBase> for GetXdgSurfaceCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_wm_base: &mut XdgWmBase,
 	) -> WaylandResult<Option<ClientEffect>> {
@@ -74,7 +74,7 @@ pub struct PongCommand {
 
 impl Command<XdgWmBase> for PongCommand {
 	fn handle(
-		&self,
+		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
 		_xdg_wm_base: &mut XdgWmBase,
 	) -> WaylandResult<Option<ClientEffect>> {
