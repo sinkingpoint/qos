@@ -56,6 +56,19 @@ impl WaylandCompositor {
 	pub fn handle_cursor_event(&mut self, event: CursorEvent) {
 		match event {
 			CursorEvent::Move(x, y) => {
+				let dragging_window = self
+					.clients
+					.iter()
+					.find(|(_, client)| client.dragging.is_some())
+					.map(|(client_id, _)| *client_id);
+
+				if let Some(dragging_window_id) = dragging_window {
+					if let Some(client) = self.clients.get_mut(&dragging_window_id) {
+						client.handle_drag(x, y).unwrap();
+					}
+					return;
+				}
+
 				let hovered_window = self
 					.clients
 					.iter()
@@ -95,6 +108,18 @@ impl WaylandCompositor {
 				}
 			}
 			CursorEvent::ButtonUp(button) => {
+				let dragging_window = self
+					.clients
+					.iter()
+					.find(|(_, client)| client.dragging.is_some())
+					.map(|(client_id, _)| *client_id);
+
+				if let Some(dragging_window_id) = dragging_window
+					&& let Some(client) = self.clients.get_mut(&dragging_window_id)
+				{
+					client.end_drag();
+				}
+
 				if let Some((client_id, _)) = self.hovered_window
 					&& let Some(client) = self.clients.get_mut(&client_id)
 				{

@@ -65,7 +65,7 @@ impl SharedMemoryPool {
 		Self { pool_id, size, ptr }
 	}
 
-	pub fn blit_onto(&self, buffer: &Buffer, framebuffer: &mut VideoBuffer) {
+	pub fn blit_onto(&self, buffer: &Buffer, framebuffer: &mut VideoBuffer, x: i32, y: i32) {
 		if buffer.offset < 0 {
 			eprintln!("blit_onto: negative buffer offset {}", buffer.offset);
 			return;
@@ -78,9 +78,19 @@ impl SharedMemoryPool {
 			);
 			return;
 		}
+		if x < 0 || y < 0 {
+			return;
+		}
 		let src = unsafe { self.ptr.add(buffer.offset as usize) } as *const u32;
 		let src_stride_pixels = buffer.stride as u32 / 4;
-		framebuffer.blit_and_mark_dirty(src, src_stride_pixels, 0, 0, buffer.width as u32, buffer.height as u32);
+		framebuffer.blit_and_mark_dirty(
+			src,
+			src_stride_pixels,
+			x as u32,
+			y as u32,
+			buffer.width as u32,
+			buffer.height as u32,
+		);
 	}
 }
 

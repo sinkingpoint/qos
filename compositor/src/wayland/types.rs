@@ -53,6 +53,7 @@ pub type WaylandResult<T> = Result<T, WaylandError>;
 pub enum ClientEffect {
 	Register(u32, SubsystemType),
 	Unregister(u32),
+	StartDrag,
 	DestroySelf,
 }
 
@@ -92,10 +93,16 @@ impl<T: ReadFromWithEndian> FromPacket for WithFd<T> {
 	}
 }
 
+pub struct DragState {
+	top_level_id: u32,
+	initial_pointer: Option<(i32, i32)>,
+}
+
 pub struct Client {
 	pub connection: Arc<UnixStream>,
 	pub objects: HashMap<u32, SubsystemType>,
 	fds: VecDeque<OwnedFd>,
+	pub dragging: Option<DragState>,
 }
 
 impl Client {
@@ -106,6 +113,7 @@ impl Client {
 			connection,
 			objects,
 			fds: VecDeque::new(),
+			dragging: None,
 		}
 	}
 
@@ -141,7 +149,24 @@ impl Client {
 					continue; // skip if we've already blitted this surface since the last commit
 				}
 
-				mem_pool.blit_onto(buffer, framebuffer);
+				// Find the XdgTopLevel for this surface to get its position.
+				let (blit_x, blit_y) = self
+					.objects
+					.values()
+					.find_map(|obj| {
+						if let SubsystemType::XdgTopLevel(toplevel) = obj {
+							let xdg_surface = self.objects.get(&toplevel.xdg_surface)?;
+							if let SubsystemType::XdgSurface(xdg_surface) = xdg_surface
+								&& xdg_surface.surface_id == *surface_id
+							{
+								return Some((toplevel.x, toplevel.y));
+							}
+						}
+						None
+					})
+					.unwrap_or((0, 0));
+
+				mem_pool.blit_onto(buffer, framebuffer, blit_x, blit_y);
 				blitted.push((*surface_id, buffer_id));
 			}
 		}
@@ -163,6 +188,30 @@ impl Client {
 				continue;
 			}
 		}
+	}
+
+	pub fn handle_drag(&mut self, x: i32, y: i32) -> WaylandResult<()> {
+		if let Some(drag_state) = &mut self.dragging {
+			if drag_state.initial_pointer.is_none() {
+				drag_state.initial_pointer = Some((x, y));
+			} else {
+				let (initial_x, initial_y) = drag_state.initial_pointer.unwrap();
+				let delta_x = x - initial_x;
+				let delta_y = y - initial_y;
+
+				if let Some(SubsystemType::XdgTopLevel(top_level)) = self.objects.get_mut(&drag_state.top_level_id) {
+					top_level.x += delta_x;
+					top_level.y += delta_y;
+				}
+
+				drag_state.initial_pointer = Some((x, y));
+			}
+		}
+		Ok(())
+	}
+
+	pub fn end_drag(&mut self) {
+		self.dragging = None;
 	}
 
 	// Returns the ID of the surface at the given coordinates, if any.
@@ -393,6 +442,12 @@ impl Client {
 			}
 			Some(ClientEffect::DestroySelf) => {
 				self.objects.remove(&object_id);
+			}
+			Some(ClientEffect::StartDrag) => {
+				self.dragging = Some(DragState {
+					top_level_id: object_id,
+					initial_pointer: None,
+				});
 			}
 			None => {}
 		}

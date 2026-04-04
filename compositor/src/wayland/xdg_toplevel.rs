@@ -8,7 +8,6 @@ pub struct XdgTopLevel {
 	pub xdg_surface: u32,
 	pub x: i32,
 	pub y: i32,
-	pub dragging: bool,
 	title: Option<String>,
 }
 
@@ -18,7 +17,6 @@ impl XdgTopLevel {
 			xdg_surface,
 			x: 0,
 			y: 0,
-			dragging: false,
 			title: None,
 		}
 	}
@@ -74,9 +72,8 @@ impl Command<XdgTopLevel> for MoveCommand {
 	fn handle(
 		self,
 		_connection: &Arc<UnixStream>,
-		xdg_toplevel: &mut XdgTopLevel,
+		_xdg_toplevel: &mut XdgTopLevel,
 	) -> WaylandResult<Option<ClientEffect>> {
-		xdg_toplevel.dragging = true;
-		Ok(None)
+		Ok(Some(ClientEffect::StartDrag))
 	}
 }
