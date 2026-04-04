@@ -144,6 +144,7 @@ struct InputEvent {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Event {
 	Relative(MouseCode, i32, DeviceInfo),
 	Absolute(MouseCode, i32, DeviceInfo),

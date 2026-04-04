@@ -16,7 +16,7 @@ int_enum! {
 #[derive(Debug, Clone)]
 pub struct DrmEvent {
 	pub event_type: DrmEventType,
-	pub data: Vec<u8>,
+	pub _data: Vec<u8>,
 }
 
 pub struct DrmEventSource {
@@ -40,7 +40,7 @@ impl EventSource for DrmEventSource {
 			.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Unknown DRM event type: {}", e)))?;
 		Ok(DrmEvent {
 			event_type,
-			data: buf[8..length.min(n)].to_vec(),
+			_data: buf[8..length.min(n)].to_vec(),
 		})
 	}
 }

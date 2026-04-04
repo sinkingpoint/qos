@@ -20,10 +20,10 @@ pub struct DrmModeResources {
 	pub encoders: Vec<u32>,
 	pub framebuffers: Vec<u32>,
 
-	pub min_width: u32,
-	pub max_width: u32,
-	pub min_height: u32,
-	pub max_height: u32,
+	pub _min_width: u32,
+	pub _max_width: u32,
+	pub _min_height: u32,
+	pub _max_height: u32,
 }
 
 impl DrmModeResources {
@@ -33,10 +33,10 @@ impl DrmModeResources {
 			crtcs: vec![0; res.count_crtcs as usize],
 			encoders: vec![0; res.count_encoders as usize],
 			framebuffers: vec![0; res.count_framebuffers as usize],
-			min_width: res.min_width,
-			max_width: res.max_width,
-			min_height: res.min_height,
-			max_height: res.max_height,
+			_min_width: res.min_width,
+			_max_width: res.max_width,
+			_min_height: res.min_height,
+			_max_height: res.max_height,
 		}
 	}
 }
@@ -138,7 +138,7 @@ pub struct DrmModeInfo {
 	pub ty: DrmModeInfoType,
 
 	// string describing the mode resolution
-	pub name: String,
+	pub _name: String,
 }
 
 impl DrmModeInfo {
@@ -158,7 +158,7 @@ impl DrmModeInfo {
 			vrefresh: info.vrefresh,
 			flags: DrmModeInfoFlags::from_bits_truncate(info.flags),
 			ty: DrmModeInfoType::from_bits_truncate(info.ty),
-			name: String::from_utf8_lossy(&info.name).trim_end_matches('\0').to_string(),
+			_name: String::from_utf8_lossy(&info.name).trim_end_matches('\0').to_string(),
 		}
 	}
 }
@@ -175,13 +175,13 @@ pub struct DrmModeConnector {
 	pub encoder_id: u32,
 	pub connector_id: u32,
 
-	pub connector_type: u32,
-	pub connector_type_id: u32,
+	pub _connector_type: u32,
+	pub _connector_type_id: u32,
 
 	pub connection: DrmConnection,
 	pub mm_width: u32,
 	pub mm_height: u32,
-	pub subpixel: u32,
+	pub _subpixel: u32,
 
 	pub modes: Vec<DrmModeInfo>,
 }
@@ -208,8 +208,8 @@ pub fn get_drm_connector(fd: impl AsFd, connector_id: u32) -> nix::Result<DrmMod
 	Ok(DrmModeConnector {
 		encoder_id: res.encoder_id,
 		connector_id: res.connector_id,
-		connector_type: res.connector_type,
-		connector_type_id: res.connector_type_id,
+		_connector_type: res.connector_type,
+		_connector_type_id: res.connector_type_id,
 		connection: match res.connection {
 			1 => DrmConnection::Connected,
 			2 => DrmConnection::Disconnected,
@@ -217,27 +217,27 @@ pub fn get_drm_connector(fd: impl AsFd, connector_id: u32) -> nix::Result<DrmMod
 		},
 		mm_width: res.mm_width,
 		mm_height: res.mm_height,
-		subpixel: res.subpixel,
+		_subpixel: res.subpixel,
 		modes,
 	})
 }
 
 pub struct EncoderInfo {
-	pub encoder_id: u32,
-	pub encoder_type: u32,
+	pub _encoder_id: u32,
+	pub _encoder_type: u32,
 	pub crtc_id: u32,
-	pub possible_crtcs: u32,
-	pub possible_clones: u32,
+	pub _possible_crtcs: u32,
+	pub _possible_clones: u32,
 }
 
 impl EncoderInfo {
 	fn from_cstruct(info: cstructs::DrmModeGetEncoder) -> Self {
 		Self {
-			encoder_id: info.encoder_id,
-			encoder_type: info.encoder_type,
+			_encoder_id: info.encoder_id,
+			_encoder_type: info.encoder_type,
 			crtc_id: info.crtc_id,
-			possible_crtcs: info.possible_crtcs,
-			possible_clones: info.possible_clones,
+			_possible_crtcs: info.possible_crtcs,
+			_possible_clones: info.possible_clones,
 		}
 	}
 }

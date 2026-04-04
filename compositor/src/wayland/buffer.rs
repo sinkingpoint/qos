@@ -8,7 +8,7 @@ pub struct Buffer {
 	pub width: i32,
 	pub height: i32,
 	pub stride: i32,
-	pub format: u32,
+	pub _format: u32,
 }
 
 impl Buffer {
@@ -19,7 +19,7 @@ impl Buffer {
 			width,
 			height,
 			stride,
-			format,
+			_format: format,
 		}
 	}
 }
