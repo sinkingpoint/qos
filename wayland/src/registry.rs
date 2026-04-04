@@ -12,3 +12,12 @@ pub struct BindRequest {
 }
 
 wayland_payload!(BindRequest, opcode = 0);
+
+#[derive(Debug, ByteStruct)]
+pub struct GlobalEvent {
+	pub name: u32,
+	pub interface: WaylandEncodedString,
+	pub version: u32,
+}
+
+wayland_payload!(GlobalEvent, opcode = 0);

@@ -15,8 +15,10 @@ use std::{
 
 use nix::{sys::epoll, unistd::Uid};
 
+use wayland::connection::WaylandConnection;
+
 use crate::{
-	events::{CompositorEvent, event_threads::EventThreadHandle, scm_bufreader::ScmBufReader},
+	events::{CompositorEvent, event_threads::EventThreadHandle},
 	wayland::WaylandPacket,
 };
 
@@ -75,7 +77,7 @@ impl WaylandSocket {
 		)?;
 		epoll.add(&killfd, epoll::EpollEvent::new(epoll::EpollFlags::EPOLLIN, KILL_ID))?;
 
-		let mut clients = HashMap::new();
+		let mut clients: HashMap<u32, WaylandConnection> = HashMap::new();
 
 		loop {
 			let mut events = vec![epoll::EpollEvent::empty(); 16];
@@ -89,18 +91,6 @@ impl WaylandSocket {
 							let client_id = self.client_id_counter;
 							self.client_id_counter += 1;
 							println!("New client connected: {}", client_id);
-							epoll.add(
-								&stream,
-								epoll::EpollEvent::new(epoll::EpollFlags::EPOLLIN, client_id as u64),
-							)?;
-							let write = match stream.try_clone() {
-								Ok(s) => s,
-								Err(e) => {
-									eprintln!("Failed to clone client stream for client {}: {}", client_id, e);
-									continue;
-								}
-							};
-
 							if let Err(e) = stream.set_nonblocking(true) {
 								eprintln!(
 									"Failed to set client stream to non-blocking for client {}: {}",
@@ -108,14 +98,21 @@ impl WaylandSocket {
 								);
 								continue;
 							}
-
-							clients.insert(client_id, (ScmBufReader::new(stream), Arc::new(write)));
+							let conn = WaylandConnection::new(stream);
+							if let Err(e) = epoll.add(
+								conn.stream.as_ref(),
+								epoll::EpollEvent::new(epoll::EpollFlags::EPOLLIN, client_id as u64),
+							) {
+								eprintln!("Failed to add client {} to epoll: {}", client_id, e);
+								continue;
+							}
+							clients.insert(client_id, conn);
 						}
 						Err(e) => eprintln!("Failed to accept client: {}", e),
 					}
 				} else {
 					let client_id = event.data() as u32;
-					let (read_client, write_client) = match clients.get_mut(&client_id) {
+					let conn = match clients.get_mut(&client_id) {
 						Some(c) => c,
 						None => {
 							eprintln!("Received event for unknown client ID: {}", client_id);
@@ -124,12 +121,12 @@ impl WaylandSocket {
 					};
 
 					loop {
-						let (packet, fds) = match read_client.read_packet() {
+						let packet = match conn.recv_packet() {
 							Ok(packet) => packet,
 							Err(e) if e.kind() == io::ErrorKind::WouldBlock => break, // no more data right now
 							Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-								if let Some((reader, _)) = clients.remove(&client_id)
-									&& let Err(e) = epoll.delete(reader.socket())
+								if let Some(removed) = clients.remove(&client_id)
+									&& let Err(e) = epoll.delete(removed.stream.as_ref())
 								{
 									eprintln!("Failed to remove client {} from epoll: {}", client_id, e);
 								}
@@ -140,12 +137,14 @@ impl WaylandSocket {
 								break;
 							}
 						};
+						let fds = conn.drain_fds();
+						let client = Arc::clone(&conn.stream);
 						output_channel
 							.send(CompositorEvent::Wayland(WaylandEvent {
 								client_id,
 								packet,
 								fds,
-								client: Arc::clone(write_client),
+								client,
 							}))
 							.unwrap_or_else(|e| {
 								eprintln!("Failed to send Wayland event from client {}: {}", client_id, e)

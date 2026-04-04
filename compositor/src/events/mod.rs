@@ -3,7 +3,6 @@ use std::thread;
 pub mod drm;
 mod event_threads;
 pub mod input;
-mod scm_bufreader;
 pub mod wayland;
 
 #[derive(Debug)]

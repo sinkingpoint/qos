@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod compositor;
+pub mod connection;
 pub mod display;
 pub mod keyboard;
 pub mod output;
