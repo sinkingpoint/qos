@@ -1,4 +1,5 @@
 use std::{
+	fs::File,
 	io::IoSlice,
 	os::{fd::AsRawFd, unix::net::UnixStream},
 	sync::Arc,
@@ -6,10 +7,7 @@ use std::{
 
 use bytestruct::WriteToWithEndian;
 use bytestruct_derive::ByteStruct;
-use nix::sys::{
-	memfd::{MemFdCreateFlag, memfd_create},
-	socket::{ControlMessage, MsgFlags, sendmsg},
-};
+use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg};
 
 use crate::wayland::{
 	WaylandPacket,
@@ -42,29 +40,23 @@ pub struct KeyMapCommand {
 }
 
 impl KeyMapCommand {
-	pub fn new_no_keymap() -> Self {
-		Self {
-			keymap_path: String::new(),
-		}
+	pub fn new(keymap_path: String) -> Self {
+		Self { keymap_path }
 	}
 
 	pub fn write_as_packet(&self, object_id: u32, connection: &Arc<UnixStream>) -> WaylandResult<()> {
-		// TODO: If we have a keyboard_path, we should mmap it and send the fd instead of sending an empty keymap
-		let memfd = memfd_create(c"wl-keymap", MemFdCreateFlag::empty())?;
-
-		nix::unistd::ftruncate(&memfd, 1)?;
+		let file = File::open(&self.keymap_path)?;
+		let size = file.metadata()?.len() as u32 + 1; // +1 for the null terminator
 
 		let mut payload = Vec::new();
-		// format: 0 = no keymap
-		0u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-		// size: 1 (minimal memfd)
 		1u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
+		size.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
 
 		let packet = WaylandPacket::new(object_id, 0, payload);
 		let mut buf = Vec::new();
 		packet.write_to_with_endian(&mut buf, bytestruct::Endian::Little)?;
 
-		let raw_fd = memfd.as_raw_fd();
+		let raw_fd = file.as_raw_fd();
 		let iov = [IoSlice::new(&buf)];
 		let cmsg = [ControlMessage::ScmRights(&[raw_fd])];
 		sendmsg::<()>(connection.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)?;

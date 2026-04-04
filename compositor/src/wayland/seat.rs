@@ -44,7 +44,7 @@ pub struct GetKeyboardCommand {
 
 impl Command<Seat> for GetKeyboardCommand {
 	fn handle(self, connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
-		let keymap = KeyMapCommand::new_no_keymap();
+		let keymap = KeyMapCommand::new("/etc/xkb/qwerty".to_string());
 		keymap.write_as_packet(self.new_id, connection)?;
 		Ok(Some(ClientEffect::Register(
 			self.new_id,
