@@ -78,18 +78,35 @@ impl SharedMemoryPool {
 			);
 			return;
 		}
-		if x < 0 || y < 0 {
+
+		// Clip to framebuffer bounds
+		let src_stride_pixels = buffer.stride / 4;
+		let clip_x = x.max(0);
+		let clip_y = y.max(0);
+		let clip_x2 = (x + buffer.width).min(framebuffer.width as i32);
+		let clip_y2 = (y + buffer.height).min(framebuffer.height as i32);
+		if clip_x2 <= clip_x || clip_y2 <= clip_y {
 			return;
 		}
-		let src = unsafe { self.ptr.add(buffer.offset as usize) } as *const u32;
-		let src_stride_pixels = buffer.stride as u32 / 4;
+
+		// Offset into source to skip the clipped rows/columns
+		let src_skip_x = (clip_x - x) as usize;
+		let src_skip_y = (clip_y - y) as usize;
+		let src = unsafe {
+			(self.ptr.add(buffer.offset as usize) as *const u32)
+				// skip rows
+				.add(src_skip_y * src_stride_pixels as usize)
+				// skip columns
+				.add(src_skip_x)
+		};
+
 		framebuffer.blit_and_mark_dirty(
 			src,
-			src_stride_pixels,
-			x as u32,
-			y as u32,
-			buffer.width as u32,
-			buffer.height as u32,
+			src_stride_pixels as u32,
+			clip_x as u32,
+			clip_y as u32,
+			(clip_x2 - clip_x) as u32,
+			(clip_y2 - clip_y) as u32,
 		);
 	}
 }

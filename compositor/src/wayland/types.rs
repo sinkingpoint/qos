@@ -119,6 +119,7 @@ impl Client {
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
 		let mut blitted: Vec<(u32, u32)> = Vec::new(); // (surface_id, buffer_id)
+		let mut blitted_rects: Vec<(u32, i32, i32, i32, i32)> = Vec::new(); // (surface_id, x, y, width, height)
 		// For each surface with a committed buffer, blit the buffer to the framebuffer.
 		for (surface_id, subsystem) in self.objects.iter() {
 			if let SubsystemType::Surface(surface) = subsystem
@@ -166,6 +167,20 @@ impl Client {
 					})
 					.unwrap_or((0, 0));
 
+				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
+					&& (blit_x != last_x
+						|| blit_y != last_y
+						|| buffer.width != last_width
+						|| buffer.height != last_height)
+				{
+					let x0 = last_x.max(0);
+					let y0 = last_y.max(0);
+					let x1 = (last_x + last_width).min(framebuffer.width as i32);
+					let y1 = (last_y + last_height).min(framebuffer.height as i32);
+					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
+				}
+				blitted_rects.push((*surface_id, blit_x, blit_y, buffer.width, buffer.height));
+
 				mem_pool.blit_onto(buffer, framebuffer, blit_x, blit_y);
 				blitted.push((*surface_id, buffer_id));
 			}
@@ -188,6 +203,12 @@ impl Client {
 				continue;
 			}
 		}
+
+		for (surface_id, x, y, width, height) in blitted_rects {
+			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
+				surface.last_blit_rect = Some((x, y, width, height));
+			}
+		}
 	}
 
 	pub fn handle_drag(&mut self, x: i32, y: i32) -> WaylandResult<()> {
@@ -203,10 +224,17 @@ impl Client {
 					top_level.x += delta_x;
 					top_level.y += delta_y;
 				}
-
 				drag_state.initial_pointer = Some((x, y));
 			}
 		}
+
+		if let Some(drag_state) = &self.dragging
+			&& let Some(surface_id) = self.derive_surface_id_from_top_level_id(drag_state.top_level_id)
+			&& let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id)
+		{
+			surface.blitted = false; // mark the surface as needing to be repainted
+		}
+
 		Ok(())
 	}
 

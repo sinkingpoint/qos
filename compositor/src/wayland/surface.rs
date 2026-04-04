@@ -11,6 +11,7 @@ use crate::wayland::{
 
 pub struct Surface {
 	pub attached_buffer: Option<(u32, i32, i32)>,
+	pub last_blit_rect: Option<(i32, i32, i32, i32)>,
 	pub committed: bool,
 	pub blitted: bool,
 	pub pending_callbacks: Vec<u32>,
@@ -20,6 +21,7 @@ impl Surface {
 	pub fn new() -> Self {
 		Self {
 			attached_buffer: None,
+			last_blit_rect: None,
 			committed: false,
 			blitted: false,
 			pending_callbacks: Vec::new(),

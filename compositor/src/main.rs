@@ -343,6 +343,23 @@ impl VideoBuffer {
 		self.damaged.push((x, y, width, height));
 	}
 
+	pub fn mark_dirty(&mut self, x: u32, y: u32, width: u32, height: u32) {
+		self.damaged.push((x, y, width, height));
+	}
+
+	pub fn clear_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32) {
+		for row in 0..height {
+			unsafe {
+				std::ptr::write_bytes(
+					self.pixels.add(((y + row) * self.pitch + x) as usize),
+					color as u8,
+					width as usize,
+				);
+			}
+		}
+		self.mark_dirty(x, y, width, height);
+	}
+
 	fn blit_from(&mut self, src_pixels: *const u32, src_stride_pixels: u32, x: u32, y: u32, width: u32, height: u32) {
 		if x.saturating_add(width) > self.width {
 			eprintln!(
@@ -373,7 +390,8 @@ impl VideoBuffer {
 
 	pub fn sync_from(&mut self, other: &VideoBuffer) {
 		for &(x, y, width, height) in &other.damaged {
-			self.blit_from(other.pixels, other.pitch, x, y, width, height);
+			let src = unsafe { other.pixels.add((y * other.pitch + x) as usize) };
+			self.blit_from(src, other.pitch, x, y, width, height);
 		}
 	}
 
