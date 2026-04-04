@@ -1,14 +1,13 @@
 use std::{
 	collections::{HashMap, VecDeque},
-	io::Write,
-	ops::Deref,
 	os::{fd::OwnedFd, unix::net::UnixStream},
 	sync::Arc,
 };
 
-use bytestruct::{Endian, ReadFromWithEndian, WriteToWithEndian};
-use bytestruct_derive::ByteStruct;
+use bytestruct::{Endian, ReadFromWithEndian};
 use thiserror::Error;
+
+pub use wayland::types::{WaylandEncodedString, WaylandPacket};
 
 use crate::{
 	VideoBuffer,
@@ -17,9 +16,9 @@ use crate::{
 		buffer::Buffer,
 		compositor::Compositor,
 		display::Display,
-		keyboard::{KeyCommand, KeyEnterCommand, KeyLeaveCommand, Keyboard, ModifiersCommand},
+		keyboard::{KeyEnterCommand, KeyEventPacket, KeyLeaveCommand, Keyboard, ModifiersCommand},
 		output::{DisplayGeometry, Output},
-		pointer::{ButtonEvent, EnterEvent, LeaveEvent, MoveEvent, Pointer},
+		pointer::{ButtonEvent, Pointer},
 		registry::Registry,
 		seat::Seat,
 		shm::{SharedMemory, SharedMemoryPool},
@@ -28,6 +27,11 @@ use crate::{
 		xdg_toplevel::XdgTopLevel,
 		xdg_wm_base::XdgWmBase,
 	},
+};
+use wayland::buffer::ReleaseEvent;
+use wayland::{
+	pointer::{EnterEvent, FrameEvent, LeaveEvent, MoveEvent},
+	types::WaylandPayload,
 };
 
 pub trait SubSystem {
@@ -191,15 +195,7 @@ impl Client {
 			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
 				surface.mark_blitted(&self.connection);
 			}
-			// wl_buffer.release — opcode 0, no payload
-			let packet = WaylandPacket::new(buffer_id, 0, vec![]);
-			let mut buf = Vec::new();
-			if let Err(e) = packet.write_to_with_endian(&mut buf, Endian::Little) {
-				eprintln!("Failed to write wl_buffer.release packet: {}", e);
-				continue;
-			}
-
-			if let Err(e) = self.connection.as_ref().write_all(&buf) {
+			if let Err(e) = ReleaseEvent.write_as_packet(buffer_id, &self.connection) {
 				eprintln!("Failed to send wl_buffer.release packet: {}", e);
 				continue;
 			}
@@ -259,11 +255,21 @@ impl Client {
 			.derive_surface_id_from_top_level_id(top_level_id)
 			.ok_or(WaylandError::UnrecognisedObject)?;
 
-		let enter_event = KeyEnterCommand::new(serial, surface_id, Vec::new());
+		let enter_event = KeyEnterCommand {
+			serial,
+			surface_id,
+			keys: bytestruct::LengthPrefixedVec::new(vec![]),
+		};
 		enter_event.write_as_packet(keyboard_id, &self.connection)?;
 
-		let modifiers_event = ModifiersCommand::new(serial, keyboard.depressed, Modifiers::empty(), keyboard.locked, 0);
-		modifiers_event.write_as_packet(keyboard_id, &self.connection)
+		let modifiers_event = ModifiersCommand {
+			serial,
+			depressed: keyboard.depressed.bits(),
+			latched: Modifiers::empty().bits(),
+			locked: keyboard.locked.bits(),
+			group: 0,
+		};
+		Ok(modifiers_event.write_as_packet(keyboard_id, &self.connection)?)
 	}
 
 	pub fn handle_focus_leave(&mut self, serial: u32, top_level_id: u32) -> WaylandResult<()> {
@@ -277,8 +283,8 @@ impl Client {
 			.derive_surface_id_from_top_level_id(top_level_id)
 			.ok_or(WaylandError::UnrecognisedObject)?;
 
-		let leave_event = KeyLeaveCommand::new(serial, surface_id);
-		leave_event.write_as_packet(keyboard_id, &self.connection)
+		let leave_event = KeyLeaveCommand { serial, surface_id };
+		Ok(leave_event.write_as_packet(keyboard_id, &self.connection)?)
 	}
 
 	pub fn handle_key_event(
@@ -299,12 +305,24 @@ impl Client {
 		};
 
 		let raw_key_code: u16 = code.into();
-		let event = KeyCommand::new(serial, raw_key_code as u32, state)?;
+		let time = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC)?;
+		let time_ms = time.tv_sec() as u64 * 1000 + time.tv_nsec() as u64 / 1_000_000;
+		let event = KeyEventPacket {
+			serial,
+			time: time_ms as u32,
+			key: raw_key_code as u32,
+			state,
+		};
 		event.write_as_packet(keyboard_id, &self.connection)?;
 
 		if code.is_modifier() {
-			let modifiers_event =
-				ModifiersCommand::new(serial, keyboard.depressed, Modifiers::empty(), keyboard.locked, 0);
+			let modifiers_event = ModifiersCommand {
+				serial,
+				depressed: keyboard.depressed.bits(),
+				latched: Modifiers::empty().bits(),
+				locked: keyboard.locked.bits(),
+				group: 0,
+			};
 			modifiers_event.write_as_packet(keyboard_id, &self.connection)?;
 		}
 
@@ -382,23 +400,14 @@ impl Client {
 		let relative_x = x - surface_x;
 		let relative_y = y - surface_y;
 
-		let enter_event = EnterEvent::new(serial, surface_id, relative_x, relative_y);
-
-		let mut event_bytes = Vec::new();
-		enter_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
-
-		let packet = WaylandPacket::new(pointer_id, 0, event_bytes); // opcode 0 is enter
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-
-		self.connection.as_ref().write_all(&buf)?;
-
-		// wl_pointer.frame — opcode 5, no payload
-		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-
-		self.connection.as_ref().write_all(&buf)?;
+		let enter_event = EnterEvent {
+			serial,
+			surface_id,
+			x: relative_x * 256,
+			y: relative_y * 256,
+		};
+		enter_event.write_as_packet(pointer_id, &self.connection)?;
+		FrameEvent.write_as_packet(pointer_id, &self.connection)?;
 
 		Ok(())
 	}
@@ -414,17 +423,8 @@ impl Client {
 			.derive_surface_id_from_top_level_id(top_level_id)
 			.ok_or(WaylandError::UnrecognisedObject)?;
 		let leave_event = LeaveEvent { serial, surface_id };
-		let mut event_bytes = Vec::new();
-		leave_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
-		let packet = WaylandPacket::new(pointer_id, 1, event_bytes); // opcode 1 is leave
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
-		// wl_pointer.frame — opcode 5, no payload
-		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
+		leave_event.write_as_packet(pointer_id, &self.connection)?;
+		FrameEvent.write_as_packet(pointer_id, &self.connection)?;
 
 		Ok(())
 	}
@@ -477,18 +477,15 @@ impl Client {
 		let relative_x = x - surface_x;
 		let relative_y = y - surface_y;
 
-		let move_event = MoveEvent::new(relative_x, relative_y);
-		let mut event_bytes = Vec::new();
-		move_event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
-		let packet = WaylandPacket::new(pointer_id, 2, event_bytes); // opcode 2 is move
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
-		// wl_pointer.frame — opcode 5, no payload
-		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 5 is frame
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
+		let time = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC)?;
+		let ms = time.tv_sec() * 1000 + time.tv_nsec() / 1_000_000;
+		MoveEvent {
+			time: ms as u32,
+			x: relative_x * 256,
+			y: relative_y * 256,
+		}
+		.write_as_packet(pointer_id, &self.connection)?;
+		FrameEvent.write_as_packet(pointer_id, &self.connection)?;
 		Ok(())
 	}
 
@@ -499,17 +496,8 @@ impl Client {
 			.find_map(|(id, s)| matches!(s, SubsystemType::Pointer(_)).then_some(*id))
 			.ok_or(WaylandError::UnrecognisedObject)?;
 
-		let mut event_bytes = Vec::new();
-		event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
-		let packet = WaylandPacket::new(pointer_id, 3, event_bytes); // opcode 3 is button
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
-		// wl_pointer.frame — opcode 5, no payload
-		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 5 is frame
-		let mut buf = Vec::new();
-		packet.write_to_with_endian(&mut buf, Endian::Little)?;
-		self.connection.as_ref().write_all(&buf)?;
+		event.write_as_packet(pointer_id, &self.connection)?;
+		FrameEvent.write_as_packet(pointer_id, &self.connection)?;
 		Ok(())
 	}
 
@@ -567,103 +555,4 @@ subsystem_type! {
 	Pointer(Pointer),
 	Keyboard(Keyboard),
 	Output(Output),
-}
-
-#[derive(Debug, ByteStruct)]
-pub struct WaylandHeader {
-	pub object_id: u32,
-	pub opcode: u16,
-	pub data_length: u16,
-}
-
-#[derive(Debug)]
-pub struct WaylandPacket {
-	pub object_id: u32,
-	pub opcode: u16,
-	pub payload: Vec<u8>,
-}
-
-impl WaylandPacket {
-	pub fn new(object_id: u32, opcode: u16, payload: Vec<u8>) -> Self {
-		Self {
-			object_id,
-			opcode,
-			payload,
-		}
-	}
-}
-
-impl WriteToWithEndian for WaylandPacket {
-	fn write_to_with_endian<W: std::io::Write>(&self, writer: &mut W, endian: Endian) -> std::io::Result<()> {
-		let header = WaylandHeader {
-			object_id: self.object_id,
-			opcode: self.opcode,
-			data_length: self.payload.len() as u16 + 8,
-		};
-		header.write_to_with_endian(writer, endian)?;
-		writer.write_all(&self.payload)?;
-		Ok(())
-	}
-}
-
-impl ReadFromWithEndian for WaylandPacket {
-	fn read_from_with_endian<R: std::io::Read>(reader: &mut R, endian: Endian) -> std::io::Result<Self> {
-		let header = WaylandHeader::read_from_with_endian(reader, endian)?;
-		let mut payload = vec![0u8; header.data_length as usize - 8];
-		reader.read_exact(&mut payload)?;
-		Ok(Self::new(header.object_id, header.opcode, payload))
-	}
-}
-
-#[derive(Debug)]
-pub struct WaylandEncodedString(pub String);
-
-impl Deref for WaylandEncodedString {
-	type Target = String;
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl WriteToWithEndian for WaylandEncodedString {
-	fn write_to_with_endian<W: std::io::Write>(&self, writer: &mut W, _endian: Endian) -> std::io::Result<()> {
-		writer.write_all(&(self.0.len() as u32 + 1).to_le_bytes())?;
-		writer.write_all(self.0.as_bytes())?;
-		writer.write_all(&[0])?; // null terminator
-		let padding = (4 - (self.0.len() + 1) % 4) % 4;
-		writer.write_all(&vec![0; padding])?; // padding to 4 bytes
-		Ok(())
-	}
-}
-
-impl ReadFromWithEndian for WaylandEncodedString {
-	fn read_from_with_endian<R: std::io::Read>(reader: &mut R, _endian: Endian) -> std::io::Result<Self> {
-		let mut len_bytes = [0u8; 4];
-		reader.read_exact(&mut len_bytes)?;
-		let len = u32::from_le_bytes(len_bytes);
-		let mut string_bytes = vec![0u8; len as usize];
-		reader.read_exact(&mut string_bytes)?;
-		// Strip the null byte
-		if string_bytes.last() == Some(&0) {
-			string_bytes.pop();
-		} else {
-			return Err(std::io::Error::new(
-				std::io::ErrorKind::InvalidData,
-				"Wayland string is not null-terminated",
-			));
-		}
-
-		let padding = (4 - (len % 4)) % 4;
-		let mut padding_bytes = vec![0u8; padding as usize];
-		reader.read_exact(&mut padding_bytes)?;
-
-		let string = String::from_utf8(string_bytes).map_err(|e| {
-			std::io::Error::new(
-				std::io::ErrorKind::InvalidData,
-				format!("Invalid UTF-8 in Wayland string: {}", e),
-			)
-		})?;
-		Ok(Self(string))
-	}
 }

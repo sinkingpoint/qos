@@ -1,4 +1,4 @@
-use bytestruct_derive::ByteStruct;
+use wayland::xdg_wm_base::{CreatePositionerRequest, DestroyRequest, GetXdgSurfaceRequest, PongRequest};
 
 use crate::wayland::{
 	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandResult},
@@ -14,16 +14,13 @@ impl SubSystem for XdgWmBase {
 }
 
 wayland_interface!(XdgWmBase, XdgWmBaseRequest {
-  0 => Destroy(DestroyCommand),
-  1 => CreatePositioner(CreatePositionerCommand),
-  2 => GetXdgSurface(GetXdgSurfaceCommand),
-  3 => Pong(PongCommand),
+  DestroyRequest::OPCODE => Destroy(DestroyRequest),
+  CreatePositionerRequest::OPCODE => CreatePositioner(CreatePositionerRequest),
+  GetXdgSurfaceRequest::OPCODE => GetXdgSurface(GetXdgSurfaceRequest),
+  PongRequest::OPCODE => Pong(PongRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct DestroyCommand;
-
-impl Command<XdgWmBase> for DestroyCommand {
+impl Command<XdgWmBase> for DestroyRequest {
 	fn handle(
 		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
@@ -33,12 +30,7 @@ impl Command<XdgWmBase> for DestroyCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct CreatePositionerCommand {
-	pub positioner_id: u32,
-}
-
-impl Command<XdgWmBase> for CreatePositionerCommand {
+impl Command<XdgWmBase> for CreatePositionerRequest {
 	fn handle(
 		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
@@ -48,13 +40,7 @@ impl Command<XdgWmBase> for CreatePositionerCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct GetXdgSurfaceCommand {
-	pub new_id: u32,
-	pub surface_id: u32,
-}
-
-impl Command<XdgWmBase> for GetXdgSurfaceCommand {
+impl Command<XdgWmBase> for GetXdgSurfaceRequest {
 	fn handle(
 		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,
@@ -67,12 +53,7 @@ impl Command<XdgWmBase> for GetXdgSurfaceCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct PongCommand {
-	pub callback_id: u32,
-}
-
-impl Command<XdgWmBase> for PongCommand {
+impl Command<XdgWmBase> for PongRequest {
 	fn handle(
 		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,

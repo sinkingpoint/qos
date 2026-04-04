@@ -1,0 +1,10 @@
+[package]
+name = "wayland"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitflags = "2"
+bytestruct = { path = "../bytestruct" }
+bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
+nix = { workspace = true, features = ["socket", "uio"] }

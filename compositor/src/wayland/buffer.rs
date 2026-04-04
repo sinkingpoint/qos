@@ -1,4 +1,4 @@
-use bytestruct_derive::ByteStruct;
+use wayland::buffer::DestroyRequest;
 
 use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
@@ -30,13 +30,10 @@ impl SubSystem for Buffer {
 }
 
 wayland_interface!(Buffer, BufferRequest {
-  0 => Destroy(DestroyCommand),
+  DestroyRequest::OPCODE => Destroy(DestroyRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct DestroyCommand;
-
-impl Command<Buffer> for DestroyCommand {
+impl Command<Buffer> for DestroyRequest {
 	fn handle(
 		self,
 		_connection: &std::sync::Arc<std::os::unix::net::UnixStream>,

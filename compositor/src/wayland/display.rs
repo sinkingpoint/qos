@@ -1,7 +1,7 @@
 use std::{io::Write, os::unix::net::UnixStream, sync::Arc};
 
 use bytestruct::WriteToWithEndian;
-use bytestruct_derive::ByteStruct;
+use wayland::display::{GetRegistryRequest, SyncRequest};
 
 use crate::{
 	wayland::{
@@ -44,16 +44,11 @@ impl SubSystem for Display {
 }
 
 wayland_interface!(Display, DisplayRequest {
-  0 => Sync(SyncCommand),
-  1 => GetRegistry(GetRegistry),
+  SyncRequest::OPCODE => Sync(SyncRequest),
+  GetRegistryRequest::OPCODE => GetRegistry(GetRegistryRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct SyncCommand {
-	pub callback_id: u32,
-}
-
-impl Command<Display> for SyncCommand {
+impl Command<Display> for SyncRequest {
 	fn handle(self, connection: &Arc<UnixStream>, _display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
 		let mut payload = Vec::new();
 		0u32.write_to_with_endian(&mut payload, bytestruct::Endian::Little)
@@ -68,12 +63,7 @@ impl Command<Display> for SyncCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct GetRegistry {
-	pub registry_id: u32,
-}
-
-impl Command<Display> for GetRegistry {
+impl Command<Display> for GetRegistryRequest {
 	fn handle(self, connection: &Arc<UnixStream>, display: &mut Display) -> WaylandResult<Option<ClientEffect>> {
 		for (i, global) in display.globals.iter().enumerate() {
 			let name = global.name();

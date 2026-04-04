@@ -1,6 +1,6 @@
 use std::{os::unix::net::UnixStream, sync::Arc};
 
-use bytestruct_derive::ByteStruct;
+use wayland::compositor::CreateSurfaceRequest;
 
 use crate::wayland::{
 	surface::Surface,
@@ -16,15 +16,10 @@ impl SubSystem for Compositor {
 }
 
 wayland_interface!(Compositor, CompositorRequest {
-  0 => CreateSurface(CreateSurfaceCommand),
+  CreateSurfaceRequest::OPCODE => CreateSurface(CreateSurfaceRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct CreateSurfaceCommand {
-	pub new_id: u32,
-}
-
-impl Command<Compositor> for CreateSurfaceCommand {
+impl Command<Compositor> for CreateSurfaceRequest {
 	fn handle(
 		self,
 		_connection: &Arc<UnixStream>,

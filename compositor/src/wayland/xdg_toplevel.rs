@@ -1,8 +1,8 @@
 use std::{os::unix::net::UnixStream, sync::Arc};
 
-use bytestruct_derive::ByteStruct;
+use wayland::xdg_toplevel::{DestroyRequest, MoveRequest, SetTitleRequest};
 
-use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandEncodedString, WaylandResult};
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct XdgTopLevel {
 	pub xdg_surface: u32,
@@ -28,15 +28,12 @@ impl SubSystem for XdgTopLevel {
 }
 
 wayland_interface!(XdgTopLevel, XdgTopLevelRequest {
-  0 => Destroy(DestroyCommand),
-	2 => SetTitle(SetTitleCommand),
-	6 => Move(MoveCommand),
+  DestroyRequest::OPCODE => Destroy(DestroyRequest),
+	SetTitleRequest::OPCODE => SetTitle(SetTitleRequest),
+	MoveRequest::OPCODE => Move(MoveRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct DestroyCommand;
-
-impl Command<XdgTopLevel> for DestroyCommand {
+impl Command<XdgTopLevel> for DestroyRequest {
 	fn handle(
 		self,
 		_connection: &Arc<UnixStream>,
@@ -46,12 +43,7 @@ impl Command<XdgTopLevel> for DestroyCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct SetTitleCommand {
-	pub title: WaylandEncodedString,
-}
-
-impl Command<XdgTopLevel> for SetTitleCommand {
+impl Command<XdgTopLevel> for SetTitleRequest {
 	fn handle(
 		self,
 		_connection: &Arc<UnixStream>,
@@ -62,13 +54,7 @@ impl Command<XdgTopLevel> for SetTitleCommand {
 	}
 }
 
-#[derive(Debug, ByteStruct)]
-pub struct MoveCommand {
-	pub seat_id: u32,
-	pub serial: u32,
-}
-
-impl Command<XdgTopLevel> for MoveCommand {
+impl Command<XdgTopLevel> for MoveRequest {
 	fn handle(
 		self,
 		_connection: &Arc<UnixStream>,

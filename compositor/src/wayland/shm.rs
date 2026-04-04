@@ -1,6 +1,7 @@
 use std::{num::NonZeroUsize, os::unix::net::UnixStream, sync::Arc};
 
-use bytestruct_derive::ByteStruct;
+use wayland::shm::CreatePoolRequest;
+use wayland::shm_pool::CreateBufferRequest;
 
 use crate::{
 	VideoBuffer,
@@ -19,16 +20,10 @@ impl SubSystem for SharedMemory {
 }
 
 wayland_interface!(SharedMemory, SharedMemoryRequest {
-  0 => CreatePool(WithFd<CreatePoolCommand>),
+  CreatePoolRequest::OPCODE => CreatePool(WithFd<CreatePoolRequest>),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct CreatePoolCommand {
-	pub pool_id: u32,
-	pub size: u32,
-}
-
-impl Command<SharedMemory> for WithFd<CreatePoolCommand> {
+impl Command<SharedMemory> for WithFd<CreatePoolRequest> {
 	fn handle(self, _connection: &Arc<UnixStream>, _shm: &mut SharedMemory) -> WaylandResult<Option<ClientEffect>> {
 		let ptr = unsafe {
 			nix::sys::mman::mmap(
@@ -120,20 +115,10 @@ impl Drop for SharedMemoryPool {
 }
 
 wayland_interface!(SharedMemoryPool, SharedMemoryPoolRequest {
-  0 => CreatePool(CreateBufferCommand),
+  CreateBufferRequest::OPCODE => CreateBuffer(CreateBufferRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct CreateBufferCommand {
-	pub buffer_id: u32,
-	pub offset: i32,
-	pub width: i32,
-	pub height: i32,
-	pub stride: i32,
-	pub format: u32,
-}
-
-impl Command<SharedMemoryPool> for CreateBufferCommand {
+impl Command<SharedMemoryPool> for CreateBufferRequest {
 	fn handle(self, _connection: &Arc<UnixStream>, pool: &mut SharedMemoryPool) -> WaylandResult<Option<ClientEffect>> {
 		if self.offset < 0 || self.width <= 0 || self.height <= 0 || self.stride < self.width.saturating_mul(4) {
 			eprintln!(

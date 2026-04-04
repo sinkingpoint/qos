@@ -117,8 +117,15 @@ impl WaylandCompositor {
 				if let Some((client_id, _)) = self.hovered_window
 					&& let Some(client) = self.clients.get_mut(&client_id)
 				{
-					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left); // TODO: handle this properly instead of just defaulting to ButtonLeft
-					let button_event = ButtonEvent::new(self.serial, button, ButtonState::Pressed);
+					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left);
+					let time = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC).expect("clock");
+					let ms = time.tv_sec() * 1000 + time.tv_nsec() / 1_000_000;
+					let button_event = ButtonEvent {
+						serial: self.serial,
+						time: ms as u32,
+						button: u32::from(button),
+						state: u32::from(ButtonState::Pressed),
+					};
 					client.send_button_event(button_event).unwrap();
 
 					// Move the focus to the clicked window
@@ -159,8 +166,15 @@ impl WaylandCompositor {
 				if let Some((client_id, _)) = self.hovered_window
 					&& let Some(client) = self.clients.get_mut(&client_id)
 				{
-					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left); // TODO: handle this properly instead of just defaulting to ButtonLeft
-					let button_event = ButtonEvent::new(self.serial, button, ButtonState::Released);
+					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left);
+					let time = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC).expect("clock");
+					let ms = time.tv_sec() * 1000 + time.tv_nsec() / 1_000_000;
+					let button_event = ButtonEvent {
+						serial: self.serial,
+						time: ms as u32,
+						button: u32::from(button),
+						state: u32::from(ButtonState::Released),
+					};
 					client.send_button_event(button_event).unwrap();
 				}
 			}

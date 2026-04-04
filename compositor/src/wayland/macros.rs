@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! wayland_interface {
-    ($subsystem:ty, $enum_name:ident { $($opcode:literal => $variant:ident ($ty:ty)),* $(,)? }) => {
+    ($subsystem:ty, $enum_name:ident { $($opcode:pat => $variant:ident ($ty:ty)),* $(,)? }) => {
         pub enum $enum_name {
             $($variant($ty),)*
         }

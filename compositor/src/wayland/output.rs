@@ -1,12 +1,11 @@
 use std::{os::unix::net::UnixStream, sync::Arc};
 
-use bytestruct::WriteToWithEndian;
-use bytestruct_derive::ByteStruct;
+use wayland::output::ReleaseRequest;
+use wayland::types::WaylandEncodedString;
 
-use crate::wayland::{
-	WaylandPacket,
-	types::{ClientEffect, Command, SubSystem, WaylandEncodedString, WaylandResult},
-};
+pub use wayland::output::{DoneEvent, GeometryEvent, ModeEvent};
+
+use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct Output;
 impl SubSystem for Output {
@@ -16,13 +15,10 @@ impl SubSystem for Output {
 }
 
 wayland_interface!(Output, OutputCommand {
-  0 => Release(ReleaseCommand),
+  ReleaseRequest::OPCODE => Release(ReleaseRequest),
 });
 
-#[derive(Debug, ByteStruct)]
-pub struct ReleaseCommand;
-
-impl Command<Output> for ReleaseCommand {
+impl Command<Output> for ReleaseRequest {
 	fn handle(self, _connection: &Arc<UnixStream>, _output: &mut Output) -> WaylandResult<Option<ClientEffect>> {
 		Ok(Some(ClientEffect::DestroySelf))
 	}
@@ -60,64 +56,26 @@ impl DisplayGeometry {
 			transform: 0,
 		}
 	}
-}
 
-#[derive(Debug, ByteStruct)]
-struct GeometryCommand {
-	x: i32,
-	y: i32,
-	physical_width: i32,
-	physical_height: i32,
-	subpixel: u32,
-	make: WaylandEncodedString,
-	model: WaylandEncodedString,
-	transform: u32,
-}
-
-impl GeometryCommand {
-	pub fn from_display_geometry(display_geometry: &DisplayGeometry) -> Self {
-		Self {
-			x: display_geometry.x,
-			y: display_geometry.y,
-			physical_width: display_geometry.physical_width,
-			physical_height: display_geometry.physical_height,
-			subpixel: display_geometry.subpixel,
-			make: WaylandEncodedString(display_geometry.make.clone()),
-			model: WaylandEncodedString(display_geometry.model.clone()),
-			transform: display_geometry.transform,
+	pub fn geometry_event(&self) -> GeometryEvent {
+		GeometryEvent {
+			x: self.x,
+			y: self.y,
+			physical_width: self.physical_width,
+			physical_height: self.physical_height,
+			subpixel: self.subpixel as i32,
+			make: WaylandEncodedString(self.make.clone()),
+			model: WaylandEncodedString(self.model.clone()),
+			transform: self.transform as i32,
 		}
 	}
-}
 
-pub fn geometry_command_packet(display_geometry: &DisplayGeometry, output_id: u32) -> WaylandResult<WaylandPacket> {
-	let geometry_command = GeometryCommand::from_display_geometry(display_geometry);
-	let mut payload = Vec::new();
-	geometry_command.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-	Ok(WaylandPacket::new(output_id, 0, payload))
-}
-
-#[derive(Debug, ByteStruct)]
-struct ModeCommand {
-	flags: u32,
-	width: i32,
-	height: i32,
-	refresh_rate: i32,
-}
-
-impl ModeCommand {
-	pub fn from_display_geometry(display_geometry: &DisplayGeometry) -> Self {
-		Self {
+	pub fn mode_event(&self) -> ModeEvent {
+		ModeEvent {
 			flags: 0x3,
-			width: display_geometry.width,
-			height: display_geometry.height,
-			refresh_rate: display_geometry.refresh_rate,
+			width: self.width,
+			height: self.height,
+			refresh_rate: self.refresh_rate,
 		}
 	}
-}
-
-pub fn mode_command_packet(display_geometry: &DisplayGeometry, output_id: u32) -> WaylandResult<WaylandPacket> {
-	let mode_command = ModeCommand::from_display_geometry(display_geometry);
-	let mut payload = Vec::new();
-	mode_command.write_to_with_endian(&mut payload, bytestruct::Endian::Little)?;
-	Ok(WaylandPacket::new(output_id, 1, payload))
 }
