@@ -12,11 +12,12 @@ use thiserror::Error;
 
 use crate::{
 	VideoBuffer,
+	keyboard::{KeyEvent, Modifiers},
 	wayland::{
 		buffer::Buffer,
 		compositor::Compositor,
 		display::Display,
-		keyboard::Keyboard,
+		keyboard::{KeyCommand, KeyEnterCommand, KeyLeaveCommand, Keyboard, ModifiersCommand},
 		output::{DisplayGeometry, Output},
 		pointer::{ButtonEvent, EnterEvent, LeaveEvent, MoveEvent, Pointer},
 		registry::Registry,
@@ -240,6 +241,74 @@ impl Client {
 
 	pub fn end_drag(&mut self) {
 		self.dragging = None;
+	}
+
+	pub fn handle_focus_enter(
+		&mut self,
+		serial: u32,
+		top_level_id: u32,
+		keyboard: &crate::keyboard::Keyboard,
+	) -> WaylandResult<()> {
+		let keyboard_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Keyboard(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface_id = self
+			.derive_surface_id_from_top_level_id(top_level_id)
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let enter_event = KeyEnterCommand::new(serial, surface_id, Vec::new());
+		enter_event.write_as_packet(keyboard_id, &self.connection)?;
+
+		let modifiers_event = ModifiersCommand::new(serial, keyboard.depressed, Modifiers::empty(), keyboard.locked, 0);
+		modifiers_event.write_as_packet(keyboard_id, &self.connection)
+	}
+
+	pub fn handle_focus_leave(&mut self, serial: u32, top_level_id: u32) -> WaylandResult<()> {
+		let keyboard_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Keyboard(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let surface_id = self
+			.derive_surface_id_from_top_level_id(top_level_id)
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let leave_event = KeyLeaveCommand::new(serial, surface_id);
+		leave_event.write_as_packet(keyboard_id, &self.connection)
+	}
+
+	pub fn handle_key_event(
+		&mut self,
+		serial: u32,
+		key_event: KeyEvent,
+		keyboard: &crate::keyboard::Keyboard,
+	) -> WaylandResult<()> {
+		let keyboard_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Keyboard(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let (code, state) = match key_event {
+			KeyEvent::KeyPress(code) => (code, 1),
+			KeyEvent::KeyRelease(code) => (code, 0),
+		};
+
+		let raw_key_code: u16 = code.into();
+		let event = KeyCommand::new(serial, raw_key_code as u32, state)?;
+		event.write_as_packet(keyboard_id, &self.connection)?;
+
+		if code.is_modifier() {
+			let modifiers_event =
+				ModifiersCommand::new(serial, keyboard.depressed, Modifiers::empty(), keyboard.locked, 0);
+			modifiers_event.write_as_packet(keyboard_id, &self.connection)?;
+		}
+
+		Ok(())
 	}
 
 	// Returns the ID of the surface at the given coordinates, if any.

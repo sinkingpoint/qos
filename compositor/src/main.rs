@@ -14,6 +14,7 @@ use crate::{
 		drm::DrmEventType,
 		input::{Event, KeyCode, KeyState},
 	},
+	keyboard::KeyEvent,
 	wayland::{DisplayGeometry, WaylandCompositor},
 };
 
@@ -21,6 +22,7 @@ mod bmp;
 mod cursor;
 mod drm;
 mod events;
+mod keyboard;
 mod wayland;
 
 fn main() {
@@ -146,7 +148,7 @@ fn main() {
 	cursor.update_kernel(&card, encoder.crtc_id);
 
 	// Event loop to keep the program running and handle page flip events
-	'outer: loop {
+	loop {
 		let event = match input_event_receiver.recv() {
 			Ok(event) => event,
 			Err(err) => {
@@ -198,13 +200,13 @@ fn main() {
 					KeyState::AutoRepeat => wayland.handle_cursor_event(CursorEvent::ButtonDown(code)), // Treat auto-repeat as pressed for button events
 				};
 			}
+			CompositorEvent::Input(Event::Key(code, state)) => {
+				let key_event = KeyEvent::new(code, state);
+				wayland.handle_key_event(key_event);
+			}
 			CompositorEvent::Input(Event::Synchronise(_, _)) => {
 				cursor.update_kernel(&card, encoder.crtc_id);
 				wayland.handle_cursor_event(CursorEvent::Move(cursor.x, cursor.y));
-			}
-			CompositorEvent::Input(Event::Key(KeyCode::KeyEsc, KeyState::Pressed)) => {
-				println!("Key press event received, exiting...");
-				break 'outer;
 			}
 			CompositorEvent::Wayland(event) => {
 				wayland.handle_event(event);

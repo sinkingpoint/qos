@@ -24,6 +24,7 @@ use crate::{
 	VideoBuffer,
 	cursor::CursorEvent,
 	events::wayland::WaylandEvent,
+	keyboard::KeyEvent,
 	wayland::{
 		pointer::{ButtonCode, ButtonEvent, ButtonState},
 		types::Client,
@@ -34,6 +35,8 @@ pub struct WaylandCompositor {
 	pub clients: HashMap<u32, types::Client>,
 	pub display_geometry: DisplayGeometry,
 	pub hovered_window: Option<(u32, u32)>,
+	pub active_window: Option<(u32, u32)>,
+	pub keyboard: crate::keyboard::Keyboard,
 	pub serial: u32,
 }
 
@@ -43,6 +46,8 @@ impl WaylandCompositor {
 			clients: HashMap::new(),
 			display_geometry,
 			hovered_window: None,
+			active_window: None,
+			keyboard: crate::keyboard::Keyboard::new(),
 			serial: 1,
 		}
 	}
@@ -50,6 +55,16 @@ impl WaylandCompositor {
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
 		for client in self.clients.values_mut() {
 			client.repaint(framebuffer);
+		}
+	}
+
+	pub fn handle_key_event(&mut self, event: KeyEvent) {
+		self.keyboard.handle_input(event);
+		if let Some((client_id, _)) = self.active_window
+			&& let Some(client) = self.clients.get_mut(&client_id)
+		{
+			client.handle_key_event(self.serial, event, &self.keyboard).unwrap();
+			self.serial += 1;
 		}
 	}
 
@@ -105,6 +120,27 @@ impl WaylandCompositor {
 					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left); // TODO: handle this properly instead of just defaulting to ButtonLeft
 					let button_event = ButtonEvent::new(self.serial, button, ButtonState::Pressed);
 					client.send_button_event(button_event).unwrap();
+
+					// Move the focus to the clicked window
+					if self.active_window != self.hovered_window {
+						if let Some((prev_client_id, prev_surface_id)) = self.active_window
+							&& let Some(prev_client) = self.clients.get_mut(&prev_client_id)
+						{
+							prev_client.handle_focus_leave(self.serial, prev_surface_id).unwrap();
+							self.serial += 1;
+						}
+
+						if let Some((new_client_id, new_surface_id)) = self.hovered_window
+							&& let Some(new_client) = self.clients.get_mut(&new_client_id)
+						{
+							new_client
+								.handle_focus_enter(self.serial, new_surface_id, &self.keyboard)
+								.unwrap();
+							self.serial += 1;
+						}
+
+						self.active_window = self.hovered_window;
+					}
 				}
 			}
 			CursorEvent::ButtonUp(button) => {

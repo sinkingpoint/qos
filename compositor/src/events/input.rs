@@ -193,13 +193,6 @@ pub enum MouseCode {
 }
 
 // Key Events
-
-#[derive(Debug, Clone)]
-pub struct KeyEvent {
-	pub code: KeyCode,
-	pub state: KeyState,
-}
-
 int_enum! {
 	#[derive(Debug, Copy, Clone, PartialEq)]
 	pub enum KeyState: i32 {
@@ -241,7 +234,7 @@ int_enum! {
 		KeyLeftbrace = 26,
 		KeyRightbrace = 27,
 		KeyEnter = 28,
-		KeyLeftctrl = 29,
+		KeyLeftCtrl = 29,
 		KeyA = 30,
 		KeyS = 31,
 		KeyD = 32,
@@ -254,7 +247,7 @@ int_enum! {
 		KeySemicolon = 39,
 		KeyApostrophe = 40,
 		KeyGrave = 41,
-		KeyLeftshift = 42,
+		KeyLeftShift = 42,
 		KeyBackslash = 43,
 		KeyZ = 44,
 		KeyX = 45,
@@ -266,11 +259,11 @@ int_enum! {
 		KeyComma = 51,
 		KeyDot = 52,
 		KeySlash = 53,
-		KeyRightshift = 54,
+		KeyRightShift = 54,
 		KeyKpasterisk = 55,
-		KeyLeftalt = 56,
+		KeyLeftAlt = 56,
 		KeySpace = 57,
-		KeyCapslock = 58,
+		KeyCapsLock = 58,
 		KeyF1 = 59,
 		KeyF2 = 60,
 		KeyF3 = 61,
@@ -308,10 +301,10 @@ int_enum! {
 		KeyMuhenkan = 94,
 		KeyKpjpcomma = 95,
 		KeyKpenter = 96,
-		KeyRightctrl = 97,
+		KeyRightCtrl = 97,
 		KeyKpslash = 98,
 		KeySysrq = 99,
-		KeyRightalt = 100,
+		KeyRightAlt = 100,
 		KeyLinefeed = 101,
 		KeyHome = 102,
 		KeyUp = 103,
@@ -336,8 +329,8 @@ int_enum! {
 		KeyHangeul = 122,
 		KeyHanja = 123,
 		KeyYen = 124,
-		KeyLeftmeta = 125,
-		KeyRightmeta = 126,
+		KeyLeftMeta = 125,
+		KeyRightMeta = 126,
 		KeyCompose = 127,
 		KeyStop = 128,
 		KeyAgain = 129,
@@ -836,5 +829,22 @@ int_enum! {
 		BtnTriggerHappy38 = 0x2e5,
 		BtnTriggerHappy39 = 0x2e6,
 		BtnTriggerHappy40 = 0x2e7,
+	}
+}
+
+impl KeyCode {
+	pub fn is_modifier(&self) -> bool {
+		matches!(
+			self,
+			KeyCode::KeyLeftCtrl
+				| KeyCode::KeyRightCtrl
+				| KeyCode::KeyLeftShift
+				| KeyCode::KeyRightShift
+				| KeyCode::KeyLeftAlt
+				| KeyCode::KeyRightAlt
+				| KeyCode::KeyLeftMeta
+				| KeyCode::KeyRightMeta
+				| KeyCode::KeyFn
+		)
 	}
 }
