@@ -20,7 +20,15 @@ use std::collections::HashMap;
 pub use output::DisplayGeometry;
 pub use types::WaylandPacket;
 
-use crate::{VideoBuffer, cursor::CursorEvent, events::wayland::WaylandEvent, wayland::types::Client};
+use crate::{
+	VideoBuffer,
+	cursor::CursorEvent,
+	events::wayland::WaylandEvent,
+	wayland::{
+		pointer::{ButtonCode, ButtonEvent, ButtonState},
+		types::Client,
+	},
+};
 
 pub struct WaylandCompositor {
 	pub clients: HashMap<u32, types::Client>,
@@ -78,10 +86,22 @@ impl WaylandCompositor {
 				}
 			}
 			CursorEvent::ButtonDown(button) => {
-				println!("Cursor button {} down", button);
+				if let Some((client_id, _)) = self.hovered_window
+					&& let Some(client) = self.clients.get_mut(&client_id)
+				{
+					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left); // TODO: handle this properly instead of just defaulting to ButtonLeft
+					let button_event = ButtonEvent::new(self.serial, button, ButtonState::Pressed);
+					client.send_button_event(button_event).unwrap();
+				}
 			}
 			CursorEvent::ButtonUp(button) => {
-				println!("Cursor button {} up", button);
+				if let Some((client_id, _)) = self.hovered_window
+					&& let Some(client) = self.clients.get_mut(&client_id)
+				{
+					let button = ButtonCode::try_from(button).unwrap_or(ButtonCode::Left); // TODO: handle this properly instead of just defaulting to ButtonLeft
+					let button_event = ButtonEvent::new(self.serial, button, ButtonState::Released);
+					client.send_button_event(button_event).unwrap();
+				}
 			}
 		}
 	}

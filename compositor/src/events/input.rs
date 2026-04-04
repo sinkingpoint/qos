@@ -200,7 +200,7 @@ pub struct KeyEvent {
 }
 
 int_enum! {
-	#[derive(Debug, Clone, PartialEq)]
+	#[derive(Debug, Copy, Clone, PartialEq)]
 	pub enum KeyState: i32 {
 		Released = 0,
 		Pressed = 1,
@@ -209,7 +209,7 @@ int_enum! {
 }
 
 int_enum! {
-	#[derive(Debug, Clone, PartialEq)]
+	#[derive(Debug, Copy, Clone, PartialEq)]
 	pub enum KeyCode: u16 {
 		KeyReserved = 0,
 		KeyEsc = 1,

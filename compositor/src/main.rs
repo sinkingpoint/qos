@@ -186,6 +186,18 @@ fn main() {
 			{
 				cursor.handle_input_event(&event);
 			}
+			CompositorEvent::Input(event)
+				if let Event::Key(code @ (KeyCode::BtnLeft | KeyCode::BtnRight | KeyCode::BtnMiddle), state) =
+					event =>
+			{
+				// Press and release events
+				cursor.handle_input_event(&event);
+				match state {
+					KeyState::Pressed => wayland.handle_cursor_event(CursorEvent::ButtonDown(code)),
+					KeyState::Released => wayland.handle_cursor_event(CursorEvent::ButtonUp(code)),
+					KeyState::AutoRepeat => wayland.handle_cursor_event(CursorEvent::ButtonDown(code)), // Treat auto-repeat as pressed for button events
+				};
+			}
 			CompositorEvent::Input(Event::Synchronise(_, _)) => {
 				cursor.update_kernel(&card, encoder.crtc_id);
 				wayland.handle_cursor_event(CursorEvent::Move(cursor.x, cursor.y));

@@ -125,6 +125,6 @@ impl Cursor {
 #[derive(Debug)]
 pub enum CursorEvent {
 	Move(i32, i32),
-	ButtonDown(i32),
-	ButtonUp(i32),
+	ButtonDown(KeyCode),
+	ButtonUp(KeyCode),
 }

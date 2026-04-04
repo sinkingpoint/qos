@@ -18,7 +18,7 @@ use crate::{
 		display::Display,
 		keyboard::Keyboard,
 		output::{DisplayGeometry, Output},
-		pointer::{EnterEvent, LeaveEvent, MoveEvent, Pointer},
+		pointer::{ButtonEvent, EnterEvent, LeaveEvent, MoveEvent, Pointer},
 		registry::Registry,
 		seat::Seat,
 		shm::{SharedMemory, SharedMemoryPool},
@@ -339,7 +339,28 @@ impl Client {
 		packet.write_to_with_endian(&mut buf, Endian::Little)?;
 		self.connection.as_ref().write_all(&buf)?;
 		// wl_pointer.frame — opcode 5, no payload
-		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 0 is enter
+		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 5 is frame
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+		Ok(())
+	}
+
+	pub fn send_button_event(&self, event: ButtonEvent) -> WaylandResult<()> {
+		let pointer_id = self
+			.objects
+			.iter()
+			.find_map(|(id, s)| matches!(s, SubsystemType::Pointer(_)).then_some(*id))
+			.ok_or(WaylandError::UnrecognisedObject)?;
+
+		let mut event_bytes = Vec::new();
+		event.write_to_with_endian(&mut event_bytes, Endian::Little)?;
+		let packet = WaylandPacket::new(pointer_id, 3, event_bytes); // opcode 3 is button
+		let mut buf = Vec::new();
+		packet.write_to_with_endian(&mut buf, Endian::Little)?;
+		self.connection.as_ref().write_all(&buf)?;
+		// wl_pointer.frame — opcode 5, no payload
+		let packet = WaylandPacket::new(pointer_id, 5, vec![]); // opcode 5 is frame
 		let mut buf = Vec::new();
 		packet.write_to_with_endian(&mut buf, Endian::Little)?;
 		self.connection.as_ref().write_all(&buf)?;
