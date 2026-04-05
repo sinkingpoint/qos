@@ -1,4 +1,4 @@
-use qui::{App, AppEvent};
+use qui::{App, AppEvent, Scene};
 
 fn main() -> std::io::Result<()> {
 	let mut app = App::new("wl-test".to_string(), 400, 300)?;
@@ -6,17 +6,24 @@ fn main() -> std::io::Result<()> {
 	let mut button_pressed = false;
 	let mut last_key: u32 = 0;
 
+	let mut scene = Scene::new(400, 300);
+	let _button_handle = scene.add_widget(qui::Button::new("Click me".to_string()), 150, 100);
+
 	draw_frame(&mut app, cursor, button_pressed, last_key);
+	scene.render(&mut app.canvas());
 	app.commit_frame()?;
 
 	loop {
-		match app.poll()? {
+		let event = app.poll()?;
+		scene.handle_event(&event);
+		match event {
 			AppEvent::Frame => {
 				draw_frame(&mut app, cursor, button_pressed, last_key);
+				scene.render(&mut app.canvas());
 				app.commit_frame()?;
 			}
 			AppEvent::PointerMotion { x, y } => cursor = Some((x, y)),
-			AppEvent::PointerButton { button, pressed } => {
+			AppEvent::PointerButton { button, pressed, .. } => {
 				if button == 0x110 {
 					button_pressed = pressed;
 					if pressed {
@@ -30,6 +37,14 @@ fn main() -> std::io::Result<()> {
 				}
 			}
 			AppEvent::Close => break,
+		}
+
+		while let Some(scene_event) = scene.poll() {
+			if let Some(button_event) = _button_handle.extract(&scene_event) {
+				match button_event {
+					qui::ButtonEvent::Clicked => println!("Button clicked!"),
+				}
+			}
 		}
 	}
 

@@ -287,6 +287,7 @@ impl Drop for App<'_> {
 	}
 }
 
+#[derive(Clone)]
 pub enum AppEvent {
 	Frame,
 	Keyboard { keycode: u32, pressed: bool },
