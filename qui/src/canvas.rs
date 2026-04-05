@@ -2,16 +2,30 @@ pub struct Canvas<'a> {
 	pub width: i32,
 	pub height: i32,
 	stride: i32,
-	pub pixels: &'a mut [u32],
+	pixels: &'a mut [u32],
+	x_offset: i32,
+	y_offset: i32,
+	damage: &'a mut Vec<(i32, i32, i32, i32)>,
 }
 
 impl<'a> Canvas<'a> {
-	pub fn new(pixels: &'a mut [u32], width: i32, height: i32, stride: i32) -> Self {
+	pub fn new(
+		pixels: &'a mut [u32],
+		width: i32,
+		height: i32,
+		stride: i32,
+		x_offset: i32,
+		y_offset: i32,
+		damage: &'a mut Vec<(i32, i32, i32, i32)>,
+	) -> Self {
 		Self {
 			width,
 			height,
 			pixels,
 			stride,
+			x_offset,
+			y_offset,
+			damage,
 		}
 	}
 
@@ -22,6 +36,7 @@ impl<'a> Canvas<'a> {
 				self.pixels[start + col] = color;
 			}
 		}
+		self.record_damage(0, 0, self.width, self.height);
 	}
 
 	pub fn fill_rect(&mut self, x: i32, y: i32, width: i32, height: i32, color: u32) {
@@ -32,6 +47,11 @@ impl<'a> Canvas<'a> {
 				(*self.pixels)[(j * self.stride + i) as usize] = color;
 			}
 		}
+		self.record_damage(x.max(0), y.max(0), (x2 - x.max(0)).max(0), (y2 - y.max(0)).max(0));
+	}
+
+	fn record_damage(&mut self, x: i32, y: i32, width: i32, height: i32) {
+		self.damage.push((x + self.x_offset, y + self.y_offset, width, height));
 	}
 
 	pub fn sub(&mut self, x: i32, y: i32, width: i32, height: i32) -> Canvas<'_> {
@@ -45,6 +65,14 @@ impl<'a> Canvas<'a> {
 		// Offset into the parent slice at (x0, y0)
 		let offset = (y0 * self.width + x0) as usize;
 
-		Canvas::new(&mut self.pixels[offset..], clamped_w, clamped_h, self.stride)
+		Canvas::new(
+			&mut self.pixels[offset..],
+			clamped_w,
+			clamped_h,
+			self.stride,
+			x0 + self.x_offset,
+			y0 + self.y_offset,
+			self.damage,
+		)
 	}
 }

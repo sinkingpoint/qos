@@ -143,6 +143,7 @@ fn main() {
 			c"PATH=/usr/local/bin:/usr/bin:/bin",
 			c"USER=root",
 			c"XDG_RUNTIME_DIR=/run/user/0",
+			c"WAYLAND_DISPLAY=wayland-0",
 		],
 	);
 	eprintln!("Failed to execute {}: {}", login_program, e);

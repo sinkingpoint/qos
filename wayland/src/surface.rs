@@ -17,6 +17,16 @@ pub struct AttachRequest {
 wayland_payload!(AttachRequest, opcode = 1);
 
 #[derive(Debug, ByteStruct)]
+pub struct DamageRequest {
+	pub x: i32,
+	pub y: i32,
+	pub width: i32,
+	pub height: i32,
+}
+
+wayland_payload!(DamageRequest, opcode = 2);
+
+#[derive(Debug, ByteStruct)]
 pub struct FrameRequest {
 	pub callback_id: u32,
 }

@@ -222,6 +222,7 @@ impl Service {
 						c"PATH=/usr/local/bin:/usr/bin:/bin",
 						c"USER=root",
 						c"XDG_RUNTIME_DIR=/run/user/0",
+						c"WAYLAND_DISPLAY=wayland-0",
 					],
 				)
 				.with_context(|| format!("failed to start service name: {}, args: {:?}", self.name, self.args))

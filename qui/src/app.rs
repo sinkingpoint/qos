@@ -15,12 +15,12 @@ use wayland::{
 	connection::WaylandConnection,
 	display::{GetRegistryRequest, SyncRequest, WL_DISPLAY_OBJECT_ID},
 	keyboard::KeyboardEvent,
-	pointer::{FrameEvent, PointerEvent},
+	pointer::PointerEvent,
 	registry::{BindRequest, GlobalEvent},
 	seat::{GetKeyboardRequest, GetPointerRequest},
 	shm::CreatePoolRequest,
 	shm_pool::CreateBufferRequest,
-	surface::{AttachRequest, CommitRequest, FrameCallbackEvent, FrameRequest},
+	surface::{AttachRequest, CommitRequest, DamageRequest, FrameCallbackEvent, FrameRequest},
 	types::{WaylandEncodedString, WaylandPayload},
 	xdg_surface::{AckConfigureRequest, ConfigureEvent, GetTopLevelSurfaceRequest},
 	xdg_toplevel::{CloseEvent, MoveRequest, SetTitleRequest},
@@ -50,6 +50,7 @@ pub struct App<'a> {
 	next_object_id: ObjectId,
 	fds: VecDeque<OwnedFd>,
 	last_interaction_serial: Option<u32>,
+	damage: Vec<(i32, i32, i32, i32)>,
 }
 
 impl App<'_> {
@@ -57,9 +58,15 @@ impl App<'_> {
 		let uid = 0;
 		let runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| format!("/run/user/{}", uid));
 		let display = env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "0".to_string());
-		let socket_path = format!("{}/wayland-{}", runtime_dir, display);
+		let socket_path = if display.starts_with("/") {
+			display
+		} else {
+			format!("{}/{}", runtime_dir, display)
+		};
 
-		let mut conn = WaylandConnection::new(UnixStream::connect(&socket_path)?);
+		println!("Connecting to Wayland display at {}", socket_path);
+		let socket = UnixStream::connect(&socket_path)?;
+		let mut conn = WaylandConnection::new(socket);
 		let registry_id: u32 = 2;
 		let mut next_obj_id = ObjectId(3);
 		GetRegistryRequest { registry_id }.write_as_packet(WL_DISPLAY_OBJECT_ID, &conn.stream)?;
@@ -79,10 +86,6 @@ impl App<'_> {
 		let pointer_id = next_obj_id.next();
 		GetPointerRequest { new_id: pointer_id }.write_as_packet(seat_id, &conn.stream)?;
 
-		// keyboard_id is allocated here but get_keyboard is sent after configure,
-		// so the keymap event arrives in the main event loop rather than being dropped.
-		let keyboard_id = next_obj_id.next();
-
 		let surface_id = next_obj_id.next();
 		CreateSurfaceRequest { new_id: surface_id }.write_as_packet(compositor_id, &conn.stream)?;
 
@@ -99,6 +102,10 @@ impl App<'_> {
 		}
 		.write_as_packet(xdg_surface_id, &conn.stream)?;
 
+		// Initial commit with no buffer: required by xdg_shell to signal that
+		// setup is complete and prompt the compositor to send xdg_surface.configure.
+		CommitRequest.write_as_packet(surface_id, &conn.stream)?;
+
 		// Wait for xdg_surface.configure, then ack
 		loop {
 			let packet = conn.recv_packet()?;
@@ -110,6 +117,7 @@ impl App<'_> {
 		}
 
 		// Send get_keyboard now so the keymap event arrives in the main event loop.
+		let keyboard_id = next_obj_id.next();
 		GetKeyboardRequest { new_id: keyboard_id }.write_as_packet(seat_id, &conn.stream)?;
 
 		let stride: i32 = width * 4;
@@ -176,11 +184,12 @@ impl App<'_> {
 			next_object_id: next_obj_id,
 			fds: VecDeque::new(),
 			last_interaction_serial: None,
+			damage: Vec::new(),
 		})
 	}
 
 	pub fn canvas(&mut self) -> Canvas<'_> {
-		Canvas::new(self.pixels, self.width, self.height, self.width)
+		Canvas::new(self.pixels, self.width, self.height, self.width, 0, 0, &mut self.damage)
 	}
 
 	pub fn start_move(&mut self) -> io::Result<()> {
@@ -243,6 +252,15 @@ impl App<'_> {
 			y: 0,
 		}
 		.write_as_packet(self.surface_id, &self.conn.stream)?;
+		for damage in self.damage.drain(..) {
+			DamageRequest {
+				x: damage.0,
+				y: damage.1,
+				width: damage.2,
+				height: damage.3,
+			}
+			.write_as_packet(self.surface_id, &self.conn.stream)?;
+		}
 		CommitRequest.write_as_packet(self.surface_id, &self.conn.stream)
 	}
 }
@@ -325,11 +343,15 @@ fn bind_globals(
 	let mut bound = BoundGlobals::new();
 
 	for (name, iface, version) in &globals {
+		let bind_version = match iface.as_str() {
+			"wl_compositor" | "wl_shm" | "xdg_wm_base" | "wl_seat" => *version,
+			_ => continue,
+		};
 		let id = next_object_id.next();
 		BindRequest {
 			name: *name,
 			interface: WaylandEncodedString(iface.clone()),
-			version: *version,
+			version: bind_version,
 			new_id: id,
 		}
 		.write_as_packet(registry_id, &conn.stream)?;
