@@ -51,6 +51,8 @@ pub struct App<'a> {
 	fds: VecDeque<OwnedFd>,
 	last_interaction_serial: Option<u32>,
 	damage: Vec<(i32, i32, i32, i32)>,
+
+	last_pointer_position: Option<(i32, i32)>,
 }
 
 impl App<'_> {
@@ -185,6 +187,7 @@ impl App<'_> {
 			fds: VecDeque::new(),
 			last_interaction_serial: None,
 			damage: Vec::new(),
+			last_pointer_position: None,
 		})
 	}
 
@@ -211,8 +214,19 @@ impl App<'_> {
 			if packet.object_id == self.pointer_id {
 				let event = PointerEvent::parse(packet.opcode, &packet.payload, &mut self.fds);
 
+				// Special case pointer button because we need to inject coordinates from pointer motion events, and the event itself doesn't include them.
 				if let Some(PointerEvent::Button(event)) = &event {
 					self.last_interaction_serial = Some(event.serial);
+					return Ok(AppEvent::PointerButton {
+						button: event.button,
+						pressed: event.state != 0,
+						x: self.last_pointer_position.map(|(px, _)| px).unwrap_or(0),
+						y: self.last_pointer_position.map(|(_, py)| py).unwrap_or(0),
+					});
+				}
+
+				if let Some(PointerEvent::Move(event)) = &event {
+					self.last_pointer_position = Some((event.x / 256, event.y / 256));
 				}
 
 				if let Some(event) = event
@@ -277,7 +291,7 @@ pub enum AppEvent {
 	Frame,
 	Keyboard { keycode: u32, pressed: bool },
 	PointerMotion { x: i32, y: i32 },
-	PointerButton { button: u32, pressed: bool },
+	PointerButton { button: u32, pressed: bool, x: i32, y: i32 },
 	Close,
 }
 
@@ -293,6 +307,8 @@ impl TryFrom<PointerEvent> for AppEvent {
 			PointerEvent::Button(event) => Ok(AppEvent::PointerButton {
 				button: event.button,
 				pressed: event.state != 0,
+				x: 0,
+				y: 0,
 			}),
 			_ => Err(()),
 		}
