@@ -215,9 +215,17 @@ impl Service {
 
 				self.pipe_logging().unwrap();
 
-				execve::<_, &CStr>(&args[0], &args, &[])
-					.with_context(|| format!("failed to start service name: {}, args: {:?}", self.name, self.args))
-					.unwrap();
+				execve::<_, &CStr>(
+					&args[0],
+					&args,
+					&[
+						c"PATH=/usr/local/bin:/usr/bin:/bin",
+						c"USER=root",
+						c"XDG_RUNTIME_DIR=/run/user/0",
+					],
+				)
+				.with_context(|| format!("failed to start service name: {}, args: {:?}", self.name, self.args))
+				.unwrap();
 			}
 		};
 

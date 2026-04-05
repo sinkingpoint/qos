@@ -1,0 +1,8 @@
+[package]
+name = "wl-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+qui = { path = "../qui" }
+wayland = { path = "../wayland" }

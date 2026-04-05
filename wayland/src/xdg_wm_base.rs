@@ -28,3 +28,14 @@ pub struct PongRequest {
 }
 
 wayland_payload!(PongRequest, opcode = 3);
+
+#[derive(Debug, ByteStruct)]
+pub struct PingEvent {
+	pub callback_id: u32,
+}
+
+wayland_payload!(PingEvent, opcode = 3);
+
+crate::wayland_client_events!(XdgWmBaseEvent {
+  PingEvent::OPCODE => Ping(PingEvent),
+});

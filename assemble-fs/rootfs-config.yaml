@@ -9,6 +9,7 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/clear
   - ./target/x86_64-unknown-linux-musl/debug/busctl
   - ./target/x86_64-unknown-linux-musl/debug/netc
+  - ./target/x86_64-unknown-linux-musl/debug/wl-test
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd
@@ -25,6 +26,7 @@ files:
   etc/passwd: configs/passwd
   etc/shadow: configs/shadow
   etc/group: configs/group
+  etc/xkb: configs/xkb
   etc/netd/config.toml: configs/netd.conf.toml
   /etc/qinit/services: configs/services
   /home/colin: configs/home

@@ -136,7 +136,15 @@ fn main() {
 		&CString::new(username.trim()).expect("username contains null bytes"),
 	];
 
-	let Err(e) = execve::<_, &CStr>(&command, &args, &[]);
+	let Err(e) = execve::<_, &CStr>(
+		&command,
+		&args,
+		&[
+			c"PATH=/usr/local/bin:/usr/bin:/bin",
+			c"USER=root",
+			c"XDG_RUNTIME_DIR=/run/user/0",
+		],
+	);
 	eprintln!("Failed to execute {}: {}", login_program, e);
 
 	unreachable!("execve failed")
