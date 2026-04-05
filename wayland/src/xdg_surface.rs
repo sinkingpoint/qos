@@ -27,3 +27,7 @@ pub struct ConfigureEvent {
 }
 
 wayland_payload!(ConfigureEvent, opcode = 0);
+
+crate::wayland_client_events!(XdgSurfaceEvent {
+	ConfigureEvent::OPCODE => Configure(ConfigureEvent),
+});

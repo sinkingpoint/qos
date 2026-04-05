@@ -11,3 +11,7 @@ wayland_payload!(DestroyRequest, opcode = 0);
 pub struct ReleaseEvent;
 
 wayland_payload!(ReleaseEvent, opcode = 0);
+
+crate::wayland_client_events!(BufferEvent {
+	ReleaseEvent::OPCODE => Release(ReleaseEvent),
+});

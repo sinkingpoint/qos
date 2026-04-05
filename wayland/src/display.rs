@@ -2,6 +2,8 @@ use bytestruct_derive::ByteStruct;
 
 use crate::wayland_payload;
 
+pub const WL_DISPLAY_OBJECT_ID: u32 = 1;
+
 #[derive(Debug, ByteStruct)]
 pub struct SyncRequest {
 	pub callback_id: u32,

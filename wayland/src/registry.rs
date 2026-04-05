@@ -21,3 +21,7 @@ pub struct GlobalEvent {
 }
 
 wayland_payload!(GlobalEvent, opcode = 0);
+
+crate::wayland_client_events!(RegistryEvent {
+	GlobalEvent::OPCODE => Global(GlobalEvent),
+});

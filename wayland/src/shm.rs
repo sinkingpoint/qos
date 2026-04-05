@@ -16,3 +16,7 @@ pub struct FormatEvent {
 }
 
 wayland_payload!(FormatEvent, opcode = 0);
+
+crate::wayland_client_events!(ShmEvent {
+	FormatEvent::OPCODE => Format(FormatEvent),
+});

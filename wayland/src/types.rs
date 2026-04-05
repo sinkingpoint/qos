@@ -1,4 +1,4 @@
-use std::{io::Write, ops::Deref, os::unix::net::UnixStream};
+use std::{collections::VecDeque, io::Write, ops::Deref, os::{fd::OwnedFd, unix::net::UnixStream}};
 
 use bytestruct::{Endian, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
@@ -61,6 +61,33 @@ pub trait WaylandPayload {
 	fn write_as_packet(&self, object_id: u32, connection: &std::sync::Arc<UnixStream>) -> std::io::Result<()>;
 }
 
+/// Wraps a parsed payload struct with an `OwnedFd` received via SCM_RIGHTS.
+/// Used for Wayland messages that carry a file descriptor alongside payload bytes.
+pub struct WithFd<T> {
+	pub cmd: T,
+	pub fd: OwnedFd,
+}
+
+/// Parses a value from a Wayland event payload, with access to any received
+/// file descriptors. Normal types ignore `fds`; `WithFd<T>` pops one from it.
+pub trait FromPayload: Sized {
+	fn from_payload(payload: &[u8], fds: &mut VecDeque<OwnedFd>) -> Option<Self>;
+}
+
+impl<T: ReadFromWithEndian> FromPayload for T {
+	fn from_payload(payload: &[u8], _fds: &mut VecDeque<OwnedFd>) -> Option<Self> {
+		T::read_from_with_endian(&mut std::io::Cursor::new(payload), Endian::Little).ok()
+	}
+}
+
+impl<T: ReadFromWithEndian> FromPayload for WithFd<T> {
+	fn from_payload(payload: &[u8], fds: &mut VecDeque<OwnedFd>) -> Option<Self> {
+		let cmd = T::read_from_with_endian(&mut std::io::Cursor::new(payload), Endian::Little).ok()?;
+		let fd = fds.pop_front()?;
+		Some(Self { cmd, fd })
+	}
+}
+
 #[derive(Debug, ByteStruct)]
 pub struct WaylandHeader {
 	pub object_id: u32,
@@ -95,6 +122,40 @@ impl WriteToWithEndian for WaylandPacket {
 		header.write_to_with_endian(writer, endian)?;
 		writer.write_all(&self.payload)
 	}
+}
+
+/// Generates a client-side event enum for a Wayland object type.
+/// Each variant wraps a typed event struct. The enum exposes a
+/// `parse(opcode, payload) -> Option<Self>` method for use in `poll()` loops.
+///
+/// Usage:
+/// ```
+/// wayland_client_events!(PointerEvent {
+///     EnterEvent::OPCODE => Enter(EnterEvent),
+///     LeaveEvent::OPCODE => Leave(LeaveEvent),
+/// });
+/// ```
+#[macro_export]
+macro_rules! wayland_client_events {
+	($enum_name:ident { $($opcode:pat => $variant:ident($ty:ty)),* $(,)? }) => {
+		pub enum $enum_name {
+			$($variant($ty),)*
+		}
+
+		impl $enum_name {
+			pub fn parse(
+				opcode: u16,
+				payload: &[u8],
+				fds: &mut ::std::collections::VecDeque<::std::os::fd::OwnedFd>,
+			) -> Option<Self> {
+				use $crate::types::FromPayload;
+				match opcode {
+					$($opcode => Some(Self::$variant(<$ty>::from_payload(payload, fds)?)),)*
+					_ => None,
+				}
+			}
+		}
+	};
 }
 
 /// Implements `WaylandPayload` for a struct, associating it with a fixed opcode,

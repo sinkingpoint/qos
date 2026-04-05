@@ -35,3 +35,7 @@ pub struct FrameCallbackEvent {
 }
 
 wayland_payload!(FrameCallbackEvent, opcode = 0);
+
+crate::wayland_client_events!(FrameCallbackObjectEvent {
+	FrameCallbackEvent::OPCODE => Done(FrameCallbackEvent),
+});

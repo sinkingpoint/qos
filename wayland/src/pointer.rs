@@ -1,3 +1,4 @@
+use bytestruct::int_enum;
 use bytestruct_derive::ByteStruct;
 
 use crate::wayland_payload;
@@ -59,7 +60,13 @@ pub struct FrameEvent;
 
 wayland_payload!(FrameEvent, opcode = 5);
 
-use bytestruct::int_enum;
+crate::wayland_client_events!(PointerEvent {
+	EnterEvent::OPCODE  => Enter(EnterEvent),
+	LeaveEvent::OPCODE  => Leave(LeaveEvent),
+	MoveEvent::OPCODE   => Move(MoveEvent),
+	ButtonEvent::OPCODE => Button(ButtonEvent),
+	FrameEvent::OPCODE  => Frame(FrameEvent),
+});
 
 int_enum! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

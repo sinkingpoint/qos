@@ -1,4 +1,8 @@
-use std::{os::unix::net::UnixStream, sync::Arc};
+use std::{
+	fs::File,
+	os::{fd::OwnedFd, unix::net::UnixStream},
+	sync::Arc,
+};
 
 use wayland::seat::{GetKeyboardRequest, GetPointerRequest, ReleaseRequest};
 
@@ -9,7 +13,7 @@ use crate::wayland::{
 	pointer::Pointer,
 	types::{ClientEffect, Command, SubSystem, SubsystemType, WaylandResult},
 };
-use wayland::types::WaylandPayload;
+use wayland::types::WithFd;
 
 pub struct Seat;
 
@@ -35,7 +39,12 @@ impl Command<Seat> for GetPointerRequest {
 
 impl Command<Seat> for GetKeyboardRequest {
 	fn handle(self, connection: &Arc<UnixStream>, _seat: &mut Seat) -> WaylandResult<Option<ClientEffect>> {
-		let keymap = KeyMapCommand::new("/etc/xkb/qwerty".to_string());
+		let file = File::open("/etc/xkb/qwerty")?;
+		let size = file.metadata()?.len() as u32 + 1;
+		let keymap = WithFd {
+			cmd: KeyMapCommand { format: 1, size },
+			fd: OwnedFd::from(file),
+		};
 		keymap.write_as_packet(self.new_id, connection)?;
 		Ok(Some(ClientEffect::Register(
 			self.new_id,

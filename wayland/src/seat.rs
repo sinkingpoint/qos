@@ -1,4 +1,5 @@
 use bytestruct_derive::ByteStruct;
+use std::io;
 
 use crate::wayland_payload;
 
@@ -28,7 +29,9 @@ pub struct CapabilitiesEvent {
 
 wayland_payload!(CapabilitiesEvent, opcode = 0);
 
-use std::io;
+crate::wayland_client_events!(SeatEvent {
+	CapabilitiesEvent::OPCODE => Capabilities(CapabilitiesEvent),
+});
 
 use bitflags::bitflags;
 use bytestruct::{ReadFromWithEndian, WriteToWithEndian};
