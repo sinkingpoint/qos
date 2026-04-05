@@ -1,0 +1,9 @@
+[package]
+name = "qui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wayland = { path = "../wayland" }
+bytestruct = { path = "../bytestruct" }
+nix = { workspace = true, features = ["mman", "socket", "uio", "fs"] }
