@@ -1,3 +1,5 @@
+use crate::font::Font;
+
 pub struct Canvas<'a> {
 	pub width: i32,
 	pub height: i32,
@@ -52,6 +54,21 @@ impl<'a> Canvas<'a> {
 
 	fn record_damage(&mut self, x: i32, y: i32, width: i32, height: i32) {
 		self.damage.push((x + self.x_offset, y + self.y_offset, width, height));
+	}
+
+	pub fn set_pixel(&mut self, x: i32, y: i32, color: u32) {
+		if x >= 0 && x < self.width && y >= 0 && y < self.height {
+			(*self.pixels)[(y * self.stride + x) as usize] = color;
+			self.record_damage(x, y, 1, 1);
+		}
+	}
+
+	pub fn draw_text(&mut self, font: &dyn Font, x: i32, y: i32, text: &str, color: u32) {
+		let mut cursor_x = x;
+		for ch in text.chars() {
+			font.draw_glyph(self, cursor_x, y, ch, color);
+			cursor_x += font.advance(ch);
+		}
 	}
 
 	pub fn sub(&mut self, x: i32, y: i32, width: i32, height: i32) -> Canvas<'_> {

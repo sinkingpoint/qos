@@ -1,5 +1,6 @@
 mod app;
 mod canvas;
+pub mod font;
 mod scene;
 mod widgets;
 pub use app::*;

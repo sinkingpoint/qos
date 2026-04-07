@@ -1,6 +1,9 @@
-use qui::{App, AppEvent, Scene};
+use qui::{font::BdfFont, App, AppEvent, Scene};
+
+const SPLEEN_BDF: &[u8] = include_bytes!("../assets/ter-u16n.bdf");
 
 fn main() -> std::io::Result<()> {
+	let font = BdfFont::from_bdf_data(SPLEEN_BDF).unwrap();
 	let mut app = App::new("wl-test".to_string(), 400, 300)?;
 	let mut cursor: Option<(i32, i32)> = None;
 	let mut button_pressed = false;
@@ -9,7 +12,7 @@ fn main() -> std::io::Result<()> {
 	let mut scene = Scene::new(400, 300);
 	let _button_handle = scene.add_widget(qui::Button::new("Click me".to_string()), 150, 100);
 
-	draw_frame(&mut app, cursor, button_pressed, last_key);
+	draw_frame(&mut app, cursor, &font, button_pressed, last_key);
 	scene.render(&mut app.canvas());
 	app.commit_frame()?;
 
@@ -18,7 +21,7 @@ fn main() -> std::io::Result<()> {
 		scene.handle_event(&event);
 		match event {
 			AppEvent::Frame => {
-				draw_frame(&mut app, cursor, button_pressed, last_key);
+				draw_frame(&mut app, cursor, &font, button_pressed, last_key);
 				scene.render(&mut app.canvas());
 				app.commit_frame()?;
 			}
@@ -51,7 +54,7 @@ fn main() -> std::io::Result<()> {
 	Ok(())
 }
 
-fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, button_pressed: bool, last_key: u32) {
+fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, font: &BdfFont, button_pressed: bool, last_key: u32) {
 	let mut canvas = app.canvas();
 
 	canvas.fill(0xFF222244);
@@ -71,4 +74,6 @@ fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, button_pressed: boo
 		let colour = if button_pressed { 0xFFFF4444 } else { 0xFFFFFF00 };
 		canvas.fill_rect(cx - 15, cy - 15, 30, 30, colour);
 	}
+
+	canvas.draw_text(font, 10, 50, "Hello World!", 0xFF00FF00);
 }
