@@ -26,9 +26,10 @@ use crate::{
 		xdg_surface::XDGSurface,
 		xdg_toplevel::XdgTopLevel,
 		xdg_wm_base::XdgWmBase,
+		zwlr_layer_shell_v1::{ZwlrLayerShellV1, ZwlrLayerSurfaceV1},
 	},
 };
-use wayland::buffer::ReleaseEvent;
+use wayland::{buffer::ReleaseEvent, surface::CommitRequest, zwlr_layer_shell_v1::Layer};
 use wayland::{
 	pointer::{EnterEvent, FrameEvent, LeaveEvent, MoveEvent},
 	types::WaylandPayload,
@@ -108,39 +109,72 @@ pub struct Client {
 	pub objects: HashMap<u32, SubsystemType>,
 	fds: VecDeque<OwnedFd>,
 	pub dragging: Option<DragState>,
+	pub display_geometry: DisplayGeometry,
 }
 
 impl Client {
 	pub fn new(connection: Arc<UnixStream>, display_geometry: DisplayGeometry) -> Self {
 		let mut objects = HashMap::new();
-		objects.insert(1, SubsystemType::Display(Display::new(display_geometry)));
+		objects.insert(1, SubsystemType::Display(Display::new(display_geometry.clone())));
 		Self {
 			connection,
 			objects,
 			fds: VecDeque::new(),
 			dragging: None,
+			display_geometry,
 		}
 	}
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
+		let mut surfaces_to_blit = Vec::new();
+
+		// First pass: Any layer surfaces in the background layer.
+		for obj in self.objects.values() {
+			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
+				&& layer_surface.mapped
+				&& matches!(layer_surface.layer, Layer::Background | Layer::Bottom)
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
+				&& surface.committed
+			{
+				let (x, y) = layer_surface.compute_position(&self.display_geometry);
+				surfaces_to_blit.push((layer_surface.surface_id, x, y));
+			}
+		}
+
+		// Second pass: all XDG Top Levels
+		for obj in self.objects.values() {
+			if let SubsystemType::XdgTopLevel(xdg_toplevel) = obj
+				&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&xdg_toplevel.xdg_surface)
+				&& xdg_surface.configured
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
+				&& surface.committed
+			{
+				let (x, y) = (xdg_toplevel.x, xdg_toplevel.y);
+				surfaces_to_blit.push((xdg_surface.surface_id, x, y));
+			}
+		}
+
+		// Last pass: any layer surfaces in the overlay layer.
+		for obj in self.objects.values() {
+			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
+				&& matches!(layer_surface.layer, Layer::Overlay | Layer::Top)
+				&& layer_surface.mapped
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
+				&& surface.committed
+			{
+				let (x, y) = layer_surface.compute_position(&self.display_geometry);
+				surfaces_to_blit.push((layer_surface.surface_id, x, y));
+			}
+		}
+
 		let mut blitted: Vec<(u32, u32)> = Vec::new(); // (surface_id, buffer_id)
 		let mut blitted_rects: Vec<(u32, i32, i32, i32, i32)> = Vec::new(); // (surface_id, x, y, width, height)
 		// For each surface with a committed buffer, blit the buffer to the framebuffer.
-		for (surface_id, subsystem) in self.objects.iter() {
-			if let SubsystemType::Surface(surface) = subsystem
+		for (surface_id, x, y) in surfaces_to_blit {
+			if let Some(SubsystemType::Surface(surface)) = self.objects.get(&surface_id)
 				&& surface.committed
 				&& let Some((buffer_id, _, _)) = surface.attached_buffer
 			{
-				if let Some(xdg_surface) = self
-					.objects
-					.values()
-					.find(|v| matches!(v, SubsystemType::XdgSurface(x) if x.surface_id == *surface_id))
-					&& let SubsystemType::XdgSurface(xdg_surface) = xdg_surface
-					&& !xdg_surface.configured
-				{
-					continue; // skip if the surface isn't configured yet
-				}
-
 				let buffer = match self.objects.get(&buffer_id) {
 					Some(SubsystemType::Buffer(buffer)) => buffer,
 					_ => continue, // skip if attached buffer doesn't exist or isn't a buffer
@@ -155,28 +189,8 @@ impl Client {
 					continue; // skip if we've already blitted this surface since the last commit
 				}
 
-				// Find the XdgTopLevel for this surface to get its position.
-				let (blit_x, blit_y) = self
-					.objects
-					.values()
-					.find_map(|obj| {
-						if let SubsystemType::XdgTopLevel(toplevel) = obj {
-							let xdg_surface = self.objects.get(&toplevel.xdg_surface)?;
-							if let SubsystemType::XdgSurface(xdg_surface) = xdg_surface
-								&& xdg_surface.surface_id == *surface_id
-							{
-								return Some((toplevel.x, toplevel.y));
-							}
-						}
-						None
-					})
-					.unwrap_or((0, 0));
-
 				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
-					&& (blit_x != last_x
-						|| blit_y != last_y
-						|| buffer.width != last_width
-						|| buffer.height != last_height)
+					&& (x != last_x || y != last_y || buffer.width != last_width || buffer.height != last_height)
 				{
 					let x0 = last_x.max(0);
 					let y0 = last_y.max(0);
@@ -184,10 +198,10 @@ impl Client {
 					let y1 = (last_y + last_height).min(framebuffer.height as i32);
 					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
 				}
-				blitted_rects.push((*surface_id, blit_x, blit_y, buffer.width, buffer.height));
+				blitted_rects.push((surface_id, x, y, buffer.width, buffer.height));
 
-				mem_pool.blit_onto(buffer, framebuffer, blit_x, blit_y);
-				blitted.push((*surface_id, buffer_id));
+				mem_pool.blit_onto(buffer, framebuffer, x, y);
+				blitted.push((surface_id, buffer_id));
 			}
 		}
 
@@ -515,11 +529,19 @@ impl Client {
 	pub fn handle_event(&mut self, command: WaylandPacket, fds: Vec<OwnedFd>) -> WaylandResult<()> {
 		self.fds.extend(fds);
 		let object_id = command.object_id;
+		let is_surface_commit = matches!(self.objects.get(&object_id), Some(SubsystemType::Surface(_)))
+			&& command.opcode == CommitRequest::OPCODE;
 		let Some(subsystem) = self.objects.get_mut(&object_id) else {
 			return Err(WaylandError::UnrecognisedObject);
 		};
 		match subsystem.handle_command(&self.connection, command, &mut self.fds)? {
 			Some(ClientEffect::Register(id, obj)) => {
+				if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = &obj {
+					let surface_id = layer_surface.surface_id;
+					if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
+						surface.role_id = Some(id);
+					}
+				}
 				self.objects.insert(id, obj);
 			}
 			Some(ClientEffect::Unregister(id)) => {
@@ -535,6 +557,21 @@ impl Client {
 				});
 			}
 			None => {}
+		}
+
+		if is_surface_commit {
+			let role_info = if let Some(SubsystemType::Surface(surface)) = self.objects.get(&object_id) {
+				surface
+					.role_id
+					.map(|role_id| (role_id, surface.attached_buffer.is_some()))
+			} else {
+				None
+			};
+			if let Some((role_id, has_buffer)) = role_info
+				&& let Some(SubsystemType::ZwlrLayerSurfaceV1(layer_surface)) = self.objects.get_mut(&role_id)
+			{
+				layer_surface.on_surface_committed(&self.connection, has_buffer, &self.display_geometry)?;
+			}
 		}
 		Ok(())
 	}
@@ -555,4 +592,6 @@ subsystem_type! {
 	Pointer(Pointer),
 	Keyboard(Keyboard),
 	Output(Output),
+	ZwlrLayerShellV1(ZwlrLayerShellV1),
+	ZwlrLayerSurfaceV1(ZwlrLayerSurfaceV1),
 }

@@ -15,6 +15,7 @@ use crate::{
 			WaylandResult,
 		},
 		xdg_wm_base::XdgWmBase,
+		zwlr_layer_shell_v1::ZwlrLayerShellV1,
 	},
 	wayland_interface,
 };
@@ -32,6 +33,7 @@ impl Display {
 				SubsystemType::XdgWmBase(XdgWmBase),
 				SubsystemType::Seat(Seat),
 				SubsystemType::Output(Output),
+				SubsystemType::ZwlrLayerShellV1(ZwlrLayerShellV1),
 			],
 			display_geometry,
 		}

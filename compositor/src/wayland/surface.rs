@@ -1,8 +1,8 @@
 use std::{os::unix::net::UnixStream, sync::Arc};
 
 use nix::time::{ClockId, clock_gettime};
-use wayland::surface::{AttachRequest, CommitRequest, DestroyRequest, FrameRequest};
 use wayland::surface::FrameCallbackEvent;
+use wayland::surface::{AttachRequest, CommitRequest, DestroyRequest, FrameRequest};
 use wayland::types::WaylandPayload;
 
 use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
@@ -13,6 +13,7 @@ pub struct Surface {
 	pub committed: bool,
 	pub blitted: bool,
 	pub pending_callbacks: Vec<u32>,
+	pub role_id: Option<u32>, // ID of the role object (e.g., xdg_surface) associated with this surface
 }
 
 impl Surface {
@@ -23,6 +24,7 @@ impl Surface {
 			committed: false,
 			blitted: false,
 			pending_callbacks: Vec::new(),
+			role_id: None,
 		}
 	}
 

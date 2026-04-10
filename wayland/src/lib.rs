@@ -14,3 +14,4 @@ pub mod types;
 pub mod xdg_surface;
 pub mod xdg_toplevel;
 pub mod xdg_wm_base;
+pub mod zwlr_layer_shell_v1;

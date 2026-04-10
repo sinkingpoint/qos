@@ -14,6 +14,7 @@ mod types;
 mod xdg_surface;
 mod xdg_toplevel;
 mod xdg_wm_base;
+mod zwlr_layer_shell_v1;
 
 use std::collections::HashMap;
 

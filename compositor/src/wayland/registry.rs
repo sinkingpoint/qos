@@ -42,7 +42,6 @@ impl Command<Registry> for BindRequest {
 				SubsystemType::Compositor(Compositor),
 			))),
 			"wl_shm" => {
-				println!("Client bound to wl_shm, sending supported formats");
 				FormatEvent { format: 0 }
 					.write_as_packet(self.new_id, connection)
 					.map_err(WaylandError::IOError)?;
@@ -77,6 +76,10 @@ impl Command<Registry> for BindRequest {
 				DoneEvent.write_as_packet(self.new_id, connection)?;
 				Ok(Some(ClientEffect::Register(self.new_id, SubsystemType::Output(Output))))
 			}
+			"zwlr_layer_shell_v1" => Ok(Some(ClientEffect::Register(
+				self.new_id,
+				SubsystemType::ZwlrLayerShellV1(crate::wayland::zwlr_layer_shell_v1::ZwlrLayerShellV1),
+			))),
 			_ => Ok(None), // unrecognised interface, ignore for now
 		}
 	}
