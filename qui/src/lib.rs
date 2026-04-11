@@ -1,5 +1,6 @@
 mod app;
 mod canvas;
+mod context;
 pub mod font;
 mod scene;
 mod widgets;

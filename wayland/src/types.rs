@@ -1,4 +1,9 @@
-use std::{collections::VecDeque, io::Write, ops::Deref, os::{fd::OwnedFd, unix::net::UnixStream}};
+use std::{
+	collections::VecDeque,
+	io::Write,
+	ops::Deref,
+	os::{fd::OwnedFd, unix::net::UnixStream},
+};
 
 use bytestruct::{Endian, ReadFromWithEndian, WriteToWithEndian};
 use bytestruct_derive::ByteStruct;
@@ -63,6 +68,7 @@ pub trait WaylandPayload {
 
 /// Wraps a parsed payload struct with an `OwnedFd` received via SCM_RIGHTS.
 /// Used for Wayland messages that carry a file descriptor alongside payload bytes.
+#[derive(Debug)]
 pub struct WithFd<T> {
 	pub cmd: T,
 	pub fd: OwnedFd,
@@ -138,6 +144,7 @@ impl WriteToWithEndian for WaylandPacket {
 #[macro_export]
 macro_rules! wayland_client_events {
 	($enum_name:ident { $($opcode:pat => $variant:ident($ty:ty)),* $(,)? }) => {
+		#[derive(Debug)]
 		pub enum $enum_name {
 			$($variant($ty),)*
 		}
