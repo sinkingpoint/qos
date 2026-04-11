@@ -31,6 +31,7 @@ pub struct App<'a> {
 
 	context: Rc<RefCell<WaylandContext>>,
 	surface_id: u32,
+	xdg_surface_id: u32,
 	xdg_toplevel_id: u32,
 	buffer_id: u32,
 	pixels: &'a mut [u32],
@@ -69,6 +70,7 @@ impl App<'_> {
 		// Wait for xdg_surface.configure, then ack
 		loop {
 			let packet = context.conn.recv_packet()?;
+			context.conn.drain_fds(); // discard any fds (e.g. keyboard keymap) arriving before poll loop
 			if packet.object_id == xdg_surface_id && packet.opcode == ConfigureEvent::OPCODE {
 				let event = ConfigureEvent::read_from_with_endian(&mut Cursor::new(&packet.payload), Endian::Little)?;
 				AckConfigureRequest { serial: event.serial }.write_as_packet(xdg_surface_id, &context.conn.stream)?;
@@ -130,6 +132,7 @@ impl App<'_> {
 			width,
 			height,
 			surface_id,
+			xdg_surface_id,
 			xdg_toplevel_id,
 			buffer_id,
 			pixels: unsafe { std::slice::from_raw_parts_mut(ptr as *mut u32, (width * height) as usize) },
@@ -163,11 +166,8 @@ impl App<'_> {
 			let (object_id, event) =
 				self.context
 					.borrow_mut()
-					.poll(&[self.surface_id, self.xdg_toplevel_id, self.frame_callback_id])?;
+					.poll(&[self.surface_id, self.xdg_surface_id, self.xdg_toplevel_id, self.frame_callback_id])?;
 
-			if object_id != self.frame_callback_id {
-				println!("Received event for object {}: {:?}", object_id, event);
-			}
 			if let ContextEvent::Pointer(pointer_event) = event {
 				match pointer_event {
 					PointerEvent::Move(event) => {
@@ -196,12 +196,17 @@ impl App<'_> {
 						pressed: event.state != 0,
 					});
 				}
+			} else if matches!(event, ContextEvent::Unknown { opcode: ConfigureEvent::OPCODE, .. } if object_id == self.xdg_surface_id)
+				&& let ContextEvent::Unknown { payload, .. } = event
+			{
+				let configure = ConfigureEvent::read_from_with_endian(&mut Cursor::new(&payload), Endian::Little)?;
+				AckConfigureRequest { serial: configure.serial }
+					.write_as_packet(self.xdg_surface_id, &self.context.borrow().conn.stream)?;
 			} else if matches!(event, ContextEvent::Unknown { opcode: CloseEvent::OPCODE, .. } if object_id == self.xdg_toplevel_id)
 			{
 				return Ok(AppEvent::Close);
 			} else if matches!(event, ContextEvent::Unknown { opcode: FrameCallbackEvent::OPCODE, .. } if object_id == self.frame_callback_id)
 			{
-				eprintln!("returning Frame");
 				return Ok(AppEvent::Frame);
 			}
 		}

@@ -29,9 +29,6 @@ fn main() -> std::io::Result<()> {
 			AppEvent::PointerButton { button, pressed, .. } => {
 				if button == 0x110 {
 					button_pressed = pressed;
-					if pressed {
-						app.start_move()?;
-					}
 				}
 			}
 			AppEvent::Keyboard { keycode, pressed } => {
@@ -74,6 +71,4 @@ fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, font: &BdfFont, but
 		let colour = if button_pressed { 0xFFFF4444 } else { 0xFFFFFF00 };
 		canvas.fill_rect(cx - 15, cy - 15, 30, 30, colour);
 	}
-
-	canvas.draw_text(font, 10, 50, "Hello World!", 0xFF00FF00);
 }

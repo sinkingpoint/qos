@@ -58,6 +58,7 @@ impl WaylandContext {
 		let keyboard_id = next_obj_id.next();
 		GetKeyboardRequest { new_id: keyboard_id }.write_as_packet(seat_id, &conn.stream)?;
 
+		println!("{:?} {} {}", globals, pointer_id, keyboard_id);
 		Ok(Self {
 			conn,
 			globals,
@@ -84,19 +85,11 @@ impl WaylandContext {
 
 			let packet = self.conn.recv_packet()?;
 			self.fds.extend(self.conn.drain_fds());
-			if packet.object_id != 1 && packet.object_id != 14 && packet.object_id != 15 {
-				println!(
-					"Received packet: object_id={}, opcode={}, payload_len={}, fds={}",
-					packet.object_id,
-					packet.opcode,
-					packet.payload.len(),
-					self.fds.len()
-				);
-			}
 			if packet.object_id == self.keyboard_id
 				&& let Some(event) = KeyboardEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
 			{
 				match &event {
+					KeyboardEvent::KeyMap(_) => {} // fd already consumed by parse, nothing to route
 					KeyboardEvent::Enter(e) => self.keyboard_focus = Some(e.surface_id),
 					KeyboardEvent::Leave(_) => self.keyboard_focus = None,
 					_ => {}
@@ -156,6 +149,7 @@ impl WaylandContext {
 	}
 }
 
+#[derive(Debug)]
 pub struct BoundGlobals {
 	pub compositor: Option<u32>,
 	pub shm: Option<u32>,
