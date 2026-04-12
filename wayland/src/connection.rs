@@ -68,6 +68,21 @@ impl WaylandConnection {
 		Ok(())
 	}
 
+	/// Returns true if the socket has at least one byte ready to read without blocking.
+	pub fn has_data(&self) -> bool {
+		let mut buf = [0u8; 1];
+		let mut iov = [IoSliceMut::new(&mut buf)];
+		matches!(
+			recvmsg::<()>(
+				self.stream.as_raw_fd(),
+				&mut iov,
+				None,
+				MsgFlags::MSG_PEEK | MsgFlags::MSG_DONTWAIT,
+			),
+			Ok(msg) if msg.bytes > 0
+		)
+	}
+
 	fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
 		let mut filled = 0;
 		while filled < buf.len() {

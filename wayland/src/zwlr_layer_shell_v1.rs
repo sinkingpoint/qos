@@ -40,7 +40,7 @@ pub struct SetAnchorRequest {
 }
 
 bitflags::bitflags! {
-  #[derive(Debug)]
+  #[derive(Debug, Copy, Clone)]
   pub struct Anchor: u32 {
   const Top = 1 << 0;
   const Bottom = 1 << 1;

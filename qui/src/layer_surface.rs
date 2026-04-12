@@ -15,53 +15,54 @@ use wayland::{
 	shm_pool::CreateBufferRequest,
 	surface::{AttachRequest, CommitRequest, DamageRequest, FrameCallbackEvent, FrameRequest},
 	types::{WaylandEncodedString, WaylandPayload},
-	xdg_surface::{AckConfigureRequest, ConfigureEvent, GetTopLevelSurfaceRequest},
-	xdg_toplevel::{CloseEvent, MoveRequest, SetTitleRequest},
-	xdg_wm_base::GetXdgSurfaceRequest,
+	zwlr_layer_shell_v1::{
+		AckConfigureRequest, Anchor, ConfigureEvent, GetLayerSurfaceRequest, Layer, SetAnchorRequest, SetSizeRequest,
+	},
 };
 
 use crate::{
+	AppEvent,
 	canvas::Canvas,
 	context::{ContextEvent, WaylandContext},
 };
 
-pub struct App<'a> {
+pub struct LayerSurface<'a> {
 	width: i32,
 	height: i32,
 
 	context: Rc<RefCell<WaylandContext>>,
 	surface_id: u32,
-	xdg_surface_id: u32,
-	xdg_toplevel_id: u32,
 	buffer_id: u32,
 	pixels: &'a mut [u32],
 	pixel_count: usize,
 	frame_callback_id: u32,
+	layer_surface_id: u32,
 	last_interaction_serial: Option<u32>,
 	damage: Vec<(i32, i32, i32, i32)>,
 
 	last_pointer_position: Option<(i32, i32)>,
 }
 
-impl App<'_> {
-	pub fn new(title: String, width: i32, height: i32) -> io::Result<Self> {
+impl LayerSurface<'_> {
+	pub fn new(mut width: i32, mut height: i32, layer: Layer, anchor: Anchor) -> io::Result<Self> {
 		let mut context = WaylandContext::connect()?;
 		let surface_id = context.next_object_id.next();
 		CreateSurfaceRequest { new_id: surface_id }
 			.write_as_packet(context.globals.compositor.unwrap(), &context.conn.stream)?;
 
-		let xdg_surface_id = context.next_object_id.next();
-		GetXdgSurfaceRequest {
-			new_id: xdg_surface_id,
-			surface_id,
+		let layer_surface_id = context.next_object_id.next();
+		GetLayerSurfaceRequest {
+			new_id: layer_surface_id,
+			wl_surface_id: surface_id,
+			output_id: 0, // TODO: support multiple outputs
+			layer,
+			namespace: WaylandEncodedString("qui".into()),
 		}
-		.write_as_packet(context.globals.xdg_wm_base.unwrap(), &context.conn.stream)?;
+		.write_as_packet(context.globals.zwlr_layer_shell_v1.unwrap(), &context.conn.stream)?;
 
-		let xdg_toplevel_id = context.next_object_id.next();
-		GetTopLevelSurfaceRequest {
-			new_id: xdg_toplevel_id,
-		}
-		.write_as_packet(xdg_surface_id, &context.conn.stream)?;
+		SetSizeRequest { width, height }.write_as_packet(layer_surface_id, &context.conn.stream)?;
+
+		SetAnchorRequest { anchor }.write_as_packet(layer_surface_id, &context.conn.stream)?;
 
 		// Initial commit with no buffer: required by xdg_shell to signal that
 		// setup is complete and prompt the compositor to send xdg_surface.configure.
@@ -71,9 +72,15 @@ impl App<'_> {
 		loop {
 			let packet = context.conn.recv_packet()?;
 			context.conn.drain_fds(); // discard any fds (e.g. keyboard keymap) arriving before poll loop
-			if packet.object_id == xdg_surface_id && packet.opcode == ConfigureEvent::OPCODE {
+			if packet.object_id == layer_surface_id && packet.opcode == ConfigureEvent::OPCODE {
 				let event = ConfigureEvent::read_from_with_endian(&mut Cursor::new(&packet.payload), Endian::Little)?;
-				AckConfigureRequest { serial: event.serial }.write_as_packet(xdg_surface_id, &context.conn.stream)?;
+				AckConfigureRequest { serial: event.serial }.write_as_packet(layer_surface_id, &context.conn.stream)?;
+				if event.width > 0 {
+					width = event.width as i32;
+				}
+				if event.height > 0 {
+					height = event.height as i32;
+				}
 				break;
 			}
 		}
@@ -122,18 +129,12 @@ impl App<'_> {
 		}
 		.write_as_packet(pool_id, &context.conn.stream)?;
 
-		SetTitleRequest {
-			title: WaylandEncodedString(title.clone()),
-		}
-		.write_as_packet(xdg_toplevel_id, &context.conn.stream)?;
 		AttachRequest { buffer_id, x: 0, y: 0 }.write_as_packet(surface_id, &context.conn.stream)?;
 		CommitRequest.write_as_packet(surface_id, &context.conn.stream)?;
 		Ok(Self {
 			width,
 			height,
 			surface_id,
-			xdg_surface_id,
-			xdg_toplevel_id,
 			buffer_id,
 			pixels: unsafe { std::slice::from_raw_parts_mut(ptr as *mut u32, (width * height) as usize) },
 			pixel_count: (width * height) as usize,
@@ -142,6 +143,7 @@ impl App<'_> {
 			damage: Vec::new(),
 			last_pointer_position: None,
 			context: Rc::new(RefCell::new(context)),
+			layer_surface_id,
 		})
 	}
 
@@ -149,26 +151,12 @@ impl App<'_> {
 		Canvas::new(self.pixels, self.width, self.height, self.width, 0, 0, &mut self.damage)
 	}
 
-	pub fn start_move(&mut self) -> io::Result<()> {
-		if let Some(serial) = self.last_interaction_serial {
-			MoveRequest {
-				serial,
-				seat_id: self.context.borrow().globals.seat.unwrap(),
-			}
-			.write_as_packet(self.xdg_toplevel_id, &self.context.borrow().conn.stream)
-		} else {
-			Ok(())
-		}
-	}
-
 	pub fn poll(&mut self) -> io::Result<AppEvent> {
 		loop {
-			let (object_id, event) = self.context.borrow_mut().poll(&[
-				self.surface_id,
-				self.xdg_surface_id,
-				self.xdg_toplevel_id,
-				self.frame_callback_id,
-			])?;
+			let (object_id, event) =
+				self.context
+					.borrow_mut()
+					.poll(&[self.surface_id, self.layer_surface_id, self.frame_callback_id])?;
 			if let Some(app_event) = self.interpret_event(object_id, event)? {
 				return Ok(app_event);
 			}
@@ -179,8 +167,7 @@ impl App<'_> {
 		loop {
 			let maybe = self.context.borrow_mut().try_poll(&[
 				self.surface_id,
-				self.xdg_surface_id,
-				self.xdg_toplevel_id,
+				self.layer_surface_id,
 				self.frame_callback_id,
 			])?;
 			match maybe {
@@ -223,17 +210,14 @@ impl App<'_> {
 					pressed: event.state != 0,
 				}));
 			}
-		} else if matches!(event, ContextEvent::Unknown { opcode: ConfigureEvent::OPCODE, .. } if object_id == self.xdg_surface_id)
+		} else if matches!(event, ContextEvent::Unknown { opcode: ConfigureEvent::OPCODE, .. } if object_id == self.layer_surface_id)
 			&& let ContextEvent::Unknown { payload, .. } = event
 		{
 			let configure = ConfigureEvent::read_from_with_endian(&mut Cursor::new(&payload), Endian::Little)?;
 			AckConfigureRequest {
 				serial: configure.serial,
 			}
-			.write_as_packet(self.xdg_surface_id, &self.context.borrow().conn.stream)?;
-		} else if matches!(event, ContextEvent::Unknown { opcode: CloseEvent::OPCODE, .. } if object_id == self.xdg_toplevel_id)
-		{
-			return Ok(Some(AppEvent::Close));
+			.write_as_packet(self.layer_surface_id, &self.context.borrow().conn.stream)?;
 		} else if matches!(event, ContextEvent::Unknown { opcode: FrameCallbackEvent::OPCODE, .. } if object_id == self.frame_callback_id)
 		{
 			return Ok(Some(AppEvent::Frame));
@@ -265,53 +249,10 @@ impl App<'_> {
 	}
 }
 
-impl Drop for App<'_> {
+impl Drop for LayerSurface<'_> {
 	fn drop(&mut self) {
 		unsafe {
 			nix::sys::mman::munmap(self.pixels.as_mut_ptr() as *mut _, self.pixel_count * 4).ok();
-		}
-	}
-}
-
-#[derive(Clone)]
-pub enum AppEvent {
-	Frame,
-	Keyboard { keycode: u32, pressed: bool },
-	PointerMotion { x: i32, y: i32 },
-	PointerButton { button: u32, pressed: bool, x: i32, y: i32 },
-	Close,
-}
-
-impl TryFrom<PointerEvent> for AppEvent {
-	type Error = ();
-
-	fn try_from(event: PointerEvent) -> Result<Self, Self::Error> {
-		match event {
-			PointerEvent::Move(event) => Ok(AppEvent::PointerMotion {
-				x: event.x / 256,
-				y: event.y / 256,
-			}),
-			PointerEvent::Button(event) => Ok(AppEvent::PointerButton {
-				button: event.button,
-				pressed: event.state != 0,
-				x: 0,
-				y: 0,
-			}),
-			_ => Err(()),
-		}
-	}
-}
-
-impl TryFrom<KeyboardEvent> for AppEvent {
-	type Error = ();
-
-	fn try_from(event: KeyboardEvent) -> Result<Self, Self::Error> {
-		match event {
-			KeyboardEvent::Key(event) => Ok(AppEvent::Keyboard {
-				keycode: event.key,
-				pressed: event.state != 0,
-			}),
-			_ => Err(()),
 		}
 	}
 }

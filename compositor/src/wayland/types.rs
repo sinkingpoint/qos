@@ -1,6 +1,8 @@
 use std::{
+	cell::RefCell,
 	collections::{HashMap, VecDeque},
 	os::{fd::OwnedFd, unix::net::UnixStream},
+	rc::Rc,
 	sync::Arc,
 };
 
@@ -17,6 +19,7 @@ use crate::{
 		compositor::Compositor,
 		display::Display,
 		keyboard::{KeyEnterCommand, KeyEventPacket, KeyLeaveCommand, Keyboard, ModifiersCommand},
+		layout::{Layout, Rectangle},
 		output::{DisplayGeometry, Output},
 		pointer::{ButtonEvent, Pointer},
 		registry::Registry,
@@ -29,7 +32,11 @@ use crate::{
 		zwlr_layer_shell_v1::{ZwlrLayerShellV1, ZwlrLayerSurfaceV1},
 	},
 };
-use wayland::{buffer::ReleaseEvent, surface::CommitRequest, zwlr_layer_shell_v1::Layer};
+use wayland::{
+	buffer::ReleaseEvent,
+	surface::CommitRequest,
+	zwlr_layer_shell_v1::{Anchor, Layer},
+};
 use wayland::{
 	pointer::{EnterEvent, FrameEvent, LeaveEvent, MoveEvent},
 	types::WaylandPayload,
@@ -61,6 +68,7 @@ pub enum ClientEffect {
 	Unregister(u32),
 	StartDrag,
 	DestroySelf,
+	NewExclusiveZone(Anchor, i32),
 }
 
 pub trait Command<T: SubSystem>
@@ -110,10 +118,15 @@ pub struct Client {
 	fds: VecDeque<OwnedFd>,
 	pub dragging: Option<DragState>,
 	pub display_geometry: DisplayGeometry,
+	pub layout_manager: Rc<RefCell<Box<dyn Layout>>>,
 }
 
 impl Client {
-	pub fn new(connection: Arc<UnixStream>, display_geometry: DisplayGeometry) -> Self {
+	pub fn new(
+		connection: Arc<UnixStream>,
+		display_geometry: DisplayGeometry,
+		layout_manager: Rc<RefCell<Box<dyn Layout>>>,
+	) -> Self {
 		let mut objects = HashMap::new();
 		objects.insert(1, SubsystemType::Display(Display::new(display_geometry.clone())));
 		Self {
@@ -122,54 +135,13 @@ impl Client {
 			fds: VecDeque::new(),
 			dragging: None,
 			display_geometry,
+			layout_manager,
 		}
 	}
 
-	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
-		let mut surfaces_to_blit = Vec::new();
-
-		// First pass: Any layer surfaces in the background layer.
-		for obj in self.objects.values() {
-			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
-				&& layer_surface.mapped
-				&& matches!(layer_surface.layer, Layer::Background | Layer::Bottom)
-				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
-				&& surface.committed
-			{
-				let (x, y) = layer_surface.compute_position(&self.display_geometry);
-				surfaces_to_blit.push((layer_surface.surface_id, x, y));
-			}
-		}
-
-		// Second pass: all XDG Top Levels
-		for obj in self.objects.values() {
-			if let SubsystemType::XdgTopLevel(xdg_toplevel) = obj
-				&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&xdg_toplevel.xdg_surface)
-				&& xdg_surface.configured
-				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
-				&& surface.committed
-			{
-				let (x, y) = (xdg_toplevel.x, xdg_toplevel.y);
-				surfaces_to_blit.push((xdg_surface.surface_id, x, y));
-			}
-		}
-
-		// Last pass: any layer surfaces in the overlay layer.
-		for obj in self.objects.values() {
-			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
-				&& matches!(layer_surface.layer, Layer::Overlay | Layer::Top)
-				&& layer_surface.mapped
-				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
-				&& surface.committed
-			{
-				let (x, y) = layer_surface.compute_position(&self.display_geometry);
-				surfaces_to_blit.push((layer_surface.surface_id, x, y));
-			}
-		}
-
+	fn blit_surfaces(&mut self, surfaces_to_blit: Vec<(u32, i32, i32)>, framebuffer: &mut VideoBuffer) {
 		let mut blitted: Vec<(u32, u32)> = Vec::new(); // (surface_id, buffer_id)
 		let mut blitted_rects: Vec<(u32, i32, i32, i32, i32)> = Vec::new(); // (surface_id, x, y, width, height)
-		// For each surface with a committed buffer, blit the buffer to the framebuffer.
 		for (surface_id, x, y) in surfaces_to_blit {
 			if let Some(SubsystemType::Surface(surface)) = self.objects.get(&surface_id)
 				&& surface.committed
@@ -177,17 +149,13 @@ impl Client {
 			{
 				let buffer = match self.objects.get(&buffer_id) {
 					Some(SubsystemType::Buffer(buffer)) => buffer,
-					_ => continue, // skip if attached buffer doesn't exist or isn't a buffer
+					_ => continue,
 				};
 
 				let mem_pool = match self.objects.get(&buffer.pool_id) {
 					Some(SubsystemType::SharedMemoryPool(pool)) => pool,
-					_ => continue, // skip if pool doesn't exist or isn't a shared memory pool
+					_ => continue,
 				};
-
-				if surface.blitted {
-					continue; // skip if we've already blitted this surface since the last commit
-				}
 
 				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
 					&& (x != last_x || y != last_y || buffer.width != last_width || buffer.height != last_height)
@@ -199,7 +167,6 @@ impl Client {
 					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
 				}
 				blitted_rects.push((surface_id, x, y, buffer.width, buffer.height));
-
 				mem_pool.blit_onto(buffer, framebuffer, x, y);
 				blitted.push((surface_id, buffer_id));
 			}
@@ -211,7 +178,6 @@ impl Client {
 			}
 			if let Err(e) = ReleaseEvent.write_as_packet(buffer_id, &self.connection) {
 				eprintln!("Failed to send wl_buffer.release packet: {}", e);
-				continue;
 			}
 		}
 
@@ -220,6 +186,71 @@ impl Client {
 				surface.last_blit_rect = Some((x, y, width, height));
 			}
 		}
+	}
+
+	pub fn collect_background_bottom(&mut self) -> Vec<(u32, i32, i32)> {
+		let mut surfaces = Vec::new();
+		for obj in self.objects.values() {
+			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
+				&& layer_surface.mapped
+				&& matches!(layer_surface.layer, Layer::Background | Layer::Bottom)
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
+				&& surface.committed
+				&& !surface.blitted
+			{
+				let (x, y) = layer_surface.compute_position(&self.display_geometry);
+				surfaces.push((layer_surface.surface_id, x, y));
+			}
+		}
+		surfaces
+	}
+
+	pub fn collect_xdg(&mut self) -> Vec<(u32, i32, i32)> {
+		let mut surfaces = Vec::new();
+		for obj in self.objects.values() {
+			if let SubsystemType::XdgTopLevel(xdg_toplevel) = obj
+				&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&xdg_toplevel.xdg_surface)
+				&& xdg_surface.configured
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
+				&& surface.committed
+				&& !surface.blitted
+			{
+				let (x, y) = (xdg_toplevel.x, xdg_toplevel.y);
+				surfaces.push((xdg_surface.surface_id, x, y));
+			}
+		}
+		surfaces
+	}
+
+	pub fn collect_top_overlay(&mut self) -> Vec<(u32, i32, i32)> {
+		let mut surfaces = Vec::new();
+		for obj in self.objects.values() {
+			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
+				&& matches!(layer_surface.layer, Layer::Overlay | Layer::Top)
+				&& layer_surface.mapped
+				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
+				&& surface.committed
+			{
+				let (x, y) = layer_surface.compute_position(&self.display_geometry);
+				surfaces.push((layer_surface.surface_id, x, y));
+			}
+		}
+		surfaces
+	}
+
+	pub fn repaint_background_bottom(&mut self, framebuffer: &mut VideoBuffer) {
+		let surfaces = self.collect_background_bottom();
+		self.blit_surfaces(surfaces, framebuffer);
+	}
+
+	pub fn repaint_xdg(&mut self, framebuffer: &mut VideoBuffer) {
+		let surfaces = self.collect_xdg();
+		self.blit_surfaces(surfaces, framebuffer);
+	}
+
+	pub fn repaint_top_overlay(&mut self, framebuffer: &mut VideoBuffer) {
+		let surfaces = self.collect_top_overlay();
+		self.blit_surfaces(surfaces, framebuffer);
 	}
 
 	pub fn handle_drag(&mut self, x: i32, y: i32) -> WaylandResult<()> {
@@ -526,6 +557,18 @@ impl Client {
 		None
 	}
 
+	fn reflow(&mut self, moves: Vec<(u32, Rectangle)>) {
+		for (id, geometry) in moves {
+			if let Some(SubsystemType::XdgTopLevel(top_level)) = self.objects.get_mut(&id) {
+				top_level.x = geometry.x;
+				top_level.y = geometry.y;
+
+				// TODO: Notify the client so we can resize here as well. The current FloatingLayout
+				// never resizes windows, but when we add tiling layouts we'll need to do this.
+			}
+		}
+	}
+
 	pub fn handle_event(&mut self, command: WaylandPacket, fds: Vec<OwnedFd>) -> WaylandResult<()> {
 		self.fds.extend(fds);
 		let object_id = command.object_id;
@@ -541,6 +584,23 @@ impl Client {
 					if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
 						surface.role_id = Some(id);
 					}
+				} else if let SubsystemType::XdgTopLevel(x) = &obj
+					&& let Some(SubsystemType::XdgSurface(surface)) = self.objects.get(&x.xdg_surface)
+					&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&surface.surface_id)
+					&& let Some(SubsystemType::Buffer(buffer)) = self
+						.objects
+						.get(&surface.attached_buffer.as_ref().map(|(id, _, _)| *id).unwrap_or(0))
+				{
+					let reflows = self.layout_manager.borrow_mut().new_window(
+						id,
+						Rectangle {
+							x: 0,
+							y: 0,
+							width: buffer.width,
+							height: buffer.height,
+						},
+					);
+					self.reflow(reflows);
 				}
 				self.objects.insert(id, obj);
 			}
@@ -548,6 +608,13 @@ impl Client {
 				self.objects.remove(&id);
 			}
 			Some(ClientEffect::DestroySelf) => {
+				if let SubsystemType::XdgTopLevel(_) = subsystem {
+					let reflows = self.layout_manager.borrow_mut().remove_window(object_id);
+					self.reflow(reflows);
+				} else if let SubsystemType::ZwlrLayerSurfaceV1(_) = subsystem {
+					let reflows = self.layout_manager.borrow_mut().remove_exclusive_zone(object_id);
+					self.reflow(reflows);
+				}
 				self.objects.remove(&object_id);
 			}
 			Some(ClientEffect::StartDrag) => {
@@ -555,6 +622,13 @@ impl Client {
 					top_level_id: object_id,
 					initial_pointer: None,
 				});
+			}
+			Some(ClientEffect::NewExclusiveZone(anchor, size)) => {
+				let reflows = self
+					.layout_manager
+					.borrow_mut()
+					.new_exclusive_zone(object_id, anchor, size);
+				self.reflow(reflows);
 			}
 			None => {}
 		}

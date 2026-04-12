@@ -69,9 +69,9 @@ pub struct ZwlrLayerSurfaceV1 {
 	pub surface_id: u32,
 	next_serial: u32,
 	pub mapped: bool,
-	output_id: u32,
+	_output_id: u32,
 	pub layer: Layer,
-	namespace: WaylandEncodedString,
+	_namespace: WaylandEncodedString,
 
 	requested_size: Option<(i32, i32)>,
 	anchor: Anchor,
@@ -88,9 +88,9 @@ impl ZwlrLayerSurfaceV1 {
 		Self {
 			id,
 			surface_id,
-			output_id,
+			_output_id: output_id,
 			layer,
-			namespace,
+			_namespace: namespace,
 			next_serial: 1,
 			configure_state: ConfigureState::None,
 			requested_size: None,
@@ -219,7 +219,13 @@ impl Command<ZwlrLayerSurfaceV1> for SetExclusiveZoneRequest {
 		zwlr_layer_surface_v1: &mut ZwlrLayerSurfaceV1,
 	) -> WaylandResult<Option<ClientEffect>> {
 		zwlr_layer_surface_v1.exclusive_zone = Some(self.zone);
-		Ok(None)
+		let anchor = if let Some(edge) = zwlr_layer_surface_v1.exclusive_edge {
+			edge
+		} else {
+			zwlr_layer_surface_v1.anchor
+		};
+
+		Ok(Some(ClientEffect::NewExclusiveZone(anchor, self.zone)))
 	}
 }
 
@@ -299,6 +305,10 @@ impl Command<ZwlrLayerSurfaceV1> for SetExclusiveEdgeRequest {
 		zwlr_layer_surface_v1: &mut ZwlrLayerSurfaceV1,
 	) -> WaylandResult<Option<ClientEffect>> {
 		zwlr_layer_surface_v1.exclusive_edge = Some(self.edge);
-		Ok(None)
+		if let Some(zone) = zwlr_layer_surface_v1.exclusive_zone {
+			Ok(Some(ClientEffect::NewExclusiveZone(self.edge, zone)))
+		} else {
+			Ok(None)
+		}
 	}
 }

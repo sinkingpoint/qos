@@ -1,10 +1,11 @@
-use qui::{font::BdfFont, App, AppEvent, Scene};
+use qui::{font::BdfFont, Anchor, App, AppEvent, Layer, LayerSurface, Scene};
 
 const SPLEEN_BDF: &[u8] = include_bytes!("../assets/ter-u16n.bdf");
 
 fn main() -> std::io::Result<()> {
 	let font = BdfFont::from_bdf_data(SPLEEN_BDF).unwrap();
 	let mut app = App::new("wl-test".to_string(), 400, 300)?;
+	let mut bar = LayerSurface::new(0, 30, Layer::Top, Anchor::Left | Anchor::Right | Anchor::Top)?;
 	let mut cursor: Option<(i32, i32)> = None;
 	let mut button_pressed = false;
 	let mut last_key: u32 = 0;
@@ -15,6 +16,9 @@ fn main() -> std::io::Result<()> {
 	draw_frame(&mut app, cursor, &font, button_pressed, last_key);
 	scene.render(&mut app.canvas());
 	app.commit_frame()?;
+
+	draw_bar(&mut bar, &font);
+	bar.commit_frame()?;
 
 	loop {
 		let event = app.poll()?;
@@ -39,6 +43,14 @@ fn main() -> std::io::Result<()> {
 			AppEvent::Close => break,
 		}
 
+		// Drain bar events non-blocking so its socket doesn't fill up.
+		while let Some(bar_event) = bar.try_poll()? {
+			if matches!(bar_event, AppEvent::Frame) {
+				draw_bar(&mut bar, &font);
+				bar.commit_frame()?;
+			}
+		}
+
 		while let Some(scene_event) = scene.poll() {
 			if let Some(button_event) = _button_handle.extract(&scene_event) {
 				match button_event {
@@ -49,6 +61,12 @@ fn main() -> std::io::Result<()> {
 	}
 
 	Ok(())
+}
+
+fn draw_bar(bar: &mut LayerSurface<'_>, font: &BdfFont) {
+	let mut canvas = bar.canvas();
+	canvas.fill(0xFF1a1a2e);
+	canvas.draw_text(font, 10, 8, "wl-test", 0xFFFFFFFF);
 }
 
 fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, font: &BdfFont, button_pressed: bool, last_key: u32) {

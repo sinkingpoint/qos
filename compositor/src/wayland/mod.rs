@@ -4,6 +4,7 @@ mod macros;
 mod buffer;
 mod compositor;
 mod keyboard;
+mod layout;
 mod output;
 mod pointer;
 mod registry;
@@ -16,7 +17,7 @@ mod xdg_toplevel;
 mod xdg_wm_base;
 mod zwlr_layer_shell_v1;
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use output::DisplayGeometry;
 pub use types::WaylandPacket;
@@ -33,6 +34,7 @@ use crate::{
 };
 
 pub struct WaylandCompositor {
+	pub layout: Rc<RefCell<Box<dyn layout::Layout>>>,
 	pub clients: HashMap<u32, types::Client>,
 	pub display_geometry: DisplayGeometry,
 	pub hovered_window: Option<(u32, u32)>,
@@ -44,6 +46,9 @@ pub struct WaylandCompositor {
 impl WaylandCompositor {
 	pub fn new(display_geometry: DisplayGeometry) -> Self {
 		Self {
+			layout: Rc::new(RefCell::new(Box::new(layout::FloatingLayout::new(
+				display_geometry.clone(),
+			)))),
 			clients: HashMap::new(),
 			display_geometry,
 			hovered_window: None,
@@ -55,7 +60,13 @@ impl WaylandCompositor {
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
 		for client in self.clients.values_mut() {
-			client.repaint(framebuffer);
+			client.repaint_background_bottom(framebuffer);
+		}
+		for client in self.clients.values_mut() {
+			client.repaint_xdg(framebuffer);
+		}
+		for client in self.clients.values_mut() {
+			client.repaint_top_overlay(framebuffer);
 		}
 	}
 
@@ -64,7 +75,7 @@ impl WaylandCompositor {
 		if let Some((client_id, _)) = self.active_window
 			&& let Some(client) = self.clients.get_mut(&client_id)
 		{
-			client.handle_key_event(self.serial, event, &self.keyboard).unwrap();
+			client.handle_key_event(self.serial, event, &self.keyboard).ok();
 			self.serial += 1;
 		}
 	}
@@ -94,14 +105,14 @@ impl WaylandCompositor {
 					if let Some((prev_client_id, prev_surface_id)) = self.hovered_window
 						&& let Some(prev_client) = self.clients.get_mut(&prev_client_id)
 					{
-						prev_client.send_leave_event(self.serial, prev_surface_id).unwrap();
+						prev_client.send_leave_event(self.serial, prev_surface_id).ok();
 						self.serial += 1;
 					}
 
 					if let Some((new_client_id, new_surface_id)) = hovered_window
 						&& let Some(new_client) = self.clients.get_mut(&new_client_id)
 					{
-						new_client.send_enter_event(self.serial, new_surface_id, x, y).unwrap();
+						new_client.send_enter_event(self.serial, new_surface_id, x, y).ok();
 						self.serial += 1;
 					}
 
@@ -111,7 +122,7 @@ impl WaylandCompositor {
 				if let Some((client_id, surface_id)) = self.hovered_window
 					&& let Some(client) = self.clients.get_mut(&client_id)
 				{
-					client.send_move_event(surface_id, x, y).unwrap();
+					client.send_move_event(surface_id, x, y).ok();
 				}
 			}
 			CursorEvent::ButtonDown(button) => {
@@ -127,14 +138,14 @@ impl WaylandCompositor {
 						button: u32::from(button),
 						state: u32::from(ButtonState::Pressed),
 					};
-					client.send_button_event(button_event).unwrap();
+					client.send_button_event(button_event).ok();
 
 					// Move the focus to the clicked window
 					if self.active_window != self.hovered_window {
 						if let Some((prev_client_id, prev_surface_id)) = self.active_window
 							&& let Some(prev_client) = self.clients.get_mut(&prev_client_id)
 						{
-							prev_client.handle_focus_leave(self.serial, prev_surface_id).unwrap();
+							prev_client.handle_focus_leave(self.serial, prev_surface_id).ok();
 							self.serial += 1;
 						}
 
@@ -143,7 +154,7 @@ impl WaylandCompositor {
 						{
 							new_client
 								.handle_focus_enter(self.serial, new_surface_id, &self.keyboard)
-								.unwrap();
+								.ok();
 							self.serial += 1;
 						}
 
@@ -176,7 +187,7 @@ impl WaylandCompositor {
 						button: u32::from(button),
 						state: u32::from(ButtonState::Released),
 					};
-					client.send_button_event(button_event).unwrap();
+					client.send_button_event(button_event).ok();
 				}
 			}
 		}
@@ -186,7 +197,7 @@ impl WaylandCompositor {
 		let client = self
 			.clients
 			.entry(event.client_id)
-			.or_insert_with(|| Client::new(event.client.clone(), self.display_geometry.clone()));
+			.or_insert_with(|| Client::new(event.client.clone(), self.display_geometry.clone(), self.layout.clone()));
 		if let Err(e) = client.handle_event(event.packet, event.fds) {
 			match e {
 				types::WaylandError::IOError(e) => eprintln!("Wayland IO error: {}", e),

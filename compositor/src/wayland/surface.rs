@@ -35,7 +35,7 @@ impl Surface {
 			let time = clock_gettime(ClockId::CLOCK_MONOTONIC).expect("Failed to get time");
 			let ms = time.tv_sec() * 1000 + time.tv_nsec() / 1_000_000;
 			let event = FrameCallbackEvent { time_msec: ms as u32 };
-			event.write_as_packet(callback_id, connection).unwrap();
+			event.write_as_packet(callback_id, connection).ok();
 		}
 	}
 }
@@ -61,7 +61,6 @@ impl Command<Surface> for DestroyRequest {
 impl Command<Surface> for AttachRequest {
 	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
 		surface.attached_buffer = Some((self.buffer_id, self.x, self.y));
-		surface.committed = false;
 		surface.blitted = false;
 		Ok(None)
 	}

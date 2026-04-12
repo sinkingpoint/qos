@@ -75,77 +75,103 @@ impl WaylandContext {
 
 	pub fn poll(&mut self, object_id: &[u32]) -> io::Result<(u32, ContextEvent)> {
 		loop {
+			if let Some(item) = self.try_poll(object_id)? {
+				return Ok(item);
+			}
+			// No data in queues and nothing on socket — block until data arrives.
+			let packet = self.conn.recv_packet()?;
+			self.route_packet(packet)?;
+		}
+	}
+
+	/// Non-blocking variant: returns `None` if no event is ready right now.
+	pub fn try_poll(&mut self, object_id: &[u32]) -> io::Result<Option<(u32, ContextEvent)>> {
+		// Drain in-memory queues first (free — no syscall).
+		for id in object_id {
+			if let Some(queue) = self.events.get_mut(id)
+				&& let Some(event) = queue.pop_front()
+			{
+				return Ok(Some((*id, event)));
+			}
+		}
+		// Read and route packets until the socket is empty or we get one for our objects.
+		while self.conn.has_data() {
+			let packet = self.conn.recv_packet()?;
+			self.route_packet(packet)?;
 			for id in object_id {
 				if let Some(queue) = self.events.get_mut(id)
 					&& let Some(event) = queue.pop_front()
 				{
-					return Ok((*id, event));
+					return Ok(Some((*id, event)));
 				}
-			}
-
-			let packet = self.conn.recv_packet()?;
-			self.fds.extend(self.conn.drain_fds());
-			if packet.object_id == self.keyboard_id
-				&& let Some(event) = KeyboardEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
-			{
-				match &event {
-					KeyboardEvent::KeyMap(_) => {} // fd already consumed by parse, nothing to route
-					KeyboardEvent::Enter(e) => self.keyboard_focus = Some(e.surface_id),
-					KeyboardEvent::Leave(_) => self.keyboard_focus = None,
-					_ => {}
-				}
-
-				if let Some(focus) = self.keyboard_focus {
-					self.events
-						.entry(focus)
-						.or_default()
-						.push_back(ContextEvent::Keyboard(event));
-				}
-			} else if packet.object_id == self.pointer_id
-				&& let Some(event) = PointerEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
-			{
-				match &event {
-					PointerEvent::Enter(e) => {
-						self.mouse_focus = Some(e.surface_id);
-						self.last_mouse_surface = Some(e.surface_id);
-					}
-					PointerEvent::Leave(_) => {
-						self.mouse_focus = None;
-					}
-					_ => {}
-				}
-
-				// Motion events require active focus; button events are routed to the
-				// last entered surface so releases aren't dropped after a Leave.
-				let route_to = match &event {
-					PointerEvent::Button(_) => self.mouse_focus.or(self.last_mouse_surface),
-					_ => self.mouse_focus,
-				};
-				if let Some(focus) = route_to {
-					self.events
-						.entry(focus)
-						.or_default()
-						.push_back(ContextEvent::Pointer(event));
-				}
-			} else if packet.object_id == self.globals.xdg_wm_base.unwrap()
-				&& let Some(event) = XdgWmBaseEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
-			{
-				if let XdgWmBaseEvent::Ping(ping_event) = event {
-					PongRequest {
-						callback_id: ping_event.callback_id,
-					}
-					.write_as_packet(self.globals.xdg_wm_base.unwrap(), &self.conn.stream)?;
-				}
-			} else {
-				self.events
-					.entry(packet.object_id)
-					.or_default()
-					.push_back(ContextEvent::Unknown {
-						opcode: packet.opcode,
-						payload: packet.payload,
-					});
 			}
 		}
+		Ok(None)
+	}
+
+	fn route_packet(&mut self, packet: wayland::types::WaylandPacket) -> io::Result<()> {
+		self.fds.extend(self.conn.drain_fds());
+		if packet.object_id == self.keyboard_id
+			&& let Some(event) = KeyboardEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
+		{
+			match &event {
+				KeyboardEvent::KeyMap(_) => {} // fd already consumed by parse, nothing to route
+				KeyboardEvent::Enter(e) => self.keyboard_focus = Some(e.surface_id),
+				KeyboardEvent::Leave(_) => self.keyboard_focus = None,
+				_ => {}
+			}
+
+			if let Some(focus) = self.keyboard_focus {
+				self.events
+					.entry(focus)
+					.or_default()
+					.push_back(ContextEvent::Keyboard(event));
+			}
+		} else if packet.object_id == self.pointer_id
+			&& let Some(event) = PointerEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
+		{
+			match &event {
+				PointerEvent::Enter(e) => {
+					self.mouse_focus = Some(e.surface_id);
+					self.last_mouse_surface = Some(e.surface_id);
+				}
+				PointerEvent::Leave(_) => {
+					self.mouse_focus = None;
+				}
+				_ => {}
+			}
+
+			// Motion events require active focus; button events are routed to the
+			// last entered surface so releases aren't dropped after a Leave.
+			let route_to = match &event {
+				PointerEvent::Button(_) => self.mouse_focus.or(self.last_mouse_surface),
+				_ => self.mouse_focus,
+			};
+			if let Some(focus) = route_to {
+				self.events
+					.entry(focus)
+					.or_default()
+					.push_back(ContextEvent::Pointer(event));
+			}
+		} else if packet.object_id == self.globals.xdg_wm_base.unwrap()
+			&& let Some(event) = XdgWmBaseEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
+		{
+			if let XdgWmBaseEvent::Ping(ping_event) = event {
+				PongRequest {
+					callback_id: ping_event.callback_id,
+				}
+				.write_as_packet(self.globals.xdg_wm_base.unwrap(), &self.conn.stream)?;
+			}
+		} else {
+			self.events
+				.entry(packet.object_id)
+				.or_default()
+				.push_back(ContextEvent::Unknown {
+					opcode: packet.opcode,
+					payload: packet.payload,
+				});
+		}
+		Ok(())
 	}
 }
 
@@ -155,6 +181,7 @@ pub struct BoundGlobals {
 	pub shm: Option<u32>,
 	pub xdg_wm_base: Option<u32>,
 	pub seat: Option<u32>,
+	pub zwlr_layer_shell_v1: Option<u32>,
 }
 
 impl BoundGlobals {
@@ -164,6 +191,7 @@ impl BoundGlobals {
 			shm: None,
 			xdg_wm_base: None,
 			seat: None,
+			zwlr_layer_shell_v1: None,
 		}
 	}
 }
@@ -208,7 +236,7 @@ fn bind_globals(
 
 	for (name, iface, version) in &globals {
 		let bind_version = match iface.as_str() {
-			"wl_compositor" | "wl_shm" | "xdg_wm_base" | "wl_seat" => *version,
+			"wl_compositor" | "wl_shm" | "xdg_wm_base" | "wl_seat" | "zwlr_layer_shell_v1" => *version,
 			_ => continue,
 		};
 		let id = next_object_id.next();
@@ -225,6 +253,7 @@ fn bind_globals(
 			"wl_shm" => bound.shm = Some(id),
 			"xdg_wm_base" => bound.xdg_wm_base = Some(id),
 			"wl_seat" => bound.seat = Some(id),
+			"zwlr_layer_shell_v1" => bound.zwlr_layer_shell_v1 = Some(id),
 			_ => {}
 		}
 	}
