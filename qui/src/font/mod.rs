@@ -15,6 +15,12 @@ pub trait Font {
 
 	/// Line height — vertical advance between baselines
 	fn line_height(&self) -> i32;
+
+	fn measure_text(&self, text: &str) -> (i32, i32) {
+		let width = text.chars().map(|ch| self.advance(ch)).sum();
+		let height = self.line_height();
+		(width, height)
+	}
 }
 
 pub enum FontError {
