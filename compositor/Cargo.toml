@@ -10,3 +10,4 @@ thiserror = { workspace = true }
 bytestruct = { path = "../bytestruct" }
 bytestruct-derive = { path = "../bytestruct/bytestruct-derive" }
 wayland = { path = "../wayland" }
+common = { path = "../common" }

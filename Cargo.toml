@@ -32,7 +32,7 @@ members = [
     "tables",
     "udev",
     "udevd", "dns", "compositor",
-    "wl-test", "wayland", "qui",
+    "wl-test", "wayland", "qui", "desktop",
 ]
 
 [workspace.dependencies]

@@ -10,6 +10,7 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/busctl
   - ./target/x86_64-unknown-linux-musl/debug/netc
   - ./target/x86_64-unknown-linux-musl/debug/wl-test
+  - ./target/x86_64-unknown-linux-musl/debug/desktop
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd

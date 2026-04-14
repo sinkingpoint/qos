@@ -107,6 +107,7 @@ fn main() {
 		input_event_sender.clone(),
 	);
 	let wayland_thread_handle = events::wayland_event_thread("wayland-0".to_string(), input_event_sender);
+	common::qinit::mark_running().ok();
 
 	let display_geometry = DisplayGeometry::new(
 		mode.hdisplay,

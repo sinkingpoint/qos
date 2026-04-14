@@ -30,3 +30,6 @@ name = "udev-wait-drm"
 
 [[services]]
 name = "compositor"
+
+[[services]]
+name = "desktop"

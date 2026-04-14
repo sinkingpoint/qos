@@ -1,5 +1,6 @@
 name = "compositor"
 description = "Wayland compositor"
+start_mode = "notify"
 
 [service]
 command = "/sbin/compositor"

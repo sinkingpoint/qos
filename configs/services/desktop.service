@@ -1,0 +1,8 @@
+name = "desktop"
+description = "Desktop environment"
+
+[service]
+command = "/bin/desktop"
+
+[[needs]]
+name = "compositor"
