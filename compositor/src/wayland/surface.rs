@@ -9,6 +9,7 @@ use crate::wayland::types::{ClientEffect, Command, SubSystem, WaylandResult};
 
 pub struct Surface {
 	pub attached_buffer: Option<(u32, i32, i32)>,
+	pub pending_attached_buffer: Option<Option<(u32, i32, i32)>>,
 	pub last_blit_rect: Option<(i32, i32, i32, i32)>,
 	pub committed: bool,
 	pub blitted: bool,
@@ -20,6 +21,7 @@ impl Surface {
 	pub fn new() -> Self {
 		Self {
 			attached_buffer: None,
+			pending_attached_buffer: None,
 			last_blit_rect: None,
 			committed: false,
 			blitted: false,
@@ -60,18 +62,29 @@ impl Command<Surface> for DestroyRequest {
 
 impl Command<Surface> for AttachRequest {
 	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
-		surface.attached_buffer = Some((self.buffer_id, self.x, self.y));
-		surface.blitted = false;
+		surface.pending_attached_buffer = if self.buffer_id == 0 {
+			Some(None)
+		} else {
+			Some(Some((self.buffer_id, self.x, self.y)))
+		};
 		Ok(None)
 	}
 }
 
 impl Command<Surface> for CommitRequest {
 	fn handle(self, _connection: &Arc<UnixStream>, surface: &mut Surface) -> WaylandResult<Option<ClientEffect>> {
+		if let Some(pending) = surface.pending_attached_buffer.take() {
+			surface.attached_buffer = pending;
+		}
+
 		if surface.attached_buffer.is_some() {
 			surface.committed = true;
-			surface.blitted = false;
+		} else {
+			surface.committed = false;
+			surface.last_blit_rect = None;
 		}
+
+		surface.blitted = false;
 
 		Ok(None)
 	}

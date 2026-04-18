@@ -69,7 +69,6 @@ impl WaylandCompositor {
 			client.repaint_top_overlay(framebuffer);
 		}
 	}
-
 	pub fn handle_key_event(&mut self, event: KeyEvent) {
 		self.keyboard.handle_input(event);
 		if let Some((client_id, _)) = self.active_window
