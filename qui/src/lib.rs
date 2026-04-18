@@ -1,4 +1,5 @@
 mod app;
+mod buffer;
 mod canvas;
 mod context;
 pub mod font;
