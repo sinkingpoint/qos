@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
 	}
 }
 
-fn draw_bar(bar: &mut LayerSurface<'_>, font: &BdfFont) {
+fn draw_bar(bar: &mut LayerSurface, font: &BdfFont) {
 	let mut canvas = bar.canvas();
 	canvas.fill(0xFF1A1A2E);
 
@@ -43,7 +43,7 @@ fn draw_bar(bar: &mut LayerSurface<'_>, font: &BdfFont) {
 	bar.commit_frame().unwrap();
 }
 
-fn draw_background(background: &mut LayerSurface<'_>) {
+fn draw_background(background: &mut LayerSurface) {
 	let mut canvas = background.canvas();
 	canvas.fill(0xFF16213E);
 	let text = "Hello, QOS!";

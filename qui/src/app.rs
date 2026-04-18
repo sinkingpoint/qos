@@ -17,28 +17,24 @@ use wayland::{
 };
 
 use crate::{
-	buffer::Buffer,
+	buffer::DoubleBuffer,
 	canvas::Canvas,
 	context::{ContextEvent, WaylandContext},
 };
 
-pub struct App<'a> {
-	width: i32,
-	height: i32,
-
+pub struct App {
 	context: Rc<RefCell<WaylandContext>>,
 	surface_id: u32,
 	xdg_surface_id: u32,
 	xdg_toplevel_id: u32,
-	buffers: Vec<Buffer<'a>>,
+	buffers: DoubleBuffer,
 	frame_callback_id: u32,
 	last_interaction_serial: Option<u32>,
-	damage: Vec<(i32, i32, i32, i32)>,
 
 	last_pointer_position: Option<(i32, i32)>,
 }
 
-impl App<'_> {
+impl App {
 	pub fn new(title: String, width: i32, height: i32) -> io::Result<Self> {
 		let mut context = WaylandContext::connect()?;
 		let surface_id = context.next_object_id.next();
@@ -77,39 +73,28 @@ impl App<'_> {
 			title: WaylandEncodedString(title.clone()),
 		}
 		.write_as_packet(xdg_toplevel_id, &context.conn.stream)?;
-		let buffer = Buffer::new(&mut context, width, height)?;
+		let buffers = DoubleBuffer::new(&mut context, width, height)?;
 		AttachRequest {
-			buffer_id: buffer.id,
+			buffer_id: buffers.id(),
 			x: 0,
 			y: 0,
 		}
 		.write_as_packet(surface_id, &context.conn.stream)?;
 		CommitRequest.write_as_packet(surface_id, &context.conn.stream)?;
 		Ok(Self {
-			width,
-			height,
 			surface_id,
 			xdg_surface_id,
 			xdg_toplevel_id,
 			frame_callback_id: context.next_object_id.next(),
 			last_interaction_serial: None,
-			damage: Vec::new(),
 			last_pointer_position: None,
 			context: Rc::new(RefCell::new(context)),
-			buffers: vec![buffer],
+			buffers,
 		})
 	}
 
 	pub fn canvas(&mut self) -> Canvas<'_> {
-		Canvas::new(
-			self.buffers[0].pixels,
-			self.width,
-			self.height,
-			self.width,
-			0,
-			0,
-			&mut self.damage,
-		)
+		self.buffers.canvas()
 	}
 
 	pub fn start_move(&mut self) -> io::Result<()> {
@@ -210,12 +195,12 @@ impl App<'_> {
 		}
 		.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
 		AttachRequest {
-			buffer_id: self.buffers[0].id,
+			buffer_id: self.buffers.id(),
 			x: 0,
 			y: 0,
 		}
 		.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
-		for damage in self.damage.drain(..) {
+		for damage in self.buffers.front.drain_damage() {
 			DamageRequest {
 				x: damage.0,
 				y: damage.1,
@@ -224,7 +209,9 @@ impl App<'_> {
 			}
 			.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
 		}
-		CommitRequest.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)
+		CommitRequest.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
+		self.buffers.swap();
+		Ok(())
 	}
 }
 

@@ -18,27 +18,23 @@ use wayland::{
 
 use crate::{
 	AppEvent,
-	buffer::Buffer,
+	buffer::DoubleBuffer,
 	canvas::Canvas,
 	context::{ContextEvent, WaylandContext},
 };
 
-pub struct LayerSurface<'a> {
-	width: i32,
-	height: i32,
-
+pub struct LayerSurface {
 	context: Rc<RefCell<WaylandContext>>,
 	surface_id: u32,
-	buffers: Vec<Buffer<'a>>,
+	buffers: DoubleBuffer,
 	frame_callback_id: u32,
 	layer_surface_id: u32,
 	last_interaction_serial: Option<u32>,
-	damage: Vec<(i32, i32, i32, i32)>,
 
 	last_pointer_position: Option<(i32, i32)>,
 }
 
-impl LayerSurface<'_> {
+impl LayerSurface {
 	pub fn new(mut width: i32, mut height: i32, layer: Layer, anchor: Anchor) -> io::Result<Self> {
 		let mut context = WaylandContext::connect()?;
 		let surface_id = context.next_object_id.next();
@@ -80,38 +76,23 @@ impl LayerSurface<'_> {
 			}
 		}
 
-		let buffer = Buffer::new(&mut context, width, height)?;
+		let buffers = DoubleBuffer::new(&mut context, width, height)?;
 		AttachRequest {
-			buffer_id: buffer.id,
+			buffer_id: buffers.id(),
 			x: 0,
 			y: 0,
 		}
 		.write_as_packet(surface_id, &context.conn.stream)?;
 		CommitRequest.write_as_packet(surface_id, &context.conn.stream)?;
 		Ok(Self {
-			width,
-			height,
 			surface_id,
-			buffers: vec![buffer],
+			buffers,
 			frame_callback_id: context.next_object_id.next(),
 			last_interaction_serial: None,
-			damage: Vec::new(),
 			last_pointer_position: None,
 			context: Rc::new(RefCell::new(context)),
 			layer_surface_id,
 		})
-	}
-
-	pub fn canvas(&mut self) -> Canvas<'_> {
-		Canvas::new(
-			self.buffers[0].pixels,
-			self.width,
-			self.height,
-			self.width,
-			0,
-			0,
-			&mut self.damage,
-		)
 	}
 
 	pub fn poll(&mut self) -> io::Result<AppEvent> {
@@ -194,12 +175,12 @@ impl LayerSurface<'_> {
 		}
 		.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
 		AttachRequest {
-			buffer_id: self.buffers[0].id,
+			buffer_id: self.buffers.id(),
 			x: 0,
 			y: 0,
 		}
 		.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
-		for damage in self.damage.drain(..) {
+		for damage in self.buffers.front.drain_damage() {
 			DamageRequest {
 				x: damage.0,
 				y: damage.1,
@@ -208,6 +189,13 @@ impl LayerSurface<'_> {
 			}
 			.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
 		}
-		CommitRequest.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)
+		CommitRequest.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
+		self.buffers.swap();
+
+		Ok(())
+	}
+
+	pub fn canvas(&mut self) -> Canvas<'_> {
+		self.buffers.canvas()
 	}
 }

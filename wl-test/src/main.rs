@@ -63,13 +63,13 @@ fn main() -> std::io::Result<()> {
 	Ok(())
 }
 
-fn draw_bar(bar: &mut LayerSurface<'_>, font: &BdfFont) {
+fn draw_bar(bar: &mut LayerSurface, font: &BdfFont) {
 	let mut canvas = bar.canvas();
 	canvas.fill(0xFF1a1a2e);
 	canvas.draw_text(font, 10, 8, "wl-test", 0xFFFFFFFF);
 }
 
-fn draw_frame(app: &mut App<'_>, cursor: Option<(i32, i32)>, font: &BdfFont, button_pressed: bool, last_key: u32) {
+fn draw_frame(app: &mut App, cursor: Option<(i32, i32)>, font: &BdfFont, button_pressed: bool, last_key: u32) {
 	let mut canvas = app.canvas();
 
 	canvas.fill(0xFF222244);

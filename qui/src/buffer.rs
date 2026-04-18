@@ -4,22 +4,27 @@ use bytestruct::{Endian, WriteToWithEndian};
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use wayland::{shm::CreatePoolRequest, shm_pool::CreateBufferRequest, types::WaylandPayload};
 
-use crate::context::WaylandContext;
+use crate::{canvas::Canvas, context::WaylandContext};
 
-pub struct Buffer<'a> {
+pub struct Buffer {
 	pub(crate) id: u32,
-	pub(crate) pixels: &'a mut [u32],
+	pixels: *mut u32,
+	pixel_count: usize,
 	pool_size: usize,
+	width: i32,
+	height: i32,
+	damage: Vec<(i32, i32, i32, i32)>,
 }
 
-impl<'a> Buffer<'a> {
-	pub fn new(context: &mut WaylandContext, width: i32, height: i32) -> io::Result<Buffer<'a>> {
+impl Buffer {
+	pub fn new(context: &mut WaylandContext, width: i32, height: i32) -> io::Result<Buffer> {
 		let shm_id: u32 = context
 			.globals
 			.shm
 			.ok_or_else(|| io::Error::other("no wl_shm advertised"))?;
 		let stride: i32 = width * 4;
 		let pool_size: usize = (stride * height) as usize;
+		let pixel_count: usize = (width * height) as usize;
 
 		let memfd = nix::sys::memfd::memfd_create(c"qui-shm", nix::sys::memfd::MemFdCreateFlag::empty())
 			.map_err(io::Error::other)?;
@@ -60,16 +65,62 @@ impl<'a> Buffer<'a> {
 
 		Ok(Self {
 			id: buffer_id,
-			pixels: unsafe { std::slice::from_raw_parts_mut(ptr as *mut u32, (width * height) as usize) },
+			pixels: ptr as *mut u32,
+			pixel_count,
 			pool_size,
+			width,
+			height,
+			damage: Vec::new(),
 		})
+	}
+
+	fn copy_from(&mut self, other: &Buffer) {
+		let dst = unsafe { std::slice::from_raw_parts_mut(self.pixels, self.pixel_count) };
+		let src = unsafe { std::slice::from_raw_parts(other.pixels, other.pixel_count) };
+		dst.copy_from_slice(src);
+	}
+
+	pub fn canvas(&mut self) -> Canvas<'_> {
+		let pixels = unsafe { std::slice::from_raw_parts_mut(self.pixels, self.pixel_count) };
+		Canvas::new(pixels, self.width, self.height, self.width, 0, 0, &mut self.damage)
+	}
+
+	pub fn drain_damage(&mut self) -> impl Iterator<Item = (i32, i32, i32, i32)> + '_ {
+		self.damage.drain(..)
 	}
 }
 
-impl Drop for Buffer<'_> {
+impl Drop for Buffer {
 	fn drop(&mut self) {
 		unsafe {
-			nix::sys::mman::munmap(self.pixels.as_mut_ptr() as *mut _, self.pool_size).ok();
+			nix::sys::mman::munmap(self.pixels as *mut _, self.pool_size).ok();
 		}
+	}
+}
+
+pub struct DoubleBuffer {
+	pub front: Buffer,
+	pub back: Buffer,
+}
+
+impl DoubleBuffer {
+	pub fn new(context: &mut WaylandContext, width: i32, height: i32) -> io::Result<DoubleBuffer> {
+		Ok(Self {
+			front: Buffer::new(context, width, height)?,
+			back: Buffer::new(context, width, height)?,
+		})
+	}
+
+	pub fn id(&self) -> u32 {
+		self.front.id
+	}
+
+	pub fn swap(&mut self) {
+		self.back.copy_from(&self.front);
+		std::mem::swap(&mut self.front, &mut self.back);
+	}
+
+	pub fn canvas(&mut self) -> Canvas<'_> {
+		self.front.canvas()
 	}
 }
