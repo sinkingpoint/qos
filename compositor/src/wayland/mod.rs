@@ -33,6 +33,14 @@ use crate::{
 	},
 };
 
+struct SceneEntry {
+	client_id: u32,
+	surface_id: u32,
+	x: i32,
+	y: i32,
+	layer: LayerRequest,
+}
+
 pub struct WaylandCompositor {
 	pub layout: Rc<RefCell<Box<dyn layout::Layout>>>,
 	pub clients: HashMap<u32, types::Client>,
@@ -41,6 +49,7 @@ pub struct WaylandCompositor {
 	pub active_window: Option<(u32, u32)>,
 	pub keyboard: crate::keyboard::Keyboard,
 	pub serial: u32,
+	scene: Vec<SceneEntry>,
 }
 
 impl WaylandCompositor {
@@ -55,25 +64,18 @@ impl WaylandCompositor {
 			active_window: None,
 			keyboard: crate::keyboard::Keyboard::new(),
 			serial: 1,
+			scene: Vec::new(),
 		}
 	}
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
-		let mut lower_layers_changed = false;
-		for client in self.clients.values_mut() {
-			lower_layers_changed |= client.repaint_background_bottom(framebuffer);
-		}
-
-		let mut xdg_changed = false;
-		for client in self.clients.values_mut() {
-			xdg_changed |= client.repaint_xdg(framebuffer, lower_layers_changed);
-		}
-
-		let force_top = lower_layers_changed || xdg_changed;
-		for client in self.clients.values_mut() {
-			client.repaint_top_overlay(framebuffer, force_top);
+		for entry in &self.scene {
+			if let Some(client) = self.clients.get_mut(&entry.client_id) {
+				client.blit_surface(entry.surface_id, entry.x, entry.y, framebuffer);
+			}
 		}
 	}
+
 	pub fn handle_key_event(&mut self, event: KeyEvent) {
 		self.keyboard.handle_input(event);
 		if let Some((client_id, _)) = self.active_window
@@ -202,12 +204,44 @@ impl WaylandCompositor {
 			.clients
 			.entry(event.client_id)
 			.or_insert_with(|| Client::new(event.client.clone(), self.display_geometry.clone(), self.layout.clone()));
-		if let Err(e) = client.handle_event(event.packet, event.fds) {
-			match e {
-				types::WaylandError::IOError(e) => eprintln!("Wayland IO error: {}", e),
-				types::WaylandError::NixError(e) => eprintln!("Wayland Nix error: {}", e),
-				types::WaylandError::UnrecognisedObject => eprintln!("Wayland: unrecognised object"),
+		match client.handle_event(event.packet, event.fds) {
+			Ok(Some(CompositorClientEvent::NewWindow(surface_id, x, y, layer))) => {
+				let z_index = self.scene.iter().filter(|entry| entry.layer <= layer).count();
+				self.scene.insert(
+					z_index,
+					SceneEntry {
+						client_id: event.client_id,
+						surface_id,
+						x,
+						y,
+						layer,
+					},
+				);
 			}
+			Ok(Some(CompositorClientEvent::CloseWindow(surface_id))) => {
+				self.scene
+					.retain(|entry| !(entry.client_id == event.client_id && entry.surface_id == surface_id));
+			}
+			Ok(None) => {}
+			Err(types::WaylandError::IOError(e)) => eprintln!("Wayland IO error: {}", e),
+			Err(types::WaylandError::NixError(e)) => eprintln!("Wayland Nix error: {}", e),
+			Err(types::WaylandError::UnrecognisedObject) => eprintln!("Wayland: unrecognised object"),
 		}
 	}
+}
+
+// A request from a client as to what layer to put a surface on, or to update its layer/surface properties.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum LayerRequest {
+	Bottom = 0,
+	Background = 1,
+	Unset = 2,
+	Top = 3,
+	Overlay = 4,
+}
+
+pub enum CompositorClientEvent {
+	NewWindow(u32, i32, i32, LayerRequest), // surface_id, x, y, layer
+	CloseWindow(u32),                       // surface_id
 }
