@@ -13,8 +13,8 @@ fn main() -> std::io::Result<()> {
 	let mut scene = Scene::new(400, 300);
 	let _button_handle = scene.add_widget(qui::Button::new("Click me".to_string()), 150, 100);
 
-	draw_frame(&mut app, cursor, &font, button_pressed, last_key);
-	scene.render(&mut app.canvas());
+	draw_frame(&mut app, cursor, button_pressed, last_key);
+	scene.render(&mut app.canvas().expect("no canvas ready"));
 	app.commit_frame()?;
 
 	draw_bar(&mut bar, &font);
@@ -24,9 +24,9 @@ fn main() -> std::io::Result<()> {
 		let event = app.poll()?;
 		scene.handle_event(&event);
 		match event {
-			AppEvent::Frame => {
-				draw_frame(&mut app, cursor, &font, button_pressed, last_key);
-				scene.render(&mut app.canvas());
+			AppEvent::RenderReady => {
+				draw_frame(&mut app, cursor, button_pressed, last_key);
+				scene.render(&mut app.canvas().expect("no canvas ready"));
 				app.commit_frame()?;
 			}
 			AppEvent::PointerMotion { x, y } => cursor = Some((x, y)),
@@ -45,7 +45,7 @@ fn main() -> std::io::Result<()> {
 
 		// Drain bar events non-blocking so its socket doesn't fill up.
 		while let Some(bar_event) = bar.try_poll()? {
-			if matches!(bar_event, AppEvent::Frame) {
+			if matches!(bar_event, AppEvent::RenderReady) {
 				draw_bar(&mut bar, &font);
 				bar.commit_frame()?;
 			}
@@ -64,13 +64,13 @@ fn main() -> std::io::Result<()> {
 }
 
 fn draw_bar(bar: &mut LayerSurface, font: &BdfFont) {
-	let mut canvas = bar.canvas();
-	canvas.fill(0xFF1a1a2e);
+	let mut canvas = bar.canvas().expect("no canvas ready");
+	canvas.fill(0xFF1A1A2E);
 	canvas.draw_text(font, 10, 8, "wl-test", 0xFFFFFFFF);
 }
 
-fn draw_frame(app: &mut App, cursor: Option<(i32, i32)>, font: &BdfFont, button_pressed: bool, last_key: u32) {
-	let mut canvas = app.canvas();
+fn draw_frame(app: &mut App, cursor: Option<(i32, i32)>, button_pressed: bool, last_key: u32) {
+	let mut canvas = app.canvas().expect("no canvas ready");
 
 	canvas.fill(0xFF222244);
 

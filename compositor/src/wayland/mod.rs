@@ -59,14 +59,19 @@ impl WaylandCompositor {
 	}
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
+		let mut lower_layers_changed = false;
 		for client in self.clients.values_mut() {
-			client.repaint_background_bottom(framebuffer);
+			lower_layers_changed |= client.repaint_background_bottom(framebuffer);
 		}
+
+		let mut xdg_changed = false;
 		for client in self.clients.values_mut() {
-			client.repaint_xdg(framebuffer);
+			xdg_changed |= client.repaint_xdg(framebuffer, lower_layers_changed);
 		}
+
+		let force_top = lower_layers_changed || xdg_changed;
 		for client in self.clients.values_mut() {
-			client.repaint_top_overlay(framebuffer);
+			client.repaint_top_overlay(framebuffer, force_top);
 		}
 	}
 	pub fn handle_key_event(&mut self, event: KeyEvent) {

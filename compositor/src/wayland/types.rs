@@ -142,33 +142,103 @@ impl Client {
 	fn blit_surfaces(&mut self, surfaces_to_blit: Vec<(u32, i32, i32)>, framebuffer: &mut VideoBuffer) {
 		let mut blitted: Vec<(u32, u32)> = Vec::new(); // (surface_id, buffer_id)
 		let mut blitted_rects: Vec<(u32, i32, i32, i32, i32)> = Vec::new(); // (surface_id, x, y, width, height)
+		let mut cache_updates: Vec<(u32, Vec<u32>, i32, i32)> = Vec::new();
 		for (surface_id, x, y) in surfaces_to_blit {
 			if let Some(SubsystemType::Surface(surface)) = self.objects.get(&surface_id)
 				&& surface.committed
 				&& let Some((buffer_id, _, _)) = surface.attached_buffer
 			{
-				let buffer = match self.objects.get(&buffer_id) {
-					Some(SubsystemType::Buffer(buffer)) => buffer,
-					_ => continue,
-				};
+				let first_blit_after_commit = !surface.blitted;
 
-				let mem_pool = match self.objects.get(&buffer.pool_id) {
-					Some(SubsystemType::SharedMemoryPool(pool)) => pool,
-					_ => continue,
-				};
+				if first_blit_after_commit {
+					let buffer = match self.objects.get(&buffer_id) {
+						Some(SubsystemType::Buffer(buffer)) => buffer,
+						_ => continue,
+					};
 
-				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
-					&& (x != last_x || y != last_y || buffer.width != last_width || buffer.height != last_height)
-				{
-					let x0 = last_x.max(0);
-					let y0 = last_y.max(0);
-					let x1 = (last_x + last_width).min(framebuffer.width as i32);
-					let y1 = (last_y + last_height).min(framebuffer.height as i32);
-					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
+					let mem_pool = match self.objects.get(&buffer.pool_id) {
+						Some(SubsystemType::SharedMemoryPool(pool)) => pool,
+						_ => continue,
+					};
+
+					if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
+						&& (x != last_x || y != last_y || buffer.width != last_width || buffer.height != last_height)
+					{
+						let x0 = last_x.max(0);
+						let y0 = last_y.max(0);
+						let x1 = (last_x + last_width).min(framebuffer.width as i32);
+						let y1 = (last_y + last_height).min(framebuffer.height as i32);
+						framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
+					}
+
+					blitted_rects.push((surface_id, x, y, buffer.width, buffer.height));
+					mem_pool.blit_onto(buffer, framebuffer, x, y);
+
+					if buffer.offset >= 0 {
+						let stride_pixels = (buffer.stride / 4) as usize;
+						let width = buffer.width as usize;
+						let height = buffer.height as usize;
+						let mut pixels = vec![0u32; width * height];
+						let src_base = unsafe { (mem_pool.ptr.add(buffer.offset as usize)) as *const u32 };
+						for row in 0..height {
+							unsafe {
+								std::ptr::copy_nonoverlapping(
+									src_base.add(row * stride_pixels),
+									pixels.as_mut_ptr().add(row * width),
+									width,
+								);
+							}
+						}
+						cache_updates.push((surface_id, pixels, buffer.width, buffer.height));
+					}
+
+					blitted.push((surface_id, buffer_id));
+				} else {
+					if surface.cached_width <= 0 || surface.cached_height <= 0 || surface.cached_pixels.is_empty() {
+						continue;
+					}
+
+					if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
+						&& (x != last_x
+							|| y != last_y || surface.cached_width != last_width
+							|| surface.cached_height != last_height)
+					{
+						let x0 = last_x.max(0);
+						let y0 = last_y.max(0);
+						let x1 = (last_x + last_width).min(framebuffer.width as i32);
+						let y1 = (last_y + last_height).min(framebuffer.height as i32);
+						framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
+					}
+
+					let clip_x = x.max(0);
+					let clip_y = y.max(0);
+					let clip_x2 = (x + surface.cached_width).min(framebuffer.width as i32);
+					let clip_y2 = (y + surface.cached_height).min(framebuffer.height as i32);
+					if clip_x2 <= clip_x || clip_y2 <= clip_y {
+						continue;
+					}
+
+					let src_skip_x = (clip_x - x) as usize;
+					let src_skip_y = (clip_y - y) as usize;
+					let src_stride = surface.cached_width as usize;
+					let src = unsafe {
+						surface
+							.cached_pixels
+							.as_ptr()
+							.add(src_skip_y * src_stride)
+							.add(src_skip_x)
+					};
+
+					framebuffer.blit_and_mark_dirty(
+						src,
+						src_stride as u32,
+						clip_x as u32,
+						clip_y as u32,
+						(clip_x2 - clip_x) as u32,
+						(clip_y2 - clip_y) as u32,
+					);
+					blitted_rects.push((surface_id, x, y, surface.cached_width, surface.cached_height));
 				}
-				blitted_rects.push((surface_id, x, y, buffer.width, buffer.height));
-				mem_pool.blit_onto(buffer, framebuffer, x, y);
-				blitted.push((surface_id, buffer_id));
 			}
 		}
 
@@ -184,6 +254,14 @@ impl Client {
 		for (surface_id, x, y, width, height) in blitted_rects {
 			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
 				surface.last_blit_rect = Some((x, y, width, height));
+			}
+		}
+
+		for (surface_id, pixels, width, height) in cache_updates {
+			if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
+				surface.cached_pixels = pixels;
+				surface.cached_width = width;
+				surface.cached_height = height;
 			}
 		}
 	}
@@ -206,6 +284,10 @@ impl Client {
 	}
 
 	pub fn collect_xdg(&mut self) -> Vec<(u32, i32, i32)> {
+		self.collect_xdg_with_mode(false)
+	}
+
+	fn collect_xdg_with_mode(&mut self, include_blitted: bool) -> Vec<(u32, i32, i32)> {
 		let mut surfaces = Vec::new();
 		for obj in self.objects.values() {
 			if let SubsystemType::XdgTopLevel(xdg_toplevel) = obj
@@ -213,7 +295,7 @@ impl Client {
 				&& xdg_surface.configured
 				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
 				&& surface.committed
-				&& !surface.blitted
+				&& (include_blitted || !surface.blitted)
 			{
 				let (x, y) = (xdg_toplevel.x, xdg_toplevel.y);
 				surfaces.push((xdg_surface.surface_id, x, y));
@@ -223,6 +305,10 @@ impl Client {
 	}
 
 	pub fn collect_top_overlay(&mut self) -> Vec<(u32, i32, i32)> {
+		self.collect_top_overlay_with_mode(false)
+	}
+
+	fn collect_top_overlay_with_mode(&mut self, include_blitted: bool) -> Vec<(u32, i32, i32)> {
 		let mut surfaces = Vec::new();
 		for obj in self.objects.values() {
 			if let SubsystemType::ZwlrLayerSurfaceV1(layer_surface) = obj
@@ -230,6 +316,7 @@ impl Client {
 				&& layer_surface.mapped
 				&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&layer_surface.surface_id)
 				&& surface.committed
+				&& (include_blitted || !surface.blitted)
 			{
 				let (x, y) = layer_surface.compute_position(&self.display_geometry);
 				surfaces.push((layer_surface.surface_id, x, y));
@@ -238,19 +325,33 @@ impl Client {
 		surfaces
 	}
 
-	pub fn repaint_background_bottom(&mut self, framebuffer: &mut VideoBuffer) {
+	pub fn repaint_background_bottom(&mut self, framebuffer: &mut VideoBuffer) -> bool {
 		let surfaces = self.collect_background_bottom();
+		let changed = !surfaces.is_empty();
 		self.blit_surfaces(surfaces, framebuffer);
+		changed
 	}
 
-	pub fn repaint_xdg(&mut self, framebuffer: &mut VideoBuffer) {
-		let surfaces = self.collect_xdg();
+	pub fn repaint_xdg(&mut self, framebuffer: &mut VideoBuffer, force_redraw: bool) -> bool {
+		let surfaces = if force_redraw {
+			self.collect_xdg_with_mode(true)
+		} else {
+			self.collect_xdg()
+		};
+		let changed = !surfaces.is_empty();
 		self.blit_surfaces(surfaces, framebuffer);
+		changed
 	}
 
-	pub fn repaint_top_overlay(&mut self, framebuffer: &mut VideoBuffer) {
-		let surfaces = self.collect_top_overlay();
+	pub fn repaint_top_overlay(&mut self, framebuffer: &mut VideoBuffer, force_redraw: bool) -> bool {
+		let surfaces = if force_redraw {
+			self.collect_top_overlay_with_mode(true)
+		} else {
+			self.collect_top_overlay()
+		};
+		let changed = !surfaces.is_empty();
 		self.blit_surfaces(surfaces, framebuffer);
+		changed
 	}
 
 	pub fn handle_drag(&mut self, x: i32, y: i32) -> WaylandResult<()> {

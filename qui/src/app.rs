@@ -6,6 +6,7 @@ use std::{
 
 use bytestruct::{Endian, ReadFromWithEndian};
 use wayland::{
+	buffer::ReleaseEvent,
 	compositor::CreateSurfaceRequest,
 	keyboard::KeyboardEvent,
 	pointer::PointerEvent,
@@ -30,13 +31,24 @@ pub struct App {
 	buffers: DoubleBuffer,
 	frame_callback_id: u32,
 	last_interaction_serial: Option<u32>,
-
 	last_pointer_position: Option<(i32, i32)>,
+	awaiting_frame: bool,
+	awaiting_release: bool,
 }
 
 impl App {
 	pub fn new(title: String, width: i32, height: i32) -> io::Result<Self> {
-		let mut context = WaylandContext::connect()?;
+		let ctx = WaylandContext::connect()?;
+		Self::new_with_context(ctx, title, width, height)
+	}
+
+	pub fn new_with_context(
+		ctx: Rc<RefCell<WaylandContext>>,
+		title: String,
+		width: i32,
+		height: i32,
+	) -> io::Result<Self> {
+		let mut context = ctx.borrow_mut();
 		let surface_id = context.next_object_id.next();
 		CreateSurfaceRequest { new_id: surface_id }
 			.write_as_packet(context.globals.compositor.unwrap(), &context.conn.stream)?;
@@ -73,7 +85,7 @@ impl App {
 			title: WaylandEncodedString(title.clone()),
 		}
 		.write_as_packet(xdg_toplevel_id, &context.conn.stream)?;
-		let buffers = DoubleBuffer::new(&mut context, width, height)?;
+		let mut buffers = DoubleBuffer::new(&mut context, width, height)?;
 		AttachRequest {
 			buffer_id: buffers.id(),
 			x: 0,
@@ -81,19 +93,26 @@ impl App {
 		}
 		.write_as_packet(surface_id, &context.conn.stream)?;
 		CommitRequest.write_as_packet(surface_id, &context.conn.stream)?;
+		let frame_callback_id = context.next_object_id.next();
+		drop(context); // release mutable borrow before entering event loop
+		buffers.swap();
 		Ok(Self {
 			surface_id,
 			xdg_surface_id,
 			xdg_toplevel_id,
-			frame_callback_id: context.next_object_id.next(),
+			frame_callback_id,
 			last_interaction_serial: None,
 			last_pointer_position: None,
-			context: Rc::new(RefCell::new(context)),
+			context: ctx,
 			buffers,
+			// We already committed an initial frame during setup, so wait for both
+			// callback + release before advertising RenderReady.
+			awaiting_frame: true,
+			awaiting_release: true,
 		})
 	}
 
-	pub fn canvas(&mut self) -> Canvas<'_> {
+	pub fn canvas(&mut self) -> Option<Canvas<'_>> {
 		self.buffers.canvas()
 	}
 
@@ -110,12 +129,15 @@ impl App {
 	}
 
 	pub fn poll(&mut self) -> io::Result<AppEvent> {
+		let buffer_ids = self.buffers.all_ids();
 		loop {
 			let (object_id, event) = self.context.borrow_mut().poll(&[
 				self.surface_id,
 				self.xdg_surface_id,
 				self.xdg_toplevel_id,
 				self.frame_callback_id,
+				buffer_ids[0],
+				buffer_ids[1],
 			])?;
 			if let Some(app_event) = self.interpret_event(object_id, event)? {
 				return Ok(app_event);
@@ -124,12 +146,15 @@ impl App {
 	}
 
 	pub fn try_poll(&mut self) -> io::Result<Option<AppEvent>> {
+		let buffer_ids = self.buffers.all_ids();
 		loop {
 			let maybe = self.context.borrow_mut().try_poll(&[
 				self.surface_id,
 				self.xdg_surface_id,
 				self.xdg_toplevel_id,
 				self.frame_callback_id,
+				buffer_ids[0],
+				buffer_ids[1],
 			])?;
 			match maybe {
 				None => return Ok(None),
@@ -184,7 +209,21 @@ impl App {
 			return Ok(Some(AppEvent::Close));
 		} else if matches!(event, ContextEvent::Unknown { opcode: FrameCallbackEvent::OPCODE, .. } if object_id == self.frame_callback_id)
 		{
-			return Ok(Some(AppEvent::Frame));
+			if self.awaiting_frame {
+				self.awaiting_frame = false;
+			}
+			if !self.awaiting_frame && !self.awaiting_release {
+				return Ok(Some(AppEvent::RenderReady));
+			}
+		} else if matches!(event, ContextEvent::Unknown { opcode: ReleaseEvent::OPCODE, .. } if self.buffers.all_ids().contains(&object_id))
+		{
+			self.buffers.release(object_id);
+			if self.awaiting_release {
+				self.awaiting_release = false;
+			}
+			if !self.awaiting_frame && !self.awaiting_release {
+				return Ok(Some(AppEvent::RenderReady));
+			}
 		}
 		Ok(None)
 	}
@@ -200,7 +239,7 @@ impl App {
 			y: 0,
 		}
 		.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
-		for damage in self.buffers.front.drain_damage() {
+		for damage in self.buffers.current_buffer().drain_damage() {
 			DamageRequest {
 				x: damage.0,
 				y: damage.1,
@@ -211,13 +250,15 @@ impl App {
 		}
 		CommitRequest.write_as_packet(self.surface_id, &self.context.borrow().conn.stream)?;
 		self.buffers.swap();
+		self.awaiting_frame = true;
+		self.awaiting_release = true;
 		Ok(())
 	}
 }
 
 #[derive(Clone)]
 pub enum AppEvent {
-	Frame,
+	RenderReady,
 	Keyboard { keycode: u32, pressed: bool },
 	PointerMotion { x: i32, y: i32 },
 	PointerButton { button: u32, pressed: bool, x: i32, y: i32 },

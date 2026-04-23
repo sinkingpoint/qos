@@ -14,6 +14,7 @@ pub struct Buffer {
 	width: i32,
 	height: i32,
 	damage: Vec<(i32, i32, i32, i32)>,
+	released: bool,
 }
 
 impl Buffer {
@@ -71,13 +72,15 @@ impl Buffer {
 			width,
 			height,
 			damage: Vec::new(),
+			released: true,
 		})
 	}
 
-	fn copy_from(&mut self, other: &Buffer) {
-		let dst = unsafe { std::slice::from_raw_parts_mut(self.pixels, self.pixel_count) };
-		let src = unsafe { std::slice::from_raw_parts(other.pixels, other.pixel_count) };
-		dst.copy_from_slice(src);
+	fn clear(&mut self) {
+		unsafe {
+			std::ptr::write_bytes(self.pixels, 0, self.pixel_count);
+		}
+		self.damage.push((0, 0, self.width, self.height));
 	}
 
 	pub fn canvas(&mut self) -> Canvas<'_> {
@@ -87,6 +90,14 @@ impl Buffer {
 
 	pub fn drain_damage(&mut self) -> impl Iterator<Item = (i32, i32, i32, i32)> + '_ {
 		self.damage.drain(..)
+	}
+
+	pub fn commit(&mut self) {
+		self.released = false;
+	}
+
+	pub fn release(&mut self) {
+		self.released = true;
 	}
 }
 
@@ -99,28 +110,61 @@ impl Drop for Buffer {
 }
 
 pub struct DoubleBuffer {
-	pub front: Buffer,
-	pub back: Buffer,
+	buffers: [Buffer; 2],
+	current_index: usize,
 }
 
 impl DoubleBuffer {
 	pub fn new(context: &mut WaylandContext, width: i32, height: i32) -> io::Result<DoubleBuffer> {
 		Ok(Self {
-			front: Buffer::new(context, width, height)?,
-			back: Buffer::new(context, width, height)?,
+			buffers: [
+				Buffer::new(context, width, height)?,
+				Buffer::new(context, width, height)?,
+			],
+			current_index: 0,
 		})
 	}
 
+	pub fn release(&mut self, buffer_id: u32) {
+		for buffer in &mut self.buffers {
+			if buffer.id == buffer_id {
+				buffer.release();
+			}
+		}
+	}
+
 	pub fn id(&self) -> u32 {
-		self.front.id
+		self.buffers[self.current_index].id
+	}
+
+	pub fn all_ids(&self) -> [u32; 2] {
+		[self.buffers[0].id, self.buffers[1].id]
 	}
 
 	pub fn swap(&mut self) {
-		self.back.copy_from(&self.front);
-		std::mem::swap(&mut self.front, &mut self.back);
+		self.buffers[self.current_index].commit();
+		self.current_index = (self.current_index + 1) % 2;
+		if self.buffers[self.current_index].released {
+			self.buffers[self.current_index].clear();
+		}
 	}
 
-	pub fn canvas(&mut self) -> Canvas<'_> {
-		self.front.canvas()
+	pub fn current_buffer(&mut self) -> &mut Buffer {
+		&mut self.buffers[self.current_index]
+	}
+
+	pub fn canvas(&mut self) -> Option<Canvas<'_>> {
+		if self.buffers[self.current_index].released {
+			return Some(self.buffers[self.current_index].canvas());
+		}
+
+		// If the current buffer is blocked, fall back to the other released buffer.
+		let other_index = (self.current_index + 1) % 2;
+		if self.buffers[other_index].released {
+			self.current_index = other_index;
+			return Some(self.buffers[self.current_index].canvas());
+		}
+
+		None
 	}
 }

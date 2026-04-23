@@ -7,6 +7,7 @@ mod layer_surface;
 mod scene;
 mod widgets;
 pub use app::*;
+pub use context::WaylandContext;
 pub use layer_surface::*;
 pub use scene::{Scene, SceneEvent, WidgetHandle};
 pub use wayland::zwlr_layer_shell_v1::{Anchor, Layer};

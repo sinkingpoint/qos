@@ -13,6 +13,9 @@ pub struct Surface {
 	pub last_blit_rect: Option<(i32, i32, i32, i32)>,
 	pub committed: bool,
 	pub blitted: bool,
+	pub cached_pixels: Vec<u32>,
+	pub cached_width: i32,
+	pub cached_height: i32,
 	pub pending_callbacks: Vec<u32>,
 	pub role_id: Option<u32>, // ID of the role object (e.g., xdg_surface) associated with this surface
 }
@@ -25,6 +28,9 @@ impl Surface {
 			last_blit_rect: None,
 			committed: false,
 			blitted: false,
+			cached_pixels: Vec::new(),
+			cached_width: 0,
+			cached_height: 0,
 			pending_callbacks: Vec::new(),
 			role_id: None,
 		}
@@ -82,6 +88,9 @@ impl Command<Surface> for CommitRequest {
 		} else {
 			surface.committed = false;
 			surface.last_blit_rect = None;
+			surface.cached_pixels.clear();
+			surface.cached_width = 0;
+			surface.cached_height = 0;
 		}
 
 		surface.blitted = false;

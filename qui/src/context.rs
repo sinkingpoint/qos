@@ -1,8 +1,10 @@
 use std::{
+	cell::RefCell,
 	collections::{HashMap, VecDeque},
 	env,
 	io::{self, Cursor},
 	os::{fd::OwnedFd, unix::net::UnixStream},
+	rc::Rc,
 };
 
 use bytestruct::{Endian, ReadFromWithEndian};
@@ -31,7 +33,7 @@ pub struct WaylandContext {
 }
 
 impl WaylandContext {
-	pub fn connect() -> io::Result<Self> {
+	pub fn connect() -> io::Result<Rc<RefCell<Self>>> {
 		let uid = 0;
 		let runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| format!("/run/user/{}", uid));
 		let display = env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "0".to_string());
@@ -41,7 +43,6 @@ impl WaylandContext {
 			format!("{}/{}", runtime_dir, display)
 		};
 
-		println!("Connecting to Wayland display at {}", socket_path);
 		let socket = UnixStream::connect(&socket_path)?;
 		let mut conn = WaylandConnection::new(socket);
 		let registry_id: u32 = 2;
@@ -58,8 +59,7 @@ impl WaylandContext {
 		let keyboard_id = next_obj_id.next();
 		GetKeyboardRequest { new_id: keyboard_id }.write_as_packet(seat_id, &conn.stream)?;
 
-		println!("{:?} {} {}", globals, pointer_id, keyboard_id);
-		Ok(Self {
+		Ok(Rc::new(RefCell::new(Self {
 			conn,
 			globals,
 			pointer_id,
@@ -70,7 +70,12 @@ impl WaylandContext {
 			keyboard_focus: None,
 			mouse_focus: None,
 			last_mouse_surface: None,
-		})
+		})))
+	}
+
+	pub fn dispatch_one(&mut self) -> io::Result<()> {
+		let packet = self.conn.recv_packet()?;
+		self.route_packet(packet)
 	}
 
 	pub fn poll(&mut self, object_id: &[u32]) -> io::Result<(u32, ContextEvent)> {
@@ -156,12 +161,11 @@ impl WaylandContext {
 		} else if packet.object_id == self.globals.xdg_wm_base.unwrap()
 			&& let Some(event) = XdgWmBaseEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
 		{
-			if let XdgWmBaseEvent::Ping(ping_event) = event {
-				PongRequest {
-					callback_id: ping_event.callback_id,
-				}
-				.write_as_packet(self.globals.xdg_wm_base.unwrap(), &self.conn.stream)?;
+			let XdgWmBaseEvent::Ping(ping_event) = event;
+			PongRequest {
+				callback_id: ping_event.callback_id,
 			}
+			.write_as_packet(self.globals.xdg_wm_base.unwrap(), &self.conn.stream)?;
 		} else {
 			self.events
 				.entry(packet.object_id)
