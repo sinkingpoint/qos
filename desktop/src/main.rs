@@ -95,16 +95,6 @@ fn draw_background(background: &mut LayerSurface) {
 		return;
 	};
 	canvas.fill(0xFF16213E);
-	let text = "Hello, QOS!";
-	let font = BdfFont::from_bdf_data(SPLEEN_BDF).unwrap();
-	let (tw, th) = font.measure_text(text);
-	canvas.draw_text(
-		&font,
-		(canvas.width - tw) / 2,
-		(canvas.height - th) / 2,
-		text,
-		0xFFFFFFFF,
-	);
 	if let Err(e) = background.commit_frame() {
 		eprintln!("[desktop] draw background commit error: {}", e);
 	}
