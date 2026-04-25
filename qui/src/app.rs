@@ -73,13 +73,23 @@ impl App {
 		// Wait for xdg_surface.configure, then ack
 		loop {
 			let packet = context.conn.recv_packet()?;
-			context.conn.drain_fds(); // discard any fds (e.g. keyboard keymap) arriving before poll loop
+			if packet.object_id == context.keyboard_id && packet.opcode == wayland::keyboard::KeyMapEvent::OPCODE {
+				// Handle keymap immediately since the keyboard won't send any other events until we do
+				let fds = context.conn.drain_fds();
+				if fds.is_empty() {
+					return Err(io::Error::other("Expected fd for keymap event"));
+				}
+				context.keyboard.set_keymap(&fds[0])?;
+				continue;
+			}
+
 			if packet.object_id == xdg_surface_id && packet.opcode == ConfigureEvent::OPCODE {
 				let event = ConfigureEvent::read_from_with_endian(&mut Cursor::new(&packet.payload), Endian::Little)?;
 				AckConfigureRequest { serial: event.serial }.write_as_packet(xdg_surface_id, &context.conn.stream)?;
 				break;
 			}
 		}
+		context.conn.drain_fds(); // discard any fds (e.g. keyboard keymap) arriving before poll loop
 
 		SetTitleRequest {
 			title: WaylandEncodedString(title.clone()),

@@ -2,8 +2,11 @@ use std::{
 	cell::RefCell,
 	collections::{HashMap, VecDeque},
 	env,
-	io::{self, Cursor},
-	os::{fd::OwnedFd, unix::net::UnixStream},
+	io::{self, Cursor, Read},
+	os::{
+		fd::{AsRawFd, FromRawFd, OwnedFd},
+		unix::net::UnixStream,
+	},
 	rc::Rc,
 };
 
@@ -19,12 +22,15 @@ use wayland::{
 	xdg_wm_base::{PongRequest, XdgWmBaseEvent},
 };
 
+use crate::xkb::XkbKeyMap;
+
 pub struct WaylandContext {
 	pub(crate) conn: WaylandConnection,
 	pub(crate) globals: BoundGlobals,
 	pub(crate) pointer_id: u32,
 	pub(crate) keyboard_id: u32,
 	pub(crate) next_object_id: ObjectId,
+	pub(crate) keyboard: Keyboard,
 	fds: VecDeque<OwnedFd>,
 	events: HashMap<u32, VecDeque<ContextEvent>>,
 	keyboard_focus: Option<u32>,
@@ -43,7 +49,8 @@ impl WaylandContext {
 			format!("{}/{}", runtime_dir, display)
 		};
 
-		let socket = UnixStream::connect(&socket_path)?;
+		let socket = UnixStream::connect(&socket_path)
+			.map_err(|i| io::Error::new(i.kind(), format!("failed to connect to socket {}: {}", socket_path, i)))?;
 		let mut conn = WaylandConnection::new(socket);
 		let registry_id: u32 = 2;
 		let mut next_obj_id = ObjectId(3);
@@ -70,6 +77,7 @@ impl WaylandContext {
 			keyboard_focus: None,
 			mouse_focus: None,
 			last_mouse_surface: None,
+			keyboard: Keyboard::new(),
 		})))
 	}
 
@@ -270,4 +278,24 @@ pub enum ContextEvent {
 	Keyboard(KeyboardEvent),
 	Pointer(PointerEvent),
 	Unknown { opcode: u16, payload: Vec<u8> },
+}
+
+pub struct Keyboard {
+	keymap: Option<XkbKeyMap>,
+}
+
+impl Keyboard {
+	pub fn new() -> Self {
+		Self { keymap: None }
+	}
+
+	pub fn set_keymap(&mut self, src_fd: &OwnedFd) -> io::Result<()> {
+		let cloned_fd = src_fd.try_clone()?;
+		let mut file = std::fs::File::from(cloned_fd);
+		let mut contents = String::new();
+		file.read_to_string(&mut contents)?;
+		println!("Received keymap:\n{}", contents);
+		self.keymap = Some(XkbKeyMap::from_str(&contents).map_err(io::Error::other)?);
+		Ok(())
+	}
 }
