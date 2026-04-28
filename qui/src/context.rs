@@ -2,11 +2,8 @@ use std::{
 	cell::RefCell,
 	collections::{HashMap, VecDeque},
 	env,
-	io::{self, Cursor, Read},
-	os::{
-		fd::{AsRawFd, FromRawFd, OwnedFd},
-		unix::net::UnixStream,
-	},
+	io::{self, Cursor},
+	os::{fd::OwnedFd, unix::net::UnixStream},
 	rc::Rc,
 };
 
@@ -22,7 +19,7 @@ use wayland::{
 	xdg_wm_base::{PongRequest, XdgWmBaseEvent},
 };
 
-use crate::xkb::XkbKeyMap;
+use crate::keyboard::Keyboard;
 
 pub struct WaylandContext {
 	pub(crate) conn: WaylandConnection,
@@ -127,18 +124,24 @@ impl WaylandContext {
 		if packet.object_id == self.keyboard_id
 			&& let Some(event) = KeyboardEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
 		{
+			let mut resolved_keysym = None;
 			match &event {
 				KeyboardEvent::KeyMap(_) => {} // fd already consumed by parse, nothing to route
 				KeyboardEvent::Enter(e) => self.keyboard_focus = Some(e.surface_id),
+				KeyboardEvent::Key(e) => {
+					resolved_keysym = self.keyboard.handle_event(e.key, e.state == 1);
+				}
+				KeyboardEvent::Modifiers(e) => {
+					self.keyboard.set_raw_modifiers(e.depressed, e.latched, e.locked);
+				}
 				KeyboardEvent::Leave(_) => self.keyboard_focus = None,
-				_ => {}
 			}
 
 			if let Some(focus) = self.keyboard_focus {
 				self.events
 					.entry(focus)
 					.or_default()
-					.push_back(ContextEvent::Keyboard(event));
+					.push_back(ContextEvent::Keyboard(event, resolved_keysym));
 			}
 		} else if packet.object_id == self.pointer_id
 			&& let Some(event) = PointerEvent::parse(packet.opcode, &packet.payload, &mut self.fds)
@@ -275,27 +278,7 @@ fn bind_globals(
 
 #[derive(Debug)]
 pub enum ContextEvent {
-	Keyboard(KeyboardEvent),
+	Keyboard(KeyboardEvent, Option<crate::xkb::KeySym>),
 	Pointer(PointerEvent),
 	Unknown { opcode: u16, payload: Vec<u8> },
-}
-
-pub struct Keyboard {
-	keymap: Option<XkbKeyMap>,
-}
-
-impl Keyboard {
-	pub fn new() -> Self {
-		Self { keymap: None }
-	}
-
-	pub fn set_keymap(&mut self, src_fd: &OwnedFd) -> io::Result<()> {
-		let cloned_fd = src_fd.try_clone()?;
-		let mut file = std::fs::File::from(cloned_fd);
-		let mut contents = String::new();
-		file.read_to_string(&mut contents)?;
-		println!("Received keymap:\n{}", contents);
-		self.keymap = Some(XkbKeyMap::from_str(&contents).map_err(io::Error::other)?);
-		Ok(())
-	}
 }

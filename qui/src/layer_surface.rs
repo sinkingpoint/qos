@@ -173,12 +173,13 @@ impl LayerSurface {
 				}
 				_ => {}
 			}
-		} else if let ContextEvent::Keyboard(keyboard_event) = event {
+		} else if let ContextEvent::Keyboard(keyboard_event, resolved_keysym) = event {
 			if let KeyboardEvent::Key(event) = keyboard_event {
 				self.last_interaction_serial = Some(event.serial);
 				return Ok(Some(AppEvent::Keyboard {
 					keycode: event.key,
 					pressed: event.state != 0,
+					keysym: resolved_keysym,
 				}));
 			}
 		} else if matches!(event, ContextEvent::Unknown { opcode: ConfigureEvent::OPCODE, .. } if object_id == self.layer_surface_id)

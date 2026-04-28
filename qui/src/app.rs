@@ -75,11 +75,11 @@ impl App {
 			let packet = context.conn.recv_packet()?;
 			if packet.object_id == context.keyboard_id && packet.opcode == wayland::keyboard::KeyMapEvent::OPCODE {
 				// Handle keymap immediately since the keyboard won't send any other events until we do
-				let fds = context.conn.drain_fds();
+				let mut fds = context.conn.drain_fds();
 				if fds.is_empty() {
 					return Err(io::Error::other("Expected fd for keymap event"));
 				}
-				context.keyboard.set_keymap(&fds[0])?;
+				context.keyboard.load_configuration(fds.remove(0))?;
 				continue;
 			}
 
@@ -198,12 +198,13 @@ impl App {
 				}
 				_ => {}
 			}
-		} else if let ContextEvent::Keyboard(keyboard_event) = event {
+		} else if let ContextEvent::Keyboard(keyboard_event, resolved_keysym) = event {
 			if let KeyboardEvent::Key(event) = keyboard_event {
 				self.last_interaction_serial = Some(event.serial);
 				return Ok(Some(AppEvent::Keyboard {
 					keycode: event.key,
 					pressed: event.state != 0,
+					keysym: resolved_keysym,
 				}));
 			}
 		} else if matches!(event, ContextEvent::Unknown { opcode: ConfigureEvent::OPCODE, .. } if object_id == self.xdg_surface_id)
@@ -269,9 +270,21 @@ impl App {
 #[derive(Clone)]
 pub enum AppEvent {
 	RenderReady,
-	Keyboard { keycode: u32, pressed: bool },
-	PointerMotion { x: i32, y: i32 },
-	PointerButton { button: u32, pressed: bool, x: i32, y: i32 },
+	Keyboard {
+		keycode: u32,
+		pressed: bool,
+		keysym: Option<crate::xkb::KeySym>,
+	},
+	PointerMotion {
+		x: i32,
+		y: i32,
+	},
+	PointerButton {
+		button: u32,
+		pressed: bool,
+		x: i32,
+		y: i32,
+	},
 	Close,
 }
 
@@ -289,20 +302,6 @@ impl TryFrom<PointerEvent> for AppEvent {
 				pressed: event.state != 0,
 				x: 0,
 				y: 0,
-			}),
-			_ => Err(()),
-		}
-	}
-}
-
-impl TryFrom<KeyboardEvent> for AppEvent {
-	type Error = ();
-
-	fn try_from(event: KeyboardEvent) -> Result<Self, Self::Error> {
-		match event {
-			KeyboardEvent::Key(event) => Ok(AppEvent::Keyboard {
-				keycode: event.key,
-				pressed: event.state != 0,
 			}),
 			_ => Err(()),
 		}

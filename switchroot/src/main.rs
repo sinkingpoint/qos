@@ -13,6 +13,7 @@ fn create_device_folders() {
 		("/sys", "sysfs"),
 		("/run", "tmpfs"),
 		("/tmp", "tmpfs"),
+		("/dev/pts", "devpts"),
 	];
 	for (folder, devtype) in device_folders {
 		create_dir_all(folder).unwrap();

@@ -605,6 +605,10 @@ impl Client {
 					if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
 						surface.role_id = Some(id);
 					}
+				} else if let SubsystemType::XdgSurface(xdg_surface) = &obj {
+					if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&xdg_surface.surface_id) {
+						surface.role_id = Some(id);
+					}
 				} else if let SubsystemType::XdgTopLevel(x) = &obj
 					&& let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get(&x.xdg_surface)
 					&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&xdg_surface.surface_id)
@@ -701,6 +705,64 @@ impl Client {
 				}
 
 				if was_mapped && !layer_surface.mapped {
+					return Ok(Some(CompositorClientEvent::CloseWindow(object_id)));
+				}
+			} else if let Some((role_id, has_buffer)) = role_info {
+				let top_level_id = self.objects.iter().find_map(|(id, obj)| {
+					if let SubsystemType::XdgTopLevel(top_level) = obj
+						&& top_level.xdg_surface == role_id
+					{
+						Some(*id)
+					} else {
+						None
+					}
+				});
+
+				let xdg_state = if let Some(SubsystemType::XdgSurface(xdg_surface)) = self.objects.get_mut(&role_id) {
+					let now_mapped = xdg_surface.configured && has_buffer && top_level_id.is_some();
+					let was_mapped = xdg_surface.mapped;
+					xdg_surface.mapped = now_mapped;
+					Some((was_mapped, now_mapped))
+				} else {
+					None
+				};
+
+				let Some((was_mapped, now_mapped)) = xdg_state else {
+					return Ok(None);
+				};
+
+				if !was_mapped
+					&& now_mapped && let Some(top_level_id) = top_level_id
+					&& let Some(SubsystemType::Surface(surface)) = self.objects.get(&object_id)
+					&& let Some((buffer_id, _, _)) = surface.attached_buffer
+					&& let Some(SubsystemType::Buffer(buffer)) = self.objects.get(&buffer_id)
+				{
+					let reflows = self.layout_manager.borrow_mut().new_window(
+						top_level_id,
+						Rectangle {
+							x: 0,
+							y: 0,
+							width: buffer.width,
+							height: buffer.height,
+						},
+					);
+					self.reflow(reflows);
+
+					if let Some(SubsystemType::XdgTopLevel(top_level)) = self.objects.get(&top_level_id) {
+						return Ok(Some(CompositorClientEvent::NewWindow(
+							object_id,
+							top_level.x,
+							top_level.y,
+							LayerRequest::Unset,
+						)));
+					}
+				}
+
+				if was_mapped
+					&& !now_mapped && let Some(top_level_id) = top_level_id
+				{
+					let reflows = self.layout_manager.borrow_mut().remove_window(top_level_id);
+					self.reflow(reflows);
 					return Ok(Some(CompositorClientEvent::CloseWindow(object_id)));
 				}
 			}

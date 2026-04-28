@@ -11,6 +11,7 @@ binaries:
   - ./target/x86_64-unknown-linux-musl/debug/netc
   - ./target/x86_64-unknown-linux-musl/debug/wl-test
   - ./target/x86_64-unknown-linux-musl/debug/desktop
+  - ./target/x86_64-unknown-linux-musl/debug/terminal
 secure_binaries:
   - ./target/x86_64-unknown-linux-musl/debug/qinit
   - ./target/x86_64-unknown-linux-musl/debug/loggerd

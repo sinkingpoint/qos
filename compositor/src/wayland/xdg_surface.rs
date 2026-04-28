@@ -14,6 +14,7 @@ pub struct XDGSurface {
 	pub surface_id: u32,
 	pub pending_configure: Option<u32>,
 	pub configured: bool,
+	pub mapped: bool,
 	pub next_configure_serial: u32,
 }
 
@@ -24,6 +25,7 @@ impl XDGSurface {
 			surface_id,
 			pending_configure: None,
 			configured: false,
+			mapped: false,
 			next_configure_serial: 1,
 		}
 	}

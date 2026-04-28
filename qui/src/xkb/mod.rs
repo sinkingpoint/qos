@@ -1,13 +1,15 @@
+mod keysym;
+pub use keysym::KeySym;
 use std::collections::HashMap;
 
 use thiserror::Error;
 
 pub struct XkbKeyCodes {
-	minimum: u32,
-	maximum: u32,
-	keys: Vec<(String, u32)>,
-	aliases: HashMap<String, String>,
-	indicator: HashMap<u32, String>,
+	pub minimum: u32,
+	pub maximum: u32,
+	pub keys: Vec<(String, u32)>,
+	pub aliases: HashMap<String, String>,
+	pub indicator: HashMap<u32, String>,
 }
 
 impl XkbKeyCodes {
@@ -19,12 +21,10 @@ impl XkbKeyCodes {
 		let mut aliases = HashMap::new();
 		let mut indicator = HashMap::new();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
 			if lexer.consume_literal("minimum") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -32,7 +32,6 @@ impl XkbKeyCodes {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let minimum_str = lexer.consume_int();
 				minimum = Some(minimum_str.parse().map_err(|_| {
 					XkbError::ExpectedInt(
@@ -41,7 +40,6 @@ impl XkbKeyCodes {
 						minimum_str.to_string(),
 					)
 				})?);
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -50,7 +48,6 @@ impl XkbKeyCodes {
 					));
 				}
 			} else if lexer.consume_literal("maximum") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -58,7 +55,6 @@ impl XkbKeyCodes {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let maximum_str = lexer.consume_int();
 				maximum = Some(maximum_str.parse().map_err(|_| {
 					XkbError::ExpectedInt(
@@ -67,7 +63,6 @@ impl XkbKeyCodes {
 						maximum_str.to_string(),
 					)
 				})?);
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -87,7 +82,6 @@ impl XkbKeyCodes {
 
 				let value = lexer.consume_until(|c| c == ';').trim().to_string();
 				aliases.insert(name, value);
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -97,7 +91,6 @@ impl XkbKeyCodes {
 				}
 			} else if lexer.consume_literal("indicator") {
 				// 6= "foo"
-				lexer.skip_whitespace();
 				let indicator_index_str = lexer.consume_int();
 				let indicator_index = indicator_index_str.parse().map_err(|_| {
 					XkbError::ExpectedInt(
@@ -107,7 +100,6 @@ impl XkbKeyCodes {
 					)
 				})?;
 
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -116,10 +108,8 @@ impl XkbKeyCodes {
 					));
 				}
 
-				lexer.skip_whitespace();
 				let indicator_name = lexer.consume_until(|c| c == ';').trim_matches('"').to_string();
 				indicator.insert(indicator_index, indicator_name);
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -136,7 +126,6 @@ impl XkbKeyCodes {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let key_code_str = lexer.consume_int();
 				let key_code = key_code_str.parse().map_err(|_| {
 					XkbError::ExpectedInt(
@@ -146,7 +135,6 @@ impl XkbKeyCodes {
 					)
 				})?;
 				keys.push((key_name, key_code));
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -170,14 +158,11 @@ impl XkbKeyCodes {
 		})
 	}
 }
-
-// modifiers = none; level_name[1] = "Any";
-// modifiers = Shift+Lock; map[Shift] = 2; map[Lock] = 2; preserve[Lock] = Lock; level_name[1] = "Base"; level_name[2] = "Caps";
 pub struct XKBType {
-	modifiers: Vec<String>,
-	map: Vec<(String, u32)>,
-	preserve: Vec<(String, String)>,
-	level_names: Vec<String>,
+	pub modifiers: Vec<String>,
+	pub map: Vec<(String, u32)>,
+	pub preserve: Vec<(String, String)>,
+	pub level_names: Vec<String>,
 }
 
 impl XKBType {
@@ -188,14 +173,11 @@ impl XKBType {
 		let mut preserve = Vec::new();
 		let mut level_names = Vec::new();
 
-		lexer.skip_whitespace();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
 			if lexer.consume_literal("modifiers") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -203,13 +185,11 @@ impl XKBType {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				modifiers = lexer
 					.consume_until(|c| c == ';')
 					.split('+')
 					.map(|s| s.trim().to_string())
 					.collect();
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -218,7 +198,6 @@ impl XKBType {
 					));
 				}
 			} else if lexer.consume_literal("map") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("[") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -226,7 +205,6 @@ impl XKBType {
 						"[".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let modifier_name = lexer.consume_until(|c| c == ']').trim().to_string();
 				if !lexer.consume_literal("]") {
 					return Err(XkbError::ExpectedLiteral(
@@ -236,7 +214,6 @@ impl XKBType {
 					));
 				}
 
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -244,13 +221,11 @@ impl XKBType {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let level_str = lexer.consume_int();
 				let level = level_str.parse().map_err(|_| {
 					XkbError::ExpectedInt(lexer.position(), "type map level".to_string(), level_str.to_string())
 				})?;
 				map.push((modifier_name, level));
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -259,7 +234,6 @@ impl XKBType {
 					));
 				}
 			} else if lexer.consume_literal("preserve") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("[") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -267,7 +241,6 @@ impl XKBType {
 						"[".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let modifier_name = lexer.consume_until(|c| c == ']').trim().to_string();
 				if !lexer.consume_literal("]") {
 					return Err(XkbError::ExpectedLiteral(
@@ -277,7 +250,6 @@ impl XKBType {
 					));
 				}
 
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -285,10 +257,8 @@ impl XKBType {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let preserve_type = lexer.consume_until(|c| c == ';').trim().to_string();
 				preserve.push((modifier_name, preserve_type));
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -319,7 +289,6 @@ impl XKBType {
 						"]".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -327,13 +296,11 @@ impl XKBType {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let level_name = lexer.consume_until(|c| c == ';').trim_matches('"').to_string();
 				if level_names.len() < level_index {
 					level_names.resize(level_index, String::new());
 				}
 				level_names[level_index - 1] = level_name;
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -348,7 +315,6 @@ impl XKBType {
 					format!("Unknown field: {}", lexer.consume_while(|_| true)),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 
 		Ok(Self {
@@ -361,12 +327,16 @@ impl XKBType {
 }
 
 // action = SetMods(modifiers=Shift);
-pub struct XKBCompatEntry {
-	action: String,
-	args: HashMap<String, String>,
+pub struct XkbCompatEntry {
+	pub selector: Option<CompatSelector>,
+	pub virtual_modifier: Option<String>,
+	pub use_mod_maps: Option<String>,
+	pub repeat: Option<String>,
+	pub action: String,
+	pub args: HashMap<String, String>,
 }
 
-impl XKBCompatEntry {
+impl XkbCompatEntry {
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
 		let mut action = None;
@@ -374,10 +344,8 @@ impl XKBCompatEntry {
 		let mut virtual_modifier = None;
 		let mut use_mod_maps = None;
 		let mut repeat = None;
-		lexer.skip_whitespace();
 		while lexer.has_more() {
 			if lexer.consume_literal("useModMapMods") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -385,9 +353,7 @@ impl XKBCompatEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				use_mod_maps = Some(lexer.consume_until(|c| c == ';').trim().to_string());
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -396,7 +362,6 @@ impl XKBCompatEntry {
 					));
 				}
 			} else if lexer.consume_literal("repeat") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -404,9 +369,7 @@ impl XKBCompatEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				repeat = Some(lexer.consume_until(|c| c == ';').trim().to_string());
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -415,7 +378,6 @@ impl XKBCompatEntry {
 					));
 				}
 			} else if lexer.consume_literal("virtualModifier") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -423,9 +385,7 @@ impl XKBCompatEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				virtual_modifier = Some(lexer.consume_until(|c| c == ';').trim().to_string());
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -434,7 +394,6 @@ impl XKBCompatEntry {
 					));
 				}
 			} else if lexer.consume_literal("action") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -442,7 +401,6 @@ impl XKBCompatEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				let action_str = lexer.consume_until(|c| c == '(' || c == ';').trim().to_string();
 				let action_args = if lexer.consume_literal("(") {
 					let args_str = lexer.consume_until(|c| c == ')');
@@ -466,7 +424,6 @@ impl XKBCompatEntry {
 					HashMap::new()
 				};
 
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(")") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -475,7 +432,6 @@ impl XKBCompatEntry {
 					));
 				}
 
-				lexer.skip_whitespace();
 				if !lexer.consume_literal(";") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -493,10 +449,10 @@ impl XKBCompatEntry {
 					format!("virtualModifier, useModMaps, repeat, or action, got '{}'", next),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 
 		Ok(Self {
+			selector: None,
 			action: action.ok_or_else(|| {
 				XkbError::ExpectedLiteral(
 					lexer.position(),
@@ -505,94 +461,133 @@ impl XKBCompatEntry {
 				)
 			})?,
 			args,
+			virtual_modifier,
+			use_mod_maps,
+			repeat,
 		})
 	}
 }
 
 pub struct XKBSymbolsKey {
-	type_name: Option<String>,
-	symbols: Vec<String>,
+	pub type_name: Option<String>,
+	pub symbols: Vec<KeySym>,
+	pub grouped_symbols: HashMap<String, Vec<KeySym>>,
 }
 
-//  type="TWO_LEVEL", [ 1, exclam ]
-//  [ Escape ]
 impl XKBSymbolsKey {
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
 		let mut type_name = None;
 		let mut symbols = Vec::new();
-		lexer.skip_whitespace();
-		if lexer.consume_literal("type") {
-			lexer.skip_whitespace();
-			if !lexer.consume_literal("=") {
-				return Err(XkbError::ExpectedLiteral(
-					lexer.position(),
-					"symbols key type".to_string(),
-					"=".to_string(),
-				));
-			}
-
-			lexer.skip_whitespace();
-			if !lexer.consume_literal("\"") {
-				return Err(XkbError::ExpectedLiteral(
-					lexer.position(),
-					"symbols key type".to_string(),
-					"\"".to_string(),
-				));
-			}
-
-			let type_name_str = lexer.consume_until(|c| c == '"');
-			type_name = Some(type_name_str.to_string());
-			if !lexer.consume_literal("\"") {
-				return Err(XkbError::ExpectedLiteral(
-					lexer.position(),
-					"symbols key type".to_string(),
-					"\"".to_string(),
-				));
-			}
-			lexer.skip_whitespace();
-			if !lexer.consume_literal(",") {
-				return Err(XkbError::ExpectedLiteral(
-					lexer.position(),
-					"symbols key type".to_string(),
-					",".to_string(),
-				));
-			}
-		}
-
-		lexer.skip_whitespace();
-		if !lexer.consume_literal("[") {
-			return Err(XkbError::ExpectedLiteral(
-				lexer.position(),
-				"symbols key type".to_string(),
-				"[".to_string(),
-			));
-		}
-
+		let mut grouped_symbols = HashMap::new();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
-			let symbol = lexer.consume_until(|c| c == ',' || c == ']').trim().to_string();
-			symbols.push(symbol);
-			lexer.skip_whitespace();
-			if lexer.consume_literal(",") {
-				continue;
-			} else if lexer.consume_literal("]") {
-				break;
+			if lexer.consume_literal("type") {
+				if !lexer.consume_literal("=") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key type".to_string(),
+						"=".to_string(),
+					));
+				}
+
+				if !lexer.consume_literal("\"") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key type".to_string(),
+						"\"".to_string(),
+					));
+				}
+
+				let type_name_str = lexer.consume_until(|c| c == '"');
+				type_name = Some(type_name_str.to_string());
+				if !lexer.consume_literal("\"") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key type".to_string(),
+						"\"".to_string(),
+					));
+				}
+				if !lexer.consume_literal(",") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key type".to_string(),
+						",".to_string(),
+					));
+				}
+			}
+
+			let group_name = if lexer.consume_literal("symbols[") {
+				let group_name = lexer.consume_until(|c| c == ']').trim().to_string();
+				if !lexer.consume_literal("]") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key group".to_string(),
+						"]".to_string(),
+					));
+				}
+				if !lexer.consume_literal("=") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key group".to_string(),
+						"=".to_string(),
+					));
+				}
+				Some(group_name)
+			} else {
+				None
+			};
+
+			let mut current_symbols = Vec::new();
+			if let Some(block) = lexer.consume_until_matching('[', ']') {
+				for symbol in block.split(',') {
+					let symbol = symbol.trim();
+					let key_sym = KeySym::from_name(symbol)
+						.or_else(|| {
+							// Support Unicode literal names like U2039/U00002039.
+							symbol
+								.strip_prefix('U')
+								.and_then(|hex| u32::from_str_radix(hex, 16).ok())
+								.and_then(|cp| 0x0100_0000u32.checked_add(cp))
+								.and_then(|ks| KeySym::try_from(ks).ok())
+						})
+						.ok_or_else(|| {
+							XkbError::ExpectedLiteral(
+								lexer.position(),
+								"symbols key symbols".to_string(),
+								format!("valid KeySym, got '{}'", symbol),
+							)
+						})?;
+					current_symbols.push(key_sym);
+				}
 			} else {
 				return Err(XkbError::ExpectedLiteral(
 					lexer.position(),
-					"symbols key".to_string(),
-					", or ]".to_string(),
+					"symbols key symbols".to_string(),
+					"symbols block".to_string(),
 				));
+			}
+
+			if let Some(name) = group_name {
+				grouped_symbols.insert(name, current_symbols);
+			} else {
+				symbols = current_symbols;
+			}
+
+			if !lexer.consume_literal(",") {
+				break;
 			}
 		}
 
-		Ok(Self { type_name, symbols })
+		Ok(Self {
+			type_name,
+			symbols,
+			grouped_symbols,
+		})
 	}
 }
 
 pub struct XkbSymbolsModifierMap {
-	keys: Vec<String>,
+	pub keys: Vec<String>,
 }
 
 impl XkbSymbolsModifierMap {
@@ -600,13 +595,11 @@ impl XkbSymbolsModifierMap {
 		let mut lexer = Lexer::new(input);
 		let mut keys = Vec::new();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
 			let key = lexer.consume_until(|c| c == ',' || c == ';').trim().to_string();
 			keys.push(key);
-			lexer.skip_whitespace();
 			if !lexer.consume_literal(",") {
 				break;
 			}
@@ -617,23 +610,50 @@ impl XkbSymbolsModifierMap {
 }
 
 pub struct XkbSymbols {
-	keys: HashMap<String, XKBSymbolsKey>,
-	modifier_maps: HashMap<String, XkbSymbolsModifierMap>,
+	pub keys: HashMap<String, XKBSymbolsKey>,
+	pub modifier_maps: HashMap<String, XkbSymbolsModifierMap>,
+	pub names: HashMap<String, String>,
 }
 
 // key <CAPS> { [ Caps_Lock ] };
 // modifier_map Shift   { <LFSH>, <RTSH> };
 impl XkbSymbols {
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
+		let mut names = HashMap::new();
 		let mut lexer = Lexer::new(input);
 		let mut keys = HashMap::new();
 		let mut modifier_maps = HashMap::new();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
-			if lexer.consume_literal("key") {
+			if lexer.consume_literal("name") {
+				// name[Group2] = "English (Australia)";
+				if !lexer.consume_literal("[") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols name".to_string(),
+						"[".to_string(),
+					));
+				}
+				let name_key = lexer.consume_until(|c| c == ']').trim().to_string();
+				if !lexer.consume_literal("]") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols name".to_string(),
+						"]".to_string(),
+					));
+				}
+				if !lexer.consume_literal("=") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols name".to_string(),
+						"=".to_string(),
+					));
+				}
+				let name_value = lexer.consume_until(|c| c == ';').trim_matches('"').to_string();
+				names.insert(name_key, name_value);
+			} else if lexer.consume_literal("key") {
 				let name = lexer.consume_until(|c| c == '{').trim().to_string();
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(lexer.position(), "key block".to_string(), "key block".to_string())
@@ -666,40 +686,31 @@ impl XkbSymbols {
 					";".to_string(),
 				));
 			}
-			lexer.skip_whitespace();
 		}
-		Ok(Self { keys, modifier_maps })
+		Ok(Self {
+			keys,
+			modifier_maps,
+			names,
+		})
 	}
 }
 
-pub struct XKBCompatIndicatorEntry {
-	which_mod_state: Option<String>,
-	modifiers: Vec<String>,
-	groups: Option<u32>,
-	controls: Vec<String>,
+pub struct XkbCompatIndicatorEntry {
+	pub which_mod_state: Option<String>,
+	pub modifiers: Vec<String>,
+	pub groups: Option<u32>,
+	pub controls: Vec<String>,
 }
 
-impl XKBCompatIndicatorEntry {
-	//  indicator "Shift Lock" {
-	//               whichModState= locked;
-	//               modifiers= Shift;
-	//       };
-	//       indicator "Group 2" {
-	//               groups= 0xfe;
-	//       };
-	//       indicator "Mouse Keys" {
-	//               controls= MouseKeys;
-	//       };
+impl XkbCompatIndicatorEntry {
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
 		let mut which_mod_state = None;
 		let mut modifiers = Vec::new();
 		let mut groups = None;
 		let mut controls = Vec::new();
-		lexer.skip_whitespace();
 		while lexer.has_more() {
 			if lexer.consume_literal("whichModState") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -707,10 +718,8 @@ impl XKBCompatIndicatorEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				which_mod_state = Some(lexer.consume_until(|c| c == ';').trim().to_string());
 			} else if lexer.consume_literal("modifiers") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -718,14 +727,12 @@ impl XKBCompatIndicatorEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				modifiers = lexer
 					.consume_until(|c| c == ';')
 					.split('+')
 					.map(|s| s.trim().to_string())
 					.collect();
 			} else if lexer.consume_literal("groups") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -743,7 +750,6 @@ impl XKBCompatIndicatorEntry {
 					XkbError::ExpectedInt(lexer.position(), "compat indicator groups".to_string(), groups_str)
 				})?);
 			} else if lexer.consume_literal("controls") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -751,7 +757,6 @@ impl XKBCompatIndicatorEntry {
 						"=".to_string(),
 					));
 				}
-				lexer.skip_whitespace();
 				controls = lexer
 					.consume_until(|c| c == ';')
 					.split('+')
@@ -765,7 +770,6 @@ impl XKBCompatIndicatorEntry {
 					format!("whichModState, modifiers, groups, or controls, found '{}'", next),
 				));
 			}
-			lexer.skip_whitespace();
 			if !lexer.consume_literal(";") {
 				return Err(XkbError::ExpectedLiteral(
 					lexer.position(),
@@ -773,7 +777,6 @@ impl XKBCompatIndicatorEntry {
 					";".to_string(),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 
 		Ok(Self {
@@ -785,25 +788,90 @@ impl XKBCompatIndicatorEntry {
 	}
 }
 
+#[derive(Debug)]
+pub struct CompatSelector {
+	pub name: String,
+	pub selector_func: Option<String>,
+	pub selector_args: Option<Vec<String>>,
+}
+
+impl CompatSelector {
+	// ISO_Level3_Lock+AnyOfOrNone(all)
+	pub fn parse(input: &str) -> Result<Self, XkbError> {
+		let input = input.trim();
+		if input.is_empty() {
+			return Err(XkbError::ExpectedLiteral(
+				0,
+				"compat selector".to_string(),
+				"selector name".to_string(),
+			));
+		}
+
+		let (name, selector_part) = match input.split_once('+') {
+			Some((name, selector_part)) => (name.trim().to_string(), Some(selector_part.trim())),
+			None => (input.to_string(), None),
+		};
+
+		if name.is_empty() {
+			return Err(XkbError::ExpectedLiteral(
+				0,
+				"compat selector".to_string(),
+				"selector name".to_string(),
+			));
+		}
+
+		let mut selector_func = None;
+		let mut selector_args = None;
+		if let Some(selector_part) = selector_part
+			&& let Some(func_start) = selector_part.find('(')
+		{
+			if !selector_part.ends_with(')') {
+				return Err(XkbError::ExpectedLiteral(
+					0,
+					"compat selector function".to_string(),
+					"function(args)".to_string(),
+				));
+			}
+
+			selector_func = Some(selector_part[..func_start].trim().to_string());
+			let args_str = &selector_part[func_start + 1..selector_part.len() - 1];
+			selector_args = Some(
+				args_str
+					.split([',', '+'])
+					.map(str::trim)
+					.filter(|s| !s.is_empty())
+					.map(|s| s.to_string())
+					.collect(),
+			);
+		}
+
+		Ok(Self {
+			name,
+			selector_func,
+			selector_args,
+		})
+	}
+}
+
 pub struct XkbCompat {
-	entries: HashMap<String, XKBCompatEntry>,
-	virtual_modifiers: Option<Vec<String>>,
+	pub entries: HashMap<String, Vec<XkbCompatEntry>>,
+	pub virtual_modifiers: Option<Vec<String>>,
+	pub indicators: HashMap<String, XkbCompatIndicatorEntry>,
 }
 
 impl XkbCompat {
 	// interpret Shift_L   { action = SetMods(modifiers=Shift); }
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
-		let mut entries = HashMap::new();
+		let mut entries: HashMap<String, Vec<XkbCompatEntry>> = HashMap::new();
 		let mut virtual_modifiers = None;
 		let mut interpret_args = HashMap::new();
+		let mut indicators = HashMap::new();
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
 			if lexer.consume_literal("virtual_modifiers") {
-				lexer.skip_whitespace();
 				virtual_modifiers = Some(
 					lexer
 						.consume_until(|c| c == ';')
@@ -833,8 +901,14 @@ impl XkbCompat {
 						"interpret block".to_string(),
 					)
 				})?;
-				let compat_entry = XKBCompatEntry::parse(block)?;
-				entries.insert(name, compat_entry);
+				let mut compat_entry = XkbCompatEntry::parse(block)?;
+				let selector = CompatSelector::parse(&name)?;
+				compat_entry.selector = Some(selector);
+				if let Some(entries) = entries.get_mut(&compat_entry.selector.as_ref().unwrap().name) {
+					entries.push(compat_entry);
+				} else {
+					entries.insert(compat_entry.selector.as_ref().unwrap().name.clone(), vec![compat_entry]);
+				}
 			} else if lexer.consume_literal("indicator") {
 				let name = lexer.consume_until(|c| c == '{').trim().to_string();
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
@@ -844,7 +918,8 @@ impl XkbCompat {
 						"indicator block".to_string(),
 					)
 				})?;
-				let compat_entry = XKBCompatIndicatorEntry::parse(block)?;
+				let compat_entry = XkbCompatIndicatorEntry::parse(block)?;
+				indicators.insert(name, compat_entry);
 			} else {
 				return Err(XkbError::ExpectedLiteral(
 					lexer.position(),
@@ -860,20 +935,19 @@ impl XkbCompat {
 					";".to_string(),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 
 		Ok(Self {
 			entries,
 			virtual_modifiers,
+			indicators,
 		})
 	}
 }
 
-// type "ONE_LEVEL"  { modifiers = none; level_name[1] = "Any"; };
 pub struct XkbTypes {
-	types: HashMap<String, XKBType>,
-	virtual_modifiers: Vec<String>,
+	pub types: HashMap<String, XKBType>,
+	pub virtual_modifiers: Option<Vec<String>>,
 }
 
 impl XkbTypes {
@@ -882,7 +956,6 @@ impl XkbTypes {
 		let mut types = HashMap::new();
 		let mut virtual_modifiers = None;
 		while lexer.has_more() {
-			lexer.skip_whitespace();
 			if !lexer.has_more() {
 				break;
 			}
@@ -894,9 +967,7 @@ impl XkbTypes {
 						.map(|s| s.to_owned())
 						.collect(),
 				);
-				lexer.skip_whitespace();
 			} else if lexer.consume_literal("type") {
-				lexer.skip_whitespace();
 				if !lexer.consume_literal("\"") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -913,7 +984,6 @@ impl XkbTypes {
 					));
 				}
 
-				lexer.skip_whitespace();
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(lexer.position(), "type block".to_string(), "type block".to_string())
 				})?;
@@ -934,27 +1004,24 @@ impl XkbTypes {
 					";".to_string(),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 		Ok(Self {
 			types,
-			virtual_modifiers: virtual_modifiers
-				.ok_or_else(|| XkbError::ExpectedLiteral(lexer.position(), "type".to_string(), ";".to_string()))?,
+			virtual_modifiers,
 		})
 	}
 }
 
 pub struct XkbKeyMap {
-	key_codes: XkbKeyCodes,
-	types: XkbTypes,
-	compat: XkbCompat,
-	symbols: XkbSymbols,
+	pub key_codes: XkbKeyCodes,
+	pub types: XkbTypes,
+	pub compat: XkbCompat,
+	pub symbols: XkbSymbols,
 }
 
 impl XkbKeyMap {
 	pub fn from_str(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
-		lexer.skip_whitespace();
 		if !lexer.consume_literal("xkb_keymap") {
 			return Err(XkbError::ExpectedLiteral(
 				lexer.position(),
@@ -962,7 +1029,6 @@ impl XkbKeyMap {
 				"xkb_keymap".to_string(),
 			));
 		}
-		lexer.skip_whitespace();
 		let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 			XkbError::ExpectedLiteral(
 				lexer.position(),
@@ -979,10 +1045,8 @@ impl XkbKeyMap {
 		let mut compat = None;
 		let mut symbols = None;
 		let mut lexer = Lexer::new(input);
-		lexer.skip_whitespace();
 		while lexer.has_more() {
 			if lexer.consume_literal("xkb_keycodes") {
-				lexer.skip_whitespace();
 				if lexer.consume_literal("\"") {
 					// Parse the optional name
 					let _name = lexer.consume_until(|c| c == '"').to_string();
@@ -993,7 +1057,6 @@ impl XkbKeyMap {
 							"\"".to_string(),
 						));
 					}
-					lexer.skip_whitespace();
 				}
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(
@@ -1004,7 +1067,6 @@ impl XkbKeyMap {
 				})?;
 				key_codes = Some(XkbKeyCodes::parse(block)?);
 			} else if lexer.consume_literal("xkb_types") {
-				lexer.skip_whitespace();
 				if lexer.consume_literal("\"") {
 					// Parse the optional name
 					let _name = lexer.consume_until(|c| c == '"').to_string();
@@ -1015,7 +1077,6 @@ impl XkbKeyMap {
 							"\"".to_string(),
 						));
 					}
-					lexer.skip_whitespace();
 				}
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(
@@ -1026,7 +1087,6 @@ impl XkbKeyMap {
 				})?;
 				types = Some(XkbTypes::parse(block)?);
 			} else if lexer.consume_literal("xkb_compatibility") || lexer.consume_literal("xkb_compat") {
-				lexer.skip_whitespace();
 				if lexer.consume_literal("\"") {
 					// Parse the optional name
 					let _name = lexer.consume_until(|c| c == '"').to_string();
@@ -1037,7 +1097,6 @@ impl XkbKeyMap {
 							"\"".to_string(),
 						));
 					}
-					lexer.skip_whitespace();
 				}
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(
@@ -1048,7 +1107,6 @@ impl XkbKeyMap {
 				})?;
 				compat = Some(XkbCompat::parse(block)?);
 			} else if lexer.consume_literal("xkb_symbols") {
-				lexer.skip_whitespace();
 				if lexer.consume_literal("\"") {
 					// Parse the optional name
 					let _name = lexer.consume_until(|c| c == '"').to_string();
@@ -1059,7 +1117,6 @@ impl XkbKeyMap {
 							"\"".to_string(),
 						));
 					}
-					lexer.skip_whitespace();
 				}
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
 					XkbError::ExpectedLiteral(
@@ -1077,7 +1134,6 @@ impl XkbKeyMap {
 				));
 			}
 
-			lexer.skip_whitespace();
 			if !lexer.consume_literal(";") {
 				return Err(XkbError::ExpectedLiteral(
 					lexer.position(),
@@ -1085,7 +1141,6 @@ impl XkbKeyMap {
 					";".to_string(),
 				));
 			}
-			lexer.skip_whitespace();
 		}
 
 		Ok(Self {
@@ -1136,6 +1191,7 @@ impl<'a> Lexer<'a> {
 	}
 
 	fn consume_literal(&mut self, literal: &str) -> bool {
+		self.skip_whitespace();
 		if self.input[self.position..].starts_with(literal) {
 			self.position += literal.len();
 			true
@@ -1145,6 +1201,7 @@ impl<'a> Lexer<'a> {
 	}
 
 	fn consume_while<F: Fn(char) -> bool>(&mut self, condition: F) -> &'a str {
+		self.skip_whitespace();
 		let start = self.position;
 		while let Some(c) = self.peek() {
 			if !condition(c) {
@@ -1156,6 +1213,7 @@ impl<'a> Lexer<'a> {
 	}
 
 	fn consume_until_matching(&mut self, open: char, close: char) -> Option<&'a str> {
+		self.skip_whitespace();
 		if !self.consume_literal(&open.to_string()) {
 			return None;
 		}
@@ -1180,6 +1238,7 @@ impl<'a> Lexer<'a> {
 	}
 
 	fn consume_until<F: Fn(char) -> bool>(&mut self, condition: F) -> &'a str {
+		self.skip_whitespace();
 		let start = self.position;
 		while let Some(c) = self.peek() {
 			if condition(c) {
@@ -1191,16 +1250,20 @@ impl<'a> Lexer<'a> {
 	}
 
 	fn consume_int(&mut self) -> &'a str {
-		self.consume_while(|c| c.is_digit(10))
+		self.consume_while(|c| c.is_ascii_digit())
 	}
 
 	fn skip_whitespace(&mut self) {
-		while self.position < self.input.len() && self.input[self.position..].starts_with(char::is_whitespace) {
-			self.position += 1;
+		while let Some(c) = self.peek() {
+			if !c.is_whitespace() {
+				break;
+			}
+			self.position += c.len_utf8();
 		}
 	}
 
-	fn has_more(&self) -> bool {
+	fn has_more(&mut self) -> bool {
+		self.skip_whitespace();
 		self.position < self.input.len()
 	}
 
@@ -1248,8 +1311,8 @@ mod tests {
 
 	#[test]
 	fn test_xkb_compat_entry() {
-		let input = "action = SetMods(modifiers=Shift)";
-		let compat_entry = super::XKBCompatEntry::parse(input).unwrap();
+		let input = "action = SetMods(modifiers=Shift);";
+		let compat_entry = super::XkbCompatEntry::parse(input).unwrap();
 		assert_eq!(compat_entry.action, "SetMods".to_string());
 		assert_eq!(compat_entry.args.len(), 1);
 		assert_eq!(compat_entry.args.get("modifiers").unwrap(), "Shift");
@@ -1261,14 +1324,14 @@ mod tests {
 		let symbols_entry = super::XKBSymbolsKey::parse(input).unwrap();
 		assert_eq!(symbols_entry.type_name.unwrap(), "TWO_LEVEL".to_string());
 		assert_eq!(symbols_entry.symbols.len(), 2);
-		assert_eq!(symbols_entry.symbols[0], "1".to_string());
-		assert_eq!(symbols_entry.symbols[1], "exclam".to_string());
+		assert_eq!(symbols_entry.symbols[0].name(), "1".to_string());
+		assert_eq!(symbols_entry.symbols[1].name(), "exclam".to_string());
 
 		let input2 = "[ Escape ]";
 		let symbols_entry2 = super::XKBSymbolsKey::parse(input2).unwrap();
 		assert!(symbols_entry2.type_name.is_none());
 		assert_eq!(symbols_entry2.symbols.len(), 1);
-		assert_eq!(symbols_entry2.symbols[0], "Escape".to_string());
+		assert_eq!(symbols_entry2.symbols[0].name(), "Escape".to_string());
 	}
 
 	#[test]
@@ -1292,7 +1355,7 @@ mod tests {
 		let caps_key = symbols.keys.get("<CAPS>").unwrap();
 		assert!(caps_key.type_name.is_none());
 		assert_eq!(caps_key.symbols.len(), 1);
-		assert_eq!(caps_key.symbols[0], "Caps_Lock".to_string());
+		assert_eq!(caps_key.symbols[0].name(), "Caps_Lock".to_string());
 
 		assert_eq!(symbols.modifier_maps.len(), 1);
 		assert!(symbols.modifier_maps.contains_key("Shift"));
@@ -1312,7 +1375,7 @@ mod tests {
 		let compat = super::XkbCompat::parse(input).unwrap();
 		assert_eq!(compat.entries.len(), 3);
 		assert!(compat.entries.contains_key("Shift_L"));
-		let entry = compat.entries.get("Shift_L").unwrap();
+		let entry = compat.entries.get("Shift_L").unwrap().first().unwrap();
 		assert_eq!(entry.action, "SetMods".to_string());
 		assert_eq!(entry.args.len(), 1);
 		assert_eq!(entry.args.get("modifiers").unwrap(), "Shift");
@@ -1348,7 +1411,7 @@ mod tests {
 
 	#[test]
 	fn test_xkb_keymap_qwerty() {
-		let input = include_str!("../testdata/xkb/qwerty.txt");
+		let input = include_str!("../../testdata/xkb/qwerty.txt");
 
 		let keymap = super::XkbKeyMap::from_str(input).unwrap();
 		assert_eq!(keymap.key_codes.minimum, 8);
@@ -1372,7 +1435,7 @@ mod tests {
 
 	#[test]
 	fn test_xkb_keymap_weston() {
-		let input = include_str!("../testdata/xkb/weston.txt");
+		let input = include_str!("../../testdata/xkb/weston.txt");
 		let keymap = super::XkbKeyMap::from_str(input).unwrap();
 	}
 }
