@@ -468,8 +468,10 @@ impl XkbCompatEntry {
 	}
 }
 
+#[derive(Debug)]
 pub struct XKBSymbolsKey {
 	pub type_name: Option<String>,
+	pub grouped_type_names: HashMap<String, String>,
 	pub symbols: Vec<KeySym>,
 	pub grouped_symbols: HashMap<String, Vec<KeySym>>,
 }
@@ -478,10 +480,25 @@ impl XKBSymbolsKey {
 	pub fn parse(input: &str) -> Result<Self, XkbError> {
 		let mut lexer = Lexer::new(input);
 		let mut type_name = None;
+		let mut grouped_type_names = HashMap::new();
 		let mut symbols = Vec::new();
 		let mut grouped_symbols = HashMap::new();
 		while lexer.has_more() {
 			if lexer.consume_literal("type") {
+				let type_group = if lexer.consume_literal("[") {
+					let group_name = lexer.consume_until(|c| c == ']').trim().to_string();
+					if !lexer.consume_literal("]") {
+						return Err(XkbError::ExpectedLiteral(
+							lexer.position(),
+							"symbols key type".to_string(),
+							"]".to_string(),
+						));
+					}
+					Some(group_name)
+				} else {
+					None
+				};
+
 				if !lexer.consume_literal("=") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -499,7 +516,11 @@ impl XKBSymbolsKey {
 				}
 
 				let type_name_str = lexer.consume_until(|c| c == '"');
-				type_name = Some(type_name_str.to_string());
+				if let Some(group_name) = type_group {
+					grouped_type_names.insert(group_name, type_name_str.to_string());
+				} else {
+					type_name = Some(type_name_str.to_string());
+				}
 				if !lexer.consume_literal("\"") {
 					return Err(XkbError::ExpectedLiteral(
 						lexer.position(),
@@ -508,12 +529,9 @@ impl XKBSymbolsKey {
 					));
 				}
 				if !lexer.consume_literal(",") {
-					return Err(XkbError::ExpectedLiteral(
-						lexer.position(),
-						"symbols key type".to_string(),
-						",".to_string(),
-					));
+					break;
 				}
+				continue;
 			}
 
 			let group_name = if lexer.consume_literal("symbols[") {
@@ -580,6 +598,7 @@ impl XKBSymbolsKey {
 
 		Ok(Self {
 			type_name,
+			grouped_type_names,
 			symbols,
 			grouped_symbols,
 		})
@@ -611,6 +630,8 @@ impl XkbSymbolsModifierMap {
 
 pub struct XkbSymbols {
 	pub keys: HashMap<String, XKBSymbolsKey>,
+	pub key_type_name: Option<String>,
+	pub grouped_key_type_names: HashMap<String, String>,
 	pub modifier_maps: HashMap<String, XkbSymbolsModifierMap>,
 	pub names: HashMap<String, String>,
 }
@@ -622,6 +643,8 @@ impl XkbSymbols {
 		let mut names = HashMap::new();
 		let mut lexer = Lexer::new(input);
 		let mut keys = HashMap::new();
+		let mut key_type_name = None;
+		let mut grouped_key_type_names = HashMap::new();
 		let mut modifier_maps = HashMap::new();
 		while lexer.has_more() {
 			if !lexer.has_more() {
@@ -653,6 +676,51 @@ impl XkbSymbols {
 				}
 				let name_value = lexer.consume_until(|c| c == ';').trim_matches('"').to_string();
 				names.insert(name_key, name_value);
+			} else if lexer.consume_literal("key.type") {
+				let group_name = if lexer.consume_literal("[") {
+					let group_name = lexer.consume_until(|c| c == ']').trim().to_string();
+					if !lexer.consume_literal("]") {
+						return Err(XkbError::ExpectedLiteral(
+							lexer.position(),
+							"symbols key.type".to_string(),
+							"]".to_string(),
+						));
+					}
+					Some(group_name)
+				} else {
+					None
+				};
+
+				if !lexer.consume_literal("=") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key.type".to_string(),
+						"=".to_string(),
+					));
+				}
+
+				if !lexer.consume_literal("\"") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key.type".to_string(),
+						"\"".to_string(),
+					));
+				}
+
+				let type_name = lexer.consume_until(|c| c == '"').trim().to_string();
+				if !lexer.consume_literal("\"") {
+					return Err(XkbError::ExpectedLiteral(
+						lexer.position(),
+						"symbols key.type".to_string(),
+						"\"".to_string(),
+					));
+				}
+
+				if let Some(group_name) = group_name {
+					grouped_key_type_names.insert(group_name, type_name);
+				} else {
+					key_type_name = Some(type_name);
+				}
 			} else if lexer.consume_literal("key") {
 				let name = lexer.consume_until(|c| c == '{').trim().to_string();
 				let block = lexer.consume_until_matching('{', '}').ok_or_else(|| {
@@ -689,6 +757,8 @@ impl XkbSymbols {
 		}
 		Ok(Self {
 			keys,
+			key_type_name,
+			grouped_key_type_names,
 			modifier_maps,
 			names,
 		})

@@ -6,7 +6,7 @@ use std::{
 
 use bitflags::bitflags;
 
-use crate::xkb::{CompatSelector, XkbKeyMap};
+use crate::xkb::{CompatSelector, XKBType, XkbKeyMap};
 
 bitflags! {
 	#[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,6 +22,7 @@ bitflags! {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct Modifiers {
 	pub modifiers: BuiltinModifiers,
 	pub virtual_modifiers: Vec<String>,
@@ -122,6 +123,95 @@ enum GroupTransform {
 }
 
 impl State {
+	fn compute_level_for_type_def(&self, xkb_type: &XKBType) -> usize {
+		let active = self.effective_modifier_set();
+
+		let relevant: std::collections::HashSet<String> = active
+			.into_iter()
+			.filter(|m| xkb_type.modifiers.iter().any(|tm| tm == m))
+			.collect();
+
+		let mut best_level_1_based: u32 = 1;
+		let mut best_specificity = 0usize;
+
+		for (map_key, level) in &xkb_type.map {
+			let required: std::collections::HashSet<String> = map_key
+				.split('+')
+				.map(|s| s.trim().to_string())
+				.filter(|s| !s.is_empty())
+				.collect();
+
+			if required.iter().all(|m| relevant.contains(m)) && required.len() >= best_specificity {
+				best_specificity = required.len();
+				best_level_1_based = *level;
+			}
+		}
+
+		best_level_1_based.saturating_sub(1) as usize
+	}
+
+	fn is_alphabetic_pair(map: &[crate::xkb::KeySym]) -> bool {
+		if map.len() < 2 {
+			return false;
+		}
+
+		let Some(base) = map[0].to_char() else {
+			return false;
+		};
+		let Some(shifted) = map[1].to_char() else {
+			return false;
+		};
+
+		base.is_ascii_lowercase() && shifted == base.to_ascii_uppercase()
+	}
+
+	// For keys without an explicit type, we have to work out what level they should use based on the active modifiers
+	// and the available levels in the keymap. This mostly just means trying to guess whether Shift is active, but
+	// some keys have more complex behavior so we try to handle those too.
+	fn infer_level_without_explicit_type(&self, config: &XkbKeyMap, map: &[crate::xkb::KeySym]) -> usize {
+		if map.is_empty() {
+			return 0;
+		}
+
+		let is_alpha = Self::is_alphabetic_pair(map);
+		let mut best: Option<(usize, usize)> = None;
+
+		for xkb_type in config.types.types.values() {
+			let level = self.compute_level_for_type_def(xkb_type);
+			if level >= map.len() {
+				continue;
+			}
+
+			let max_level = xkb_type.map.iter().map(|(_, l)| *l as usize).max().unwrap_or(1);
+
+			let has_shift = xkb_type.modifiers.iter().any(|m| m == "Shift");
+			let lock_maps_to_level2 = xkb_type
+				.map
+				.iter()
+				.any(|(mods, l)| *l == 2 && mods.split('+').any(|m| m.trim() == "Lock"));
+
+			let mut score = 0usize;
+			if max_level >= map.len() {
+				score += 4;
+			}
+			if map.len() >= 2 && has_shift {
+				score += 2;
+			}
+			if is_alpha && lock_maps_to_level2 {
+				score += 3;
+			}
+			if xkb_type.modifiers.iter().any(|m| m == "LevelThree") && map.len() >= 3 {
+				score += 1;
+			}
+
+			if best.is_none_or(|(best_score, _)| score > best_score) {
+				best = Some((score, level));
+			}
+		}
+
+		best.map(|(_, level)| level).unwrap_or(0)
+	}
+
 	fn set_raw_modifiers(&mut self, modifiers: u32, latched: u32, locked: u32) {
 		self.modifiers.modifiers = BuiltinModifiers::from_bits_truncate(modifiers);
 		self.latched_modifiers.modifiers = BuiltinModifiers::from_bits_truncate(latched);
@@ -161,49 +251,11 @@ impl State {
 		self.latched_group = None;
 	}
 
-	fn compute_level_for_key(&self, config: &XkbKeyMap, key_sym: &crate::xkb::XKBSymbolsKey) -> usize {
-		// 1) key type lookup, fallback to ONE_LEVEL behavior
-		let Some(type_name) = key_sym.type_name.as_ref() else {
-			return 0;
-		};
-
+	fn compute_level_for_type_name(&self, config: &XkbKeyMap, type_name: &str) -> usize {
 		let Some(xkb_type) = config.types.types.get(type_name) else {
 			return 0;
 		};
-
-		// 2) effective active modifiers (depressed + latched + locked)
-		let active = self.effective_modifier_set();
-
-		// 3) only consider modifiers declared by the type
-		let relevant: std::collections::HashSet<String> = active
-			.into_iter()
-			.filter(|m| xkb_type.modifiers.iter().any(|tm| tm == m))
-			.collect();
-
-		// 4) find best matching map[...] entry
-		// map entry key can be "Shift" or "Shift+Lock", so split it.
-		let mut best_level_1_based: u32 = 1;
-		let mut best_specificity = 0usize;
-
-		for (map_key, level) in &xkb_type.map {
-			let required: std::collections::HashSet<String> = map_key
-				.split('+')
-				.map(|s| s.trim().to_string())
-				.filter(|s| !s.is_empty())
-				.collect();
-
-			// subset match: entry matches if all required mods are active
-			if required.iter().all(|m| relevant.contains(m)) {
-				// prefer more specific entries
-				if required.len() >= best_specificity {
-					best_specificity = required.len();
-					best_level_1_based = *level;
-				}
-			}
-		}
-
-		// 5) XKB levels are 1-based; runtime symbol vector is 0-based
-		best_level_1_based.saturating_sub(1) as usize
+		self.compute_level_for_type_def(xkb_type)
 	}
 
 	fn handle_set_mods(&mut self, args: &HashMap<String, String>, pressed: bool) {
@@ -412,7 +464,19 @@ impl Keyboard {
 				key_sym.grouped_symbols.get("Group1")?
 			};
 
-			let level = self.state.compute_level_for_key(config, key_sym);
+			let explicit_type = key_sym
+				.grouped_type_names
+				.get(&group_string)
+				.or(key_sym.type_name.as_ref())
+				.or_else(|| config.symbols.grouped_key_type_names.get(&group_string))
+				.or(config.symbols.key_type_name.as_ref())
+				.cloned();
+
+			let level = if let Some(type_name) = explicit_type {
+				self.state.compute_level_for_type_name(config, &type_name)
+			} else {
+				self.state.infer_level_without_explicit_type(config, map)
+			};
 			let selected_keysym = if level >= map.len() {
 				map.last().unwrap()
 			} else {
