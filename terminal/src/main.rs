@@ -54,7 +54,10 @@ fn main() {
 				&& let Some(keysym) = keysym
 				&& let Some(keycode) = keysym.to_utf32() =>
 			{
-				write(pty.master.as_raw_fd(), &keycode.to_ne_bytes()).expect("failed to write to pty master");
+				let c = char::from_u32(keycode).unwrap_or('\0');
+				let mut bytes = [0u8; 4];
+				c.encode_utf8(&mut bytes);
+				write(pty.master.as_raw_fd(), &bytes).expect("failed to write to pty master");
 			}
 			qui::AppEvent::RenderReady => {
 				terminal
@@ -71,6 +74,7 @@ fn main() {
 struct Terminal {
 	contents: [[char; 80]; 24],
 	cursor_position: (u32, u32),
+	last_key_press_time: Option<std::time::Instant>,
 }
 
 impl Terminal {
@@ -78,10 +82,12 @@ impl Terminal {
 		Self {
 			contents: [[' '; 80]; 24],
 			cursor_position: (0, 0),
+			last_key_press_time: None,
 		}
 	}
 
 	fn handle_input(&mut self, input: &[u8]) {
+		self.last_key_press_time = Some(std::time::Instant::now());
 		for &byte in input {
 			if byte == b'\n' {
 				self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = ' ';
@@ -100,17 +106,35 @@ impl Terminal {
 
 	fn render(&self, canvas: &mut qui::Canvas, font: &BdfFont) {
 		let (char_width, char_height) = font.measure_text("a");
+		let font_descent = font.font_descent.unwrap_or(0);
 		canvas.fill(0xFF000000);
+		let cursor_flash_on = (std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.unwrap()
+			.as_millis()
+			/ 500)
+			.is_multiple_of(2)
+			|| self.last_key_press_time.is_some_and(|t| t.elapsed().as_millis() < 500);
 		for (y, row) in self.contents.iter().enumerate() {
 			for (x, &ch) in row.iter().enumerate() {
+				let row_origin_y = (y as i32 * char_height) - font_descent;
 				canvas.draw_text(
 					font,
 					(x * char_width as usize) as i32,
-					(y * char_height as usize) as i32,
+					row_origin_y,
 					&ch.to_string(),
 					0xFFFFFFFF,
 				);
 			}
 		}
+
+		let cursor_flash_color = if cursor_flash_on { 0xFFFFFFFF } else { 0xFF000000 };
+		canvas.fill_rect(
+			self.cursor_position.0 as i32 * char_width,
+			self.cursor_position.1 as i32 * char_height,
+			char_width,
+			char_height,
+			cursor_flash_color,
+		);
 	}
 }
