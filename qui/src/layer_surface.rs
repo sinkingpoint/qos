@@ -13,7 +13,8 @@ use wayland::{
 	surface::{AttachRequest, CommitRequest, DamageRequest, FrameCallbackEvent, FrameRequest},
 	types::{WaylandEncodedString, WaylandPayload},
 	zwlr_layer_shell_v1::{
-		AckConfigureRequest, Anchor, ConfigureEvent, GetLayerSurfaceRequest, Layer, SetAnchorRequest, SetSizeRequest,
+		AckConfigureRequest, Anchor, ConfigureEvent, GetLayerSurfaceRequest, Layer, SetAnchorRequest,
+		SetExclusiveZoneRequest, SetSizeRequest,
 	},
 };
 
@@ -67,6 +68,11 @@ impl LayerSurface {
 		SetSizeRequest { width, height }.write_as_packet(layer_surface_id, &context.conn.stream)?;
 
 		SetAnchorRequest { anchor }.write_as_packet(layer_surface_id, &context.conn.stream)?;
+
+		if matches!(layer, Layer::Top) {
+			// For top layer, set exclusive zone to the full height to ensure the layer is always fully visible and doesn't get covered by other windows.
+			SetExclusiveZoneRequest { zone: height }.write_as_packet(layer_surface_id, &context.conn.stream)?;
+		}
 
 		// Initial commit with no buffer: required by xdg_shell to signal that
 		// setup is complete and prompt the compositor to send xdg_surface.configure.

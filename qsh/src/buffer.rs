@@ -12,6 +12,9 @@ use tables::RowTable;
 // The ASCII character for DEL.
 const DELETE_CHAR: char = '\u{7f}';
 
+// The ASCII character for Backspace.
+const BACKSPACE_CHAR: char = '\u{0008}';
+
 /// Buffer is a wrapper around a Read that handles terminal IO.
 pub struct Buffer<R: Read, W: Write> {
 	/// The currently buffered input.
@@ -49,11 +52,12 @@ impl<R: Read, W: Write> Buffer<R, W> {
 		write!(self.writer, "\r\n{}", prompt).expect("Failed to write to stdout");
 		loop {
 			let c = self.read_char()?;
+			println!("Read char: {}", c);
 			if c == '\n' {
 				if let Some(cmd) = self.handle_newline() {
 					return Ok(cmd);
 				}
-			} else if c == DELETE_CHAR {
+			} else if c == DELETE_CHAR || c == BACKSPACE_CHAR {
 				self.backspace();
 			} else if c == ESC {
 				self.handle_escape_sequence()?;

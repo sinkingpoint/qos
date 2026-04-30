@@ -35,7 +35,11 @@ fn main() -> std::io::Result<()> {
 					button_pressed = pressed;
 				}
 			}
-			AppEvent::Keyboard { keycode, pressed } => {
+			AppEvent::Keyboard {
+				keycode,
+				pressed,
+				keysym,
+			} => {
 				if pressed {
 					last_key = keycode;
 				}

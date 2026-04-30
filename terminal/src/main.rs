@@ -13,7 +13,7 @@ use qui::font::{BdfFont, Font};
 fn main() {
 	let pty = unsafe { forkpty(None, None) }.expect("failed to fork pty");
 	if pty.fork_result.is_child() {
-		execve(c"/bin/bash", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
+		execve(c"/bin/qsh", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
 	}
 
 	let font = BdfFont::from_bdf_data(include_bytes!("../assets/ter-u16n.bdf")).expect("failed to load font");
@@ -47,6 +47,7 @@ fn main() {
 		let event = app.poll().expect("failed to poll app events");
 		match event {
 			qui::AppEvent::Keyboard {
+				#[allow(unused_variables)]
 				keycode,
 				pressed,
 				keysym,
@@ -54,7 +55,12 @@ fn main() {
 				&& let Some(keysym) = keysym
 				&& let Some(keycode) = keysym.to_utf32() =>
 			{
-				let c = char::from_u32(keycode).unwrap_or('\0');
+				println!("Key pressed: keycode={}, keysym={:?}", keycode, keysym);
+				let mut c = char::from_u32(keycode).unwrap_or('\0');
+				if keycode == 0x08 {
+					c = '\u{7f}'; // Backspace should send DEL for terminal compatibility.
+					println!("Interpreting Backspace as DEL");
+				}
 				let mut bytes = [0u8; 4];
 				c.encode_utf8(&mut bytes);
 				write(pty.master.as_raw_fd(), &bytes).expect("failed to write to pty master");
