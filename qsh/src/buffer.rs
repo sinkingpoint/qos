@@ -52,7 +52,6 @@ impl<R: Read, W: Write> Buffer<R, W> {
 		write!(self.writer, "\r\n{}", prompt).expect("Failed to write to stdout");
 		loop {
 			let c = self.read_char()?;
-			println!("Read char: {}", c);
 			if c == '\n' {
 				if let Some(cmd) = self.handle_newline() {
 					return Ok(cmd);

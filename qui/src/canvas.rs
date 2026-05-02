@@ -59,7 +59,6 @@ impl<'a> Canvas<'a> {
 	pub fn set_pixel(&mut self, x: i32, y: i32, color: u32) {
 		if x >= 0 && x < self.width && y >= 0 && y < self.height {
 			(*self.pixels)[(y * self.stride + x) as usize] = color;
-			self.record_damage(x, y, 1, 1);
 		}
 	}
 
@@ -69,6 +68,8 @@ impl<'a> Canvas<'a> {
 			font.draw_glyph(self, cursor_x, y, ch, color);
 			cursor_x += font.advance(ch);
 		}
+
+		self.record_damage(x, y, cursor_x - x, font.line_height());
 	}
 
 	pub fn sub(&mut self, x: i32, y: i32, width: i32, height: i32) -> Canvas<'_> {
