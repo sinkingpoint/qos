@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 qui = { path = "../qui" }
 nix = { workspace = true, features=["term", "process"]}
+escapes = { path = "../escapes" }

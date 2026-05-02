@@ -1,9 +1,12 @@
 use std::{
+	collections::VecDeque,
+	io::{self, Cursor, Read},
 	os::fd::AsRawFd,
 	sync::{Arc, Mutex},
 	thread,
 };
 
+use escapes::{ANSIEscapeSequence, AnsiParserError};
 use nix::{
 	pty::forkpty,
 	unistd::{execve, write},
@@ -62,8 +65,8 @@ fn main() {
 					println!("Interpreting Backspace as DEL");
 				}
 				let mut bytes = [0u8; 4];
-				c.encode_utf8(&mut bytes);
-				write(pty.master.as_raw_fd(), &bytes).expect("failed to write to pty master");
+				let len = c.encode_utf8(&mut bytes).len();
+				write(pty.master.as_raw_fd(), &bytes[..len]).expect("failed to write to pty master");
 			}
 			qui::AppEvent::RenderReady => {
 				terminal
@@ -79,8 +82,10 @@ fn main() {
 
 struct Terminal {
 	contents: [[char; 80]; 24],
+	decoder: UTF8Decoder,
 	cursor_position: (u32, u32),
 	last_key_press_time: Option<std::time::Instant>,
+	partial_escape: Option<Vec<u8>>,
 }
 
 impl Terminal {
@@ -89,24 +94,94 @@ impl Terminal {
 			contents: [[' '; 80]; 24],
 			cursor_position: (0, 0),
 			last_key_press_time: None,
+			decoder: UTF8Decoder::new(),
+			partial_escape: None,
 		}
 	}
 
 	fn handle_input(&mut self, input: &[u8]) {
 		self.last_key_press_time = Some(std::time::Instant::now());
-		for &byte in input {
-			if byte == b'\n' {
+		self.decoder.push_bytes(input);
+		while let Some(byte) = self.decoder.peek_next_byte() {
+			if let Some(escape) = self.partial_escape.as_mut() {
+				self.decoder.next_byte();
+				escape.push(byte);
+				match ANSIEscapeSequence::read(&mut Cursor::new(escape)) {
+					Ok(seq) => {
+						self.handle_escape(seq);
+						self.partial_escape = None;
+					}
+					Err(AnsiParserError::IO(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {
+						// Wait for more bytes to complete the escape sequence
+						continue;
+					}
+					Err(_) => {
+						// Invalid escape sequence, discard it
+						self.partial_escape = None;
+					}
+				}
+				// Handle partial escape sequence
+			} else if byte == b'\x1b' {
+				self.decoder.next_byte(); // Consume the escape character
+				self.partial_escape = Some(vec![]);
+			} else if byte == b'\n' {
+				self.decoder.next_byte(); // Consume the newline
 				self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = ' ';
 				self.cursor_position.0 = 0;
 				self.cursor_position.1 += 1;
+			} else if let Some(ch) = self.decoder.next_char() {
+				self.push_char(ch);
 			} else {
-				self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = byte as char;
-				self.cursor_position.0 += 1;
-				if self.cursor_position.0 >= 80 {
-					self.cursor_position.0 = 0;
-					self.cursor_position.1 += 1;
+				break; // Wait for more bytes to form a complete character
+			}
+		}
+	}
+
+	fn handle_escape(&mut self, escape: ANSIEscapeSequence) {
+		match escape {
+			ANSIEscapeSequence::CursorUp(n) => {
+				self.cursor_position.1 = self.cursor_position.1.saturating_sub(n.0 as u32);
+			}
+			ANSIEscapeSequence::CursorDown(n) => {
+				self.cursor_position.1 = (self.cursor_position.1 + n.0 as u32).min(23);
+			}
+			ANSIEscapeSequence::CursorForward(n) => {
+				self.cursor_position.0 = (self.cursor_position.0 + n.0 as u32).min(79);
+			}
+			ANSIEscapeSequence::CursorBack(n) => {
+				self.cursor_position.0 = self.cursor_position.0.saturating_sub(n.0 as u32);
+			}
+			ANSIEscapeSequence::EraseInLine(mode) => {
+				let y = self.cursor_position.1 as usize;
+				match mode.0 {
+					0 => {
+						for x in self.cursor_position.0 as usize..80 {
+							self.contents[y][x] = ' ';
+						}
+					}
+					1 => {
+						for x in 0..=self.cursor_position.0 as usize {
+							self.contents[y][x] = ' ';
+						}
+					}
+					2 => {
+						for x in 0..80 {
+							self.contents[y][x] = ' ';
+						}
+					}
+					_ => {}
 				}
 			}
+			_ => {}
+		}
+	}
+
+	fn push_char(&mut self, ch: char) {
+		self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = ch;
+		self.cursor_position.0 += 1;
+		if self.cursor_position.0 >= 80 {
+			self.cursor_position.0 = 0;
+			self.cursor_position.1 += 1;
 		}
 	}
 
@@ -142,5 +217,45 @@ impl Terminal {
 			char_height,
 			cursor_flash_color,
 		);
+	}
+}
+
+struct UTF8Decoder {
+	buffer: VecDeque<u8>,
+}
+
+impl UTF8Decoder {
+	fn new() -> Self {
+		Self {
+			buffer: VecDeque::new(),
+		}
+	}
+
+	fn push_bytes(&mut self, bytes: &[u8]) {
+		self.buffer.extend(bytes);
+	}
+
+	fn next_char(&mut self) -> Option<char> {
+		let bytes: Vec<u8> = self.buffer.iter().take(4).cloned().collect();
+		let max_len = bytes.len().min(4);
+		for len in 1..=max_len {
+			if let Ok(s) = std::str::from_utf8(&bytes[..len])
+				&& let Some(c) = s.chars().next()
+			{
+				for _ in 0..len {
+					self.buffer.pop_front();
+				}
+				return Some(c);
+			}
+		}
+		None
+	}
+
+	fn next_byte(&mut self) -> Option<u8> {
+		self.buffer.pop_front()
+	}
+
+	fn peek_next_byte(&self) -> Option<u8> {
+		self.buffer.front().cloned()
 	}
 }
