@@ -1,6 +1,6 @@
 use std::{
 	collections::VecDeque,
-	io::{self, Cursor, Read},
+	io::{self, Cursor},
 	os::fd::AsRawFd,
 	sync::{Arc, Mutex},
 	thread,
@@ -16,7 +16,7 @@ use qui::font::{BdfFont, Font};
 fn main() {
 	let pty = unsafe { forkpty(None, None) }.expect("failed to fork pty");
 	if pty.fork_result.is_child() {
-		execve(c"/bin/qsh", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
+		execve(c"/bin/bash", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
 	}
 
 	let font = BdfFont::from_bdf_data(include_bytes!("../assets/ter-u16n.bdf")).expect("failed to load font");
@@ -58,11 +58,9 @@ fn main() {
 				&& let Some(keysym) = keysym
 				&& let Some(keycode) = keysym.to_utf32() =>
 			{
-				println!("Key pressed: keycode={}, keysym={:?}", keycode, keysym);
 				let mut c = char::from_u32(keycode).unwrap_or('\0');
 				if keycode == 0x08 {
 					c = '\u{7f}'; // Backspace should send DEL for terminal compatibility.
-					println!("Interpreting Backspace as DEL");
 				}
 				let mut bytes = [0u8; 4];
 				let len = c.encode_utf8(&mut bytes).len();
@@ -81,9 +79,11 @@ fn main() {
 }
 
 struct Terminal {
-	contents: [[char; 80]; 24],
+	contents: Vec<Vec<char>>,
+	dimensions: (usize, usize),
+	scroll_position: usize,
 	decoder: UTF8Decoder,
-	cursor_position: (u32, u32),
+	cursor_position: (usize, usize),
 	last_key_press_time: Option<std::time::Instant>,
 	partial_escape: Option<Vec<u8>>,
 }
@@ -91,7 +91,9 @@ struct Terminal {
 impl Terminal {
 	fn new() -> Self {
 		Self {
-			contents: [[' '; 80]; 24],
+			contents: vec![vec![' '; 80]; 24],
+			dimensions: (80, 24),
+			scroll_position: 0,
 			cursor_position: (0, 0),
 			last_key_press_time: None,
 			decoder: UTF8Decoder::new(),
@@ -126,9 +128,8 @@ impl Terminal {
 				self.partial_escape = Some(vec![]);
 			} else if byte == b'\n' {
 				self.decoder.next_byte(); // Consume the newline
-				self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = ' ';
 				self.cursor_position.0 = 0;
-				self.cursor_position.1 += 1;
+				self.move_cursor_y(self.cursor_position.1 + 1);
 			} else if let Some(ch) = self.decoder.next_char() {
 				self.push_char(ch);
 			} else {
@@ -137,36 +138,52 @@ impl Terminal {
 		}
 	}
 
+	fn move_cursor_y(&mut self, y: usize) {
+		if y < self.dimensions.1 {
+			self.cursor_position.1 = y;
+		} else {
+			let overflow = y - self.dimensions.1 + 1;
+			self.cursor_position.1 = self.dimensions.1 - 1;
+			// We hit the bottom of the terminal, so scroll up
+			self.scroll_position += overflow;
+			if self.contents.len() < (self.scroll_position + self.dimensions.1) {
+				// Add new blank lines if we haven't already scrolled past the end of the buffer
+				self.contents.extend(vec![vec![' '; self.dimensions.0]; overflow]);
+			}
+		}
+	}
+
 	fn handle_escape(&mut self, escape: ANSIEscapeSequence) {
 		match escape {
+			ANSIEscapeSequence::CursorPosition(c) => {}
 			ANSIEscapeSequence::CursorUp(n) => {
-				self.cursor_position.1 = self.cursor_position.1.saturating_sub(n.0 as u32);
+				self.cursor_position.1 = self.cursor_position.1.saturating_sub(n.0 as usize);
 			}
 			ANSIEscapeSequence::CursorDown(n) => {
-				self.cursor_position.1 = (self.cursor_position.1 + n.0 as u32).min(23);
+				self.move_cursor_y(self.cursor_position.1 + n.0 as usize);
 			}
 			ANSIEscapeSequence::CursorForward(n) => {
-				self.cursor_position.0 = (self.cursor_position.0 + n.0 as u32).min(79);
+				self.cursor_position.0 = (self.cursor_position.0 + n.0 as usize).min(self.dimensions.0 - 1);
 			}
 			ANSIEscapeSequence::CursorBack(n) => {
-				self.cursor_position.0 = self.cursor_position.0.saturating_sub(n.0 as u32);
+				self.cursor_position.0 = self.cursor_position.0.saturating_sub(n.0 as usize);
 			}
 			ANSIEscapeSequence::EraseInLine(mode) => {
-				let y = self.cursor_position.1 as usize;
+				let y = self.cursor_position.1;
 				match mode.0 {
 					0 => {
-						for x in self.cursor_position.0 as usize..80 {
-							self.contents[y][x] = ' ';
+						for x in self.cursor_position.0..self.dimensions.0 {
+							self.contents[y + self.scroll_position][x] = ' ';
 						}
 					}
 					1 => {
-						for x in 0..=self.cursor_position.0 as usize {
-							self.contents[y][x] = ' ';
+						for x in 0..=self.cursor_position.0 {
+							self.contents[y + self.scroll_position][x] = ' ';
 						}
 					}
 					2 => {
-						for x in 0..80 {
-							self.contents[y][x] = ' ';
+						for x in 0..self.dimensions.0 {
+							self.contents[y + self.scroll_position][x] = ' ';
 						}
 					}
 					_ => {}
@@ -177,11 +194,11 @@ impl Terminal {
 	}
 
 	fn push_char(&mut self, ch: char) {
-		self.contents[self.cursor_position.1 as usize][self.cursor_position.0 as usize] = ch;
+		self.contents[self.cursor_position.1 + self.scroll_position][self.cursor_position.0] = ch;
 		self.cursor_position.0 += 1;
-		if self.cursor_position.0 >= 80 {
+		if self.cursor_position.0 >= self.dimensions.0 {
 			self.cursor_position.0 = 0;
-			self.cursor_position.1 += 1;
+			self.move_cursor_y(self.cursor_position.1 + 1);
 		}
 	}
 
@@ -196,7 +213,13 @@ impl Terminal {
 			/ 500)
 			.is_multiple_of(2)
 			|| self.last_key_press_time.is_some_and(|t| t.elapsed().as_millis() < 500);
-		for (y, row) in self.contents.iter().enumerate() {
+		for (y, row) in self
+			.contents
+			.iter()
+			.skip(self.scroll_position)
+			.take(self.dimensions.1)
+			.enumerate()
+		{
 			for (x, &ch) in row.iter().enumerate() {
 				let row_origin_y = (y as i32 * char_height) - font_descent;
 				canvas.draw_text(
@@ -212,7 +235,7 @@ impl Terminal {
 		let cursor_flash_color = if cursor_flash_on { 0xFFFFFFFF } else { 0xFF000000 };
 		canvas.fill_rect(
 			self.cursor_position.0 as i32 * char_width,
-			self.cursor_position.1 as i32 * char_height,
+			(self.cursor_position.1) as i32 * char_height,
 			char_width,
 			char_height,
 			cursor_flash_color,
