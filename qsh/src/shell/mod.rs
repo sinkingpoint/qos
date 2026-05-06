@@ -193,6 +193,10 @@ fn default_builtins() -> HashMap<String, Box<dyn builtins::Builtin>> {
 		Box::new(builtins::Clear) as Box<dyn builtins::Builtin>,
 	);
 	builtins.insert("cd".to_string(), Box::new(builtins::Cd) as Box<dyn builtins::Builtin>);
+	builtins.insert(
+		"exit".to_string(),
+		Box::new(builtins::Exit) as Box<dyn builtins::Builtin>,
+	);
 	builtins
 }
 

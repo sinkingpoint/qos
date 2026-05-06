@@ -48,3 +48,11 @@ impl Builtin for Cd {
 		Ok(0)
 	}
 }
+
+pub struct Exit;
+
+impl Builtin for Exit {
+	fn run(&self, _args: &[String], _triple: IOTriple, _shell: &Shell) -> Result<i32, WaitError> {
+		std::process::exit(0);
+	}
+}
