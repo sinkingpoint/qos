@@ -212,9 +212,9 @@ fn main() {
 			CompositorEvent::Wayland(event) => {
 				wayland.handle_event(event);
 			}
-CompositorEvent::WaylandDisconnect(client_id) => {
-wayland.handle_client_disconnect(client_id);
-}
+			CompositorEvent::WaylandDisconnect(client_id) => {
+				wayland.handle_client_disconnect(client_id);
+			}
 			_ => {
 				// Handle other events as needed
 			}
@@ -356,11 +356,9 @@ impl VideoBuffer {
 	pub fn clear_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32) {
 		for row in 0..height {
 			unsafe {
-				std::ptr::write_bytes(
-					self.pixels.add(((y + row) * self.pitch + x) as usize),
-					color as u8,
-					width as usize,
-				);
+				let row_start = self.pixels.add(((y + row) * self.pitch + x) as usize);
+				let row_slice = std::slice::from_raw_parts_mut(row_start, width as usize);
+				row_slice.fill(color);
 			}
 		}
 		self.mark_dirty(x, y, width, height);
