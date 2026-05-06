@@ -68,6 +68,21 @@ impl WaylandCompositor {
 		}
 	}
 
+	pub fn handle_client_disconnect(&mut self, client_id: u32) {
+		self.clients.remove(&client_id);
+		self.scene.retain(|entry| entry.client_id != client_id);
+		if let Some((hovered_client_id, _)) = self.hovered_window
+			&& hovered_client_id == client_id
+		{
+			self.hovered_window = None;
+		}
+		if let Some((active_client_id, _)) = self.active_window
+			&& active_client_id == client_id
+		{
+			self.active_window = None;
+		}
+	}
+
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
 		for entry in &self.scene {
 			if let Some(client) = self.clients.get_mut(&entry.client_id) {

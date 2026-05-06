@@ -90,7 +90,6 @@ impl WaylandSocket {
 						Ok((stream, _)) => {
 							let client_id = self.client_id_counter;
 							self.client_id_counter += 1;
-							println!("New client connected: {}", client_id);
 							if let Err(e) = stream.set_nonblocking(true) {
 								eprintln!(
 									"Failed to set client stream to non-blocking for client {}: {}",
@@ -124,12 +123,23 @@ impl WaylandSocket {
 						let packet = match conn.recv_packet() {
 							Ok(packet) => packet,
 							Err(e) if e.kind() == io::ErrorKind::WouldBlock => break, // no more data right now
-							Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+							Err(e)
+								if e.kind() == io::ErrorKind::UnexpectedEof
+									|| e.kind() == io::ErrorKind::ConnectionReset =>
+							{
 								if let Some(removed) = clients.remove(&client_id)
 									&& let Err(e) = epoll.delete(removed.stream.as_ref())
 								{
 									eprintln!("Failed to remove client {} from epoll: {}", client_id, e);
 								}
+
+								if let Err(e) = output_channel.send(CompositorEvent::WaylandDisconnect(client_id)) {
+									eprintln!(
+										"Failed to send Wayland disconnect event for client {}: {}",
+										client_id, e
+									);
+								}
+
 								break;
 							}
 							Err(e) => {

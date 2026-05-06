@@ -10,6 +10,7 @@ pub enum CompositorEvent {
 	Drm(crate::events::drm::DrmEvent),
 	Input(crate::events::input::Event),
 	Wayland(crate::events::wayland::WaylandEvent),
+	WaylandDisconnect(u32), // client_id
 }
 
 impl From<crate::events::drm::DrmEvent> for CompositorEvent {

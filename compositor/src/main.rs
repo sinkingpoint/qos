@@ -212,6 +212,9 @@ fn main() {
 			CompositorEvent::Wayland(event) => {
 				wayland.handle_event(event);
 			}
+CompositorEvent::WaylandDisconnect(client_id) => {
+wayland.handle_client_disconnect(client_id);
+}
 			_ => {
 				// Handle other events as needed
 			}
