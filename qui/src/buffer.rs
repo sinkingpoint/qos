@@ -76,13 +76,6 @@ impl Buffer {
 		})
 	}
 
-	fn clear(&mut self) {
-		unsafe {
-			std::ptr::write_bytes(self.pixels, 0, self.pixel_count);
-		}
-		self.damage.push((0, 0, self.width, self.height));
-	}
-
 	pub fn canvas(&mut self) -> Canvas<'_> {
 		let pixels = unsafe { std::slice::from_raw_parts_mut(self.pixels, self.pixel_count) };
 		Canvas::new(pixels, self.width, self.height, self.width, 0, 0, &mut self.damage)
@@ -144,9 +137,6 @@ impl DoubleBuffer {
 	pub fn swap(&mut self) {
 		self.buffers[self.current_index].commit();
 		self.current_index = (self.current_index + 1) % 2;
-		if self.buffers[self.current_index].released {
-			self.buffers[self.current_index].clear();
-		}
 	}
 
 	pub fn current_buffer(&mut self) -> &mut Buffer {
