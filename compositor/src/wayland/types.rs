@@ -296,6 +296,29 @@ impl Client {
 		self.dragging = None;
 	}
 
+	pub fn dragging_surface_id(&self) -> Option<u32> {
+		let top_level_id = self.dragging.as_ref()?.top_level_id;
+		self.derive_surface_id_from_top_level_id(top_level_id)
+	}
+
+	pub fn surface_origin(&self, surface_id: u32) -> Option<(i32, i32)> {
+		for obj in self.objects.values() {
+			if let SubsystemType::XdgSurface(xdg_surface) = obj
+				&& xdg_surface.surface_id == surface_id
+			{
+				for top_obj in self.objects.values() {
+					if let SubsystemType::XdgTopLevel(top_level) = top_obj
+						&& top_level.xdg_surface == xdg_surface.id
+					{
+						return Some((top_level.x, top_level.y));
+					}
+				}
+			}
+		}
+
+		None
+	}
+
 	pub fn handle_focus_enter(
 		&mut self,
 		serial: u32,

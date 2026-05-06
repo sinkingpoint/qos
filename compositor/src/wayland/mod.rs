@@ -111,8 +111,24 @@ impl WaylandCompositor {
 					.map(|(client_id, _)| *client_id);
 
 				if let Some(dragging_window_id) = dragging_window {
+					let mut dragged_surface_position: Option<(u32, i32, i32)> = None;
 					if let Some(client) = self.clients.get_mut(&dragging_window_id) {
 						client.handle_drag(x, y).unwrap();
+						if let Some(dragged_surface_id) = client.dragging_surface_id()
+							&& let Some((surface_x, surface_y)) = client.surface_origin(dragged_surface_id)
+						{
+							dragged_surface_position = Some((dragged_surface_id, surface_x, surface_y));
+						}
+					}
+
+					if let Some((surface_id, surface_x, surface_y)) = dragged_surface_position
+						&& let Some(entry) = self
+							.scene
+							.iter_mut()
+							.find(|entry| entry.client_id == dragging_window_id && entry.surface_id == surface_id)
+					{
+						entry.x = surface_x;
+						entry.y = surface_y;
 					}
 					return;
 				}
