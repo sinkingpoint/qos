@@ -133,6 +133,8 @@ pub enum ANSIEscapeSequence {
 	Color(Color),
 	CursorSave(CursorSave),
 	CursorRestore(CursorRestore),
+	CursorHide(CursorHide),
+	CursorShow(CursorShow),
 }
 
 impl ANSIEscapeSequence {
@@ -148,6 +150,8 @@ impl ANSIEscapeSequence {
 			'm' => Ok(ANSIEscapeSequence::Color(Color::parse(params)?)),
 			's' => Ok(ANSIEscapeSequence::CursorSave(CursorSave::parse(params)?)),
 			'u' => Ok(ANSIEscapeSequence::CursorRestore(CursorRestore::parse(params)?)),
+			'l' => Ok(ANSIEscapeSequence::CursorHide(CursorHide::parse(params)?)),
+			'h' => Ok(ANSIEscapeSequence::CursorShow(CursorShow::parse(params)?)),
 			_ => Err(AnsiParserError::Unsupported(c)),
 		}
 	}
@@ -166,9 +170,16 @@ impl ANSIEscapeSequence {
 		// Parameters are numeric values separated by semicolons and are terminated by a letter, e.g. 1;2;3A.
 		let mut params = Vec::new();
 		let mut param_buffer = String::new();
+		let mut saw_private_mode_prefix = false;
 		loop {
 			reader.read_exact(&mut char_buffer)?;
 			let c = char_buffer[0] as char;
+
+			if c == '?' {
+				// Some CSI sequences use a private-mode prefix, e.g. ?25l / ?25h.
+				saw_private_mode_prefix = true;
+				continue;
+			}
 
 			if c.is_ascii_digit() {
 				param_buffer.push(char_buffer[0] as char);
@@ -188,7 +199,7 @@ impl ANSIEscapeSequence {
 			}
 		}
 
-		if params.is_empty() {
+		if params.is_empty() && !saw_private_mode_prefix {
 			params.push(1);
 		}
 
@@ -209,6 +220,8 @@ impl Display for ANSIEscapeSequence {
 			ANSIEscapeSequence::Color(c) => write!(f, "{}", c),
 			ANSIEscapeSequence::CursorSave(c) => write!(f, "{}", c),
 			ANSIEscapeSequence::CursorRestore(c) => write!(f, "{}", c),
+			ANSIEscapeSequence::CursorHide(c) => write!(f, "{}", c),
+			ANSIEscapeSequence::CursorShow(c) => write!(f, "{}", c),
 		}
 	}
 }
@@ -336,6 +349,26 @@ mod test {
 		assert_eq!(
 			ANSIEscapeSequence::read(&mut "[u".as_bytes()).unwrap(),
 			ANSIEscapeSequence::CursorRestore(CursorRestore)
+		);
+	}
+
+	#[test]
+	fn test_cursor_hide() {
+		assert_eq!(CursorHide.to_string(), "\x1b[?25l");
+		assert_eq!(ANSIEscapeSequence::CursorHide(CursorHide).to_string(), "\x1b[?25l");
+		assert_eq!(
+			ANSIEscapeSequence::read(&mut "[?25l".as_bytes()).unwrap(),
+			ANSIEscapeSequence::CursorHide(CursorHide)
+		);
+	}
+
+	#[test]
+	fn test_cursor_show() {
+		assert_eq!(CursorShow.to_string(), "\x1b[?25h");
+		assert_eq!(ANSIEscapeSequence::CursorShow(CursorShow).to_string(), "\x1b[?25h");
+		assert_eq!(
+			ANSIEscapeSequence::read(&mut "[?25h".as_bytes()).unwrap(),
+			ANSIEscapeSequence::CursorShow(CursorShow)
 		);
 	}
 }

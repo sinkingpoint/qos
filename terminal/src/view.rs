@@ -11,14 +11,34 @@ use qui::{
 
 use crate::UTF8Decoder;
 
+#[derive(Debug, Clone)]
+struct Cell {
+	ch: char,
+	fg_color: u32,
+	bg_color: u32,
+}
+
+impl Cell {
+	fn blank() -> Self {
+		Self {
+			ch: ' ',
+			fg_color: 0xFFFFFFFF,
+			bg_color: 0xFF000000,
+		}
+	}
+}
+
 pub struct TerminalState {
 	decoder: UTF8Decoder,
 	cursor_position: (usize, usize),
 	last_key_press_time: Option<std::time::Instant>,
 	partial_escape: Option<Vec<u8>>,
-	contents: Vec<Vec<char>>,
+	contents: Vec<Vec<Cell>>,
 	scroll_position: usize,
 	dimensions: (usize, usize),
+	current_fg_color: u32,
+	current_bg_color: u32,
+	cursor_visible: bool,
 }
 
 impl TerminalState {
@@ -28,9 +48,12 @@ impl TerminalState {
 			cursor_position: (0, 0),
 			last_key_press_time: None,
 			partial_escape: None,
-			contents: vec![vec![' '; cols]; rows],
+			contents: vec![vec![Cell::blank(); cols]; rows],
 			scroll_position: 0,
 			dimensions: (cols, rows),
+			current_fg_color: 0xFFFFFFFF,
+			current_bg_color: 0xFF000000,
+			cursor_visible: true,
 		}
 	}
 
@@ -81,7 +104,8 @@ impl TerminalState {
 			self.scroll_position += overflow;
 			if self.contents.len() < (self.scroll_position + self.dimensions.1) {
 				// Add new blank lines if we haven't already scrolled past the end of the buffer
-				self.contents.extend(vec![vec![' '; self.dimensions.0]; overflow]);
+				self.contents
+					.extend(vec![vec![Cell::blank(); self.dimensions.0]; overflow]);
 			}
 		}
 	}
@@ -104,22 +128,47 @@ impl TerminalState {
 			ANSIEscapeSequence::CursorBack(n) => {
 				self.cursor_position.0 = self.cursor_position.0.saturating_sub(n.0 as usize);
 			}
+			ANSIEscapeSequence::Color(c) => match c.0 {
+				0 => {
+					self.current_fg_color = 0xFFFFFFFF;
+					self.current_bg_color = 0xFF000000;
+				}
+				30..=37 => {
+					self.current_fg_color = 0xFF000000 | color_code_to_rgb(c.0 - 30);
+				}
+				40..=47 => {
+					self.current_bg_color = 0xFF000000 | color_code_to_rgb(c.0 - 40);
+				}
+				90..=97 => {
+					self.current_fg_color = 0xFF000000 | color_code_to_rgb(c.0 - 90 + 8);
+				}
+				100..=107 => {
+					self.current_bg_color = 0xFF000000 | color_code_to_rgb(c.0 - 100 + 8);
+				}
+				_ => {}
+			},
+			ANSIEscapeSequence::CursorHide(_) => {
+				self.cursor_visible = false;
+			}
+			ANSIEscapeSequence::CursorShow(_) => {
+				self.cursor_visible = true;
+			}
 			ANSIEscapeSequence::EraseInLine(mode) => {
 				let y = self.cursor_position.1;
 				match mode.0 {
 					0 => {
 						for x in self.cursor_position.0..self.dimensions.0 {
-							self.contents[y + self.scroll_position][x] = ' ';
+							self.contents[y + self.scroll_position][x] = Cell::blank();
 						}
 					}
 					1 => {
 						for x in 0..=self.cursor_position.0 {
-							self.contents[y + self.scroll_position][x] = ' ';
+							self.contents[y + self.scroll_position][x] = Cell::blank();
 						}
 					}
 					2 => {
 						for x in 0..self.dimensions.0 {
-							self.contents[y + self.scroll_position][x] = ' ';
+							self.contents[y + self.scroll_position][x] = Cell::blank();
 						}
 					}
 					_ => {}
@@ -130,12 +179,31 @@ impl TerminalState {
 	}
 
 	fn push_char(&mut self, ch: char) {
-		self.contents[self.cursor_position.1 + self.scroll_position][self.cursor_position.0] = ch;
+		self.contents[self.cursor_position.1 + self.scroll_position][self.cursor_position.0] = Cell {
+			ch,
+			fg_color: self.current_fg_color,
+			bg_color: self.current_bg_color,
+		};
 		self.cursor_position.0 += 1;
 		if self.cursor_position.0 >= self.dimensions.0 {
 			self.cursor_position.0 = 0;
 			self.move_cursor_y(self.cursor_position.1 + 1);
 		}
+	}
+}
+
+fn color_code_to_rgb(code: u8) -> u32 {
+	match code {
+		0 => 0x000000,                                       // Black
+		1 => 0x800000,                                       // Red
+		2 => 0x008000,                                       // Green
+		3 => 0x808000,                                       // Yellow
+		4 => 0x000080,                                       // Blue
+		5 => 0x800080,                                       // Magenta
+		6 => 0x008080,                                       // Cyan
+		7 => 0xC0C0C0,                                       // White
+		8..=15 => 0x808080 + ((code as u32 - 8) * 0x202020), // Bright variants
+		_ => 0,
 	}
 }
 
@@ -179,26 +247,35 @@ impl Widget for Terminal {
 			.take(state.dimensions.1)
 			.enumerate()
 		{
-			for (x, &ch) in row.iter().enumerate() {
+			for (x, ch) in row.iter().enumerate() {
 				let row_origin_y = (y as i32 * char_height) - font_descent;
+				canvas.fill_rect(
+					(x * char_width as usize) as i32,
+					row_origin_y,
+					char_width,
+					char_height,
+					ch.bg_color,
+				);
 				canvas.draw_text(
 					&self.font,
 					(x * char_width as usize) as i32,
 					row_origin_y,
-					&ch.to_string(),
-					0xFFFFFFFF,
+					&ch.ch.to_string(),
+					ch.fg_color,
 				);
 			}
 		}
 
-		let cursor_flash_color = if cursor_flash_on { 0xFFFFFFFF } else { 0xFF000000 };
-		canvas.fill_rect(
-			state.cursor_position.0 as i32 * char_width,
-			(state.cursor_position.1) as i32 * char_height,
-			char_width,
-			char_height,
-			cursor_flash_color,
-		);
+		if state.cursor_visible {
+			let cursor_flash_color = if cursor_flash_on { 0xFFFFFFFF } else { 0xFF000000 };
+			canvas.fill_rect(
+				state.cursor_position.0 as i32 * char_width,
+				(state.cursor_position.1) as i32 * char_height,
+				char_width,
+				char_height,
+				cursor_flash_color,
+			);
+		}
 	}
 
 	fn size_hint(&self) -> (i32, i32) {
