@@ -84,6 +84,7 @@ impl WaylandCompositor {
 	}
 
 	pub fn repaint(&mut self, framebuffer: &mut VideoBuffer) {
+		framebuffer.clear_rect(0, 0, framebuffer.width, framebuffer.height, 0);
 		for entry in &self.scene {
 			if let Some(client) = self.clients.get_mut(&entry.client_id) {
 				client.blit_surface(entry.surface_id, entry.x, entry.y, framebuffer);

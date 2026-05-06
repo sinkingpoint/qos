@@ -161,16 +161,6 @@ impl Client {
 					_ => return,
 				};
 
-				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
-					&& (x != last_x || y != last_y || buffer.width != last_width || buffer.height != last_height)
-				{
-					let x0 = last_x.max(0);
-					let y0 = last_y.max(0);
-					let x1 = (last_x + last_width).min(framebuffer.width as i32);
-					let y1 = (last_y + last_height).min(framebuffer.height as i32);
-					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
-				}
-
 				blitted_rects = Some((surface_id, x, y, buffer.width, buffer.height));
 				mem_pool.blit_onto(buffer, framebuffer, x, y);
 				release_buffer_id = Some(buffer_id);
@@ -195,18 +185,6 @@ impl Client {
 			} else {
 				if surface.cached_width <= 0 || surface.cached_height <= 0 || surface.cached_pixels.is_empty() {
 					return;
-				}
-
-				if let Some((last_x, last_y, last_width, last_height)) = surface.last_blit_rect
-					&& (x != last_x
-						|| y != last_y || surface.cached_width != last_width
-						|| surface.cached_height != last_height)
-				{
-					let x0 = last_x.max(0);
-					let y0 = last_y.max(0);
-					let x1 = (last_x + last_width).min(framebuffer.width as i32);
-					let y1 = (last_y + last_height).min(framebuffer.height as i32);
-					framebuffer.clear_rect(x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32, 0);
 				}
 
 				let clip_x = x.max(0);
@@ -280,13 +258,6 @@ impl Client {
 				}
 				drag_state.initial_pointer = Some((x, y));
 			}
-		}
-
-		if let Some(drag_state) = &self.dragging
-			&& let Some(surface_id) = self.derive_surface_id_from_top_level_id(drag_state.top_level_id)
-			&& let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id)
-		{
-			surface.blitted = false; // mark the surface as needing to be repainted
 		}
 
 		Ok(())
