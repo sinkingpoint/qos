@@ -46,7 +46,12 @@ impl Scene {
 		}
 	}
 
-	pub fn add_widget<W: Widget + 'static>(&mut self, widget: W, x: i32, y: i32) -> WidgetHandle<W::Event> {
+	pub fn add_widget<W: Widget + 'static>(&mut self, mut widget: W, x: i32, y: i32) -> WidgetHandle<W::Event> {
+		// First, send a resize event so the widget can set its initial size hint.
+		widget.handle_event(&AppEvent::Resize {
+			width: self.width,
+			height: self.height,
+		});
 		let index = self.widgets.len();
 		let (width, height) = widget.size_hint();
 		self.widgets.push(WidgetContainer {
@@ -62,6 +67,14 @@ impl Scene {
 	pub fn handle_event(&mut self, event: &AppEvent) {
 		for (i, container) in self.widgets.iter_mut().enumerate() {
 			let translated = translate_event(event, &container.boundary);
+			match &translated {
+				AppEvent::PointerMotion { x, y } | AppEvent::PointerButton { x, y, .. }
+					if (*x < 0 || *x >= container.boundary.width || *y < 0 || *y >= container.boundary.height) =>
+				{
+					continue;
+				}
+				_ => {}
+			}
 			if let Some(ev) = container.widget.handle_event_any(&translated) {
 				self.pending.push(SceneEvent(i, ev));
 			}
