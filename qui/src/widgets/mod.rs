@@ -3,7 +3,9 @@ use std::any::Any;
 use crate::{AppEvent, canvas::Canvas};
 
 mod button;
+mod topbar;
 pub use button::{Button, ButtonEvent};
+pub use topbar::{TopBar, TopBarEvent};
 
 pub trait Widget {
 	type Event: 'static;
