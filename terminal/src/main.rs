@@ -172,7 +172,10 @@ impl Terminal {
 
 	fn handle_escape(&mut self, escape: ANSIEscapeSequence) {
 		match escape {
-			ANSIEscapeSequence::CursorPosition(c) => {}
+			ANSIEscapeSequence::CursorPosition(c) => {
+				self.cursor_position.0 = (c.0 as usize).saturating_sub(1).min(self.dimensions.0 - 1);
+				self.move_cursor_y((c.1 as usize).saturating_sub(1));
+			}
 			ANSIEscapeSequence::CursorUp(n) => {
 				self.cursor_position.1 = self.cursor_position.1.saturating_sub(n.0 as usize);
 			}
