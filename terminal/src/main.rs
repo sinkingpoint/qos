@@ -16,7 +16,7 @@ use qui::font::{BdfFont, Font};
 fn main() {
 	let pty = unsafe { forkpty(None, None) }.expect("failed to fork pty");
 	if pty.fork_result.is_child() {
-		execve(c"/bin/bash", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
+		execve(c"/bin/qsh", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
 	}
 
 	let font = BdfFont::from_bdf_data(include_bytes!("../assets/ter-u16n.bdf")).expect("failed to load font");
