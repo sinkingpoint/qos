@@ -143,6 +143,7 @@ impl Client {
 	pub fn blit_surface(&mut self, surface_id: u32, x: i32, y: i32, framebuffer: &mut VideoBuffer) {
 		let mut blitted_rects: Option<(u32, i32, i32, i32, i32)> = None; // (surface_id, x, y, width, height)
 		let mut cache_updates: Option<(u32, Vec<u32>, i32, i32)> = None;
+		let mut release_buffer_id: Option<u32> = None;
 		if let Some(SubsystemType::Surface(surface)) = self.objects.get(&surface_id)
 			&& surface.committed
 			&& let Some((buffer_id, _, _)) = surface.attached_buffer
@@ -172,6 +173,7 @@ impl Client {
 
 				blitted_rects = Some((surface_id, x, y, buffer.width, buffer.height));
 				mem_pool.blit_onto(buffer, framebuffer, x, y);
+				release_buffer_id = Some(buffer_id);
 
 				if buffer.offset >= 0 {
 					let stride_pixels = (buffer.stride / 4) as usize;
@@ -241,7 +243,7 @@ impl Client {
 		if let Some(SubsystemType::Surface(surface)) = self.objects.get_mut(&surface_id) {
 			surface.mark_blitted(&self.connection);
 
-			if let Some((buffer_id, _, _)) = surface.attached_buffer
+			if let Some(buffer_id) = release_buffer_id
 				&& let Err(e) = ReleaseEvent.write_as_packet(buffer_id, &self.connection)
 			{
 				eprintln!("Failed to send wl_buffer.release packet: {}", e);
