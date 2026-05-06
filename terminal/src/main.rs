@@ -2,7 +2,10 @@ use std::{
 	collections::VecDeque,
 	io::{self, Cursor},
 	os::fd::AsRawFd,
-	sync::{Arc, Mutex},
+	sync::{
+		Arc, Mutex,
+		mpsc::{self, TryRecvError},
+	},
 	thread,
 };
 
@@ -34,11 +37,19 @@ fn main() {
 
 	let read_fd = pty.master.as_raw_fd();
 	let terminal_clone = Arc::clone(&terminal);
+	let (shell_exit_tx, shell_exit_rx) = mpsc::channel();
 	thread::spawn(move || {
 		loop {
 			let mut input_buf = [0u8; 1024];
-			let n = nix::unistd::read(read_fd, &mut input_buf).expect("failed to read from pty master");
+			let n = match nix::unistd::read(read_fd, &mut input_buf) {
+				Ok(n) => n,
+				Err(_) => {
+					let _ = shell_exit_tx.send(());
+					break;
+				}
+			};
 			if n == 0 {
+				let _ = shell_exit_tx.send(());
 				break; // EOF
 			}
 			let input = &input_buf[..n];
@@ -47,6 +58,11 @@ fn main() {
 	});
 
 	loop {
+		match shell_exit_rx.try_recv() {
+			Ok(()) | Err(TryRecvError::Disconnected) => break,
+			Err(TryRecvError::Empty) => {}
+		}
+
 		let event = app.poll().expect("failed to poll app events");
 		match event {
 			qui::AppEvent::Keyboard {
@@ -73,6 +89,7 @@ fn main() {
 					.render(&mut app.canvas().expect("no canvas ready"), &font);
 				app.commit_frame().expect("failed to commit frame");
 			}
+			qui::AppEvent::Close => break,
 			_ => {}
 		}
 	}
