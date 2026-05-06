@@ -267,7 +267,7 @@ impl App {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum AppEvent {
 	RenderReady,
 	Keyboard {
@@ -284,6 +284,10 @@ pub enum AppEvent {
 		pressed: bool,
 		x: i32,
 		y: i32,
+	},
+	Resize {
+		width: i32,
+		height: i32,
 	},
 	Close,
 }

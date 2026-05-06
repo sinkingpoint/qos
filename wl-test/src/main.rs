@@ -35,16 +35,13 @@ fn main() -> std::io::Result<()> {
 					button_pressed = pressed;
 				}
 			}
-			AppEvent::Keyboard {
-				keycode,
-				pressed,
-				keysym,
-			} => {
+			AppEvent::Keyboard { keycode, pressed, .. } => {
 				if pressed {
 					last_key = keycode;
 				}
 			}
 			AppEvent::Close => break,
+			AppEvent::Resize { .. } => {}
 		}
 
 		// Drain bar events non-blocking so its socket doesn't fill up.
