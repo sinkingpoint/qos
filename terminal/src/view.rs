@@ -86,6 +86,9 @@ impl TerminalState {
 				self.decoder.next_byte(); // Consume the newline
 				self.cursor_position.0 = 0;
 				self.move_cursor_y(self.cursor_position.1 + 1);
+			} else if byte == b'\r' {
+				self.decoder.next_byte(); // Consume the carriage return
+				self.cursor_position.0 = 0;
 			} else if let Some(ch) = self.decoder.next_char() {
 				self.push_char(ch);
 			} else {
