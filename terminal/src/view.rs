@@ -227,8 +227,8 @@ impl Terminal {
 impl Widget for Terminal {
 	type Event = ();
 
-	fn handle_event(&mut self, _event: &qui::AppEvent) -> Option<Self::Event> {
-		None
+	fn handle_event(&mut self, _event: &qui::AppEvent) -> Vec<Self::Event> {
+		Vec::new()
 	}
 
 	fn render(&mut self, canvas: &mut qui::Canvas) {

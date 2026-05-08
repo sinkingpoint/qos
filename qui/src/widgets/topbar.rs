@@ -11,6 +11,7 @@ pub struct TopBar {
 }
 
 impl TopBar {
+	pub const HEIGHT: i32 = 30;
 	pub fn new(label: String) -> Self {
 		Self { label, width: 100 }
 	}
@@ -19,26 +20,26 @@ impl TopBar {
 impl Widget for TopBar {
 	type Event = TopBarEvent;
 
-	fn handle_event(&mut self, event: &crate::AppEvent) -> Option<Self::Event> {
+	fn handle_event(&mut self, event: &crate::AppEvent) -> Vec<Self::Event> {
 		if let crate::AppEvent::PointerButton { button, pressed, .. } = event
 			&& *button == 0x110
 			&& *pressed
 		{
-			return Some(TopBarEvent::DragStarted);
+			return vec![TopBarEvent::DragStarted];
 		}
 
 		if let crate::AppEvent::Resize { width, .. } = event {
 			self.width = *width;
 		}
 
-		None
+		Vec::new()
 	}
 
 	fn render(&mut self, canvas: &mut crate::Canvas) {
-		canvas.fill_rect(0, 0, self.width, 30, 0xFF202020);
+		canvas.fill_rect(0, 0, self.width, Self::HEIGHT, 0xFF202020);
 	}
 
 	fn size_hint(&self) -> (i32, i32) {
-		(self.width, 30)
+		(self.width, Self::HEIGHT)
 	}
 }

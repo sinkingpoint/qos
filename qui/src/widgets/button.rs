@@ -27,7 +27,7 @@ impl Button {
 impl Widget for Button {
 	type Event = ButtonEvent;
 
-	fn handle_event(&mut self, event: &AppEvent) -> Option<ButtonEvent> {
+	fn handle_event(&mut self, event: &AppEvent) -> Vec<ButtonEvent> {
 		if let AppEvent::PointerMotion { x, y } = event {
 			self.hovered = *x >= 0 && *x < self.width && *y >= 0 && *y < self.height;
 		}
@@ -36,10 +36,10 @@ impl Widget for Button {
 		{
 			self.pressed = *pressed && *x >= 0 && *x < self.width && *y >= 0 && *y < self.height;
 			if self.pressed {
-				return Some(ButtonEvent::Clicked);
+				return vec![ButtonEvent::Clicked];
 			}
 		}
-		None
+		Vec::new()
 	}
 
 	fn render(&mut self, canvas: &mut Canvas) {

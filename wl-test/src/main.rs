@@ -1,10 +1,10 @@
-use qui::{font::BdfFont, Anchor, App, AppEvent, Layer, LayerSurface, Scene};
+use qui::{font::BdfFont, Anchor, AppEvent, Layer, LayerSurface, Scene, Widget, Window};
 
 const SPLEEN_BDF: &[u8] = include_bytes!("../assets/ter-u16n.bdf");
 
 fn main() -> std::io::Result<()> {
 	let font = BdfFont::from_bdf_data(SPLEEN_BDF).unwrap();
-	let mut app = App::new("wl-test".to_string(), 400, 300)?;
+	let mut app = Window::new(400, 300)?;
 	let mut bar = LayerSurface::new(0, 30, Layer::Top, Anchor::Left | Anchor::Right | Anchor::Top)?;
 	let mut cursor: Option<(i32, i32)> = None;
 	let mut button_pressed = false;
@@ -70,7 +70,7 @@ fn draw_bar(bar: &mut LayerSurface, font: &BdfFont) {
 	canvas.draw_text(font, 10, 8, "wl-test", 0xFFFFFFFF);
 }
 
-fn draw_frame(app: &mut App, cursor: Option<(i32, i32)>, button_pressed: bool, last_key: u32) {
+fn draw_frame(app: &mut Window, cursor: Option<(i32, i32)>, button_pressed: bool, last_key: u32) {
 	let mut canvas = app.canvas().expect("no canvas ready");
 
 	canvas.fill(0xFF222244);

@@ -75,17 +75,31 @@ impl Scene {
 				}
 				_ => {}
 			}
-			if let Some(ev) = container.widget.handle_event_any(&translated) {
-				self.pending.push(SceneEvent(i, ev));
-			}
+
+			self.pending.extend(
+				container
+					.widget
+					.handle_event_any(&translated)
+					.into_iter()
+					.map(|e| SceneEvent(i, e)),
+			);
 		}
 	}
 
 	pub fn poll(&mut self) -> Option<SceneEvent> {
 		self.pending.pop()
 	}
+}
 
-	pub fn render(&mut self, canvas: &mut Canvas) {
+impl Widget for Scene {
+	type Event = SceneEvent;
+
+	fn handle_event(&mut self, event: &AppEvent) -> Vec<Self::Event> {
+		self.handle_event(event);
+		self.pending.drain(..).collect()
+	}
+
+	fn render(&mut self, canvas: &mut Canvas) {
 		let mut canvas = canvas.sub(0, 0, self.width, self.height);
 		for container in &mut self.widgets {
 			let mut sub = canvas.sub(
@@ -96,6 +110,10 @@ impl Scene {
 			);
 			container.widget.render(&mut sub);
 		}
+	}
+
+	fn size_hint(&self) -> (i32, i32) {
+		(self.width, self.height)
 	}
 }
 

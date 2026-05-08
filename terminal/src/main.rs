@@ -12,10 +12,7 @@ use nix::{
 	pty::forkpty,
 	unistd::{execve, write},
 };
-use qui::{
-	Scene, TopBar,
-	font::{BdfFont, Font},
-};
+use qui::font::{BdfFont, Font};
 
 use crate::view::{Terminal, TerminalState};
 
@@ -33,14 +30,10 @@ fn main() {
 	let requested_height = char_height * 24;
 
 	let mut app = qui::App::new("qsh".to_string(), requested_width, requested_height).expect("failed to create app");
-	let mut scene = Scene::new(requested_width, requested_height);
 	let state = Arc::new(Mutex::new(TerminalState::new(80, 24)));
 	let terminal = Terminal::new(Arc::clone(&state));
-	let top_bar = TopBar::new("qsh".to_string());
-	let top_bar_handle = scene.add_widget(top_bar, 0, 0);
-	scene.add_widget(terminal, 0, 30);
-	scene.render(&mut app.canvas().unwrap());
-	app.commit_frame().expect("failed to commit frame");
+	app.set_content(terminal);
+	app.render().expect("failed to render app");
 
 	let read_fd = pty.master.as_raw_fd();
 	let (shell_exit_tx, shell_exit_rx) = mpsc::channel();
@@ -70,7 +63,6 @@ fn main() {
 		}
 
 		let event = app.poll().expect("failed to poll app events");
-		scene.handle_event(&event);
 		match event {
 			qui::AppEvent::Keyboard {
 				#[allow(unused_variables)]
@@ -90,19 +82,10 @@ fn main() {
 				write(pty.master.as_raw_fd(), &bytes[..len]).expect("failed to write to pty master");
 			}
 			qui::AppEvent::RenderReady => {
-				scene.render(&mut app.canvas().expect("no canvas ready"));
-				app.commit_frame().expect("failed to commit frame");
+				app.render().expect("failed to render app");
 			}
 			qui::AppEvent::Close => break,
 			_ => {}
-		}
-
-		while let Some(scene_event) = scene.poll() {
-			if let Some(button_event) = top_bar_handle.extract(&scene_event) {
-				match button_event {
-					qui::TopBarEvent::DragStarted => app.start_move().unwrap(),
-				}
-			}
 		}
 	}
 }
