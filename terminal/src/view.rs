@@ -5,7 +5,7 @@ use std::{
 
 use escapes::{ANSIEscapeSequence, AnsiParserError};
 use qui::{
-	Widget,
+	ScrollTarget, Widget,
 	font::{BdfFont, Font},
 };
 
@@ -213,6 +213,17 @@ fn color_code_to_rgb(code: u8) -> u32 {
 pub struct Terminal {
 	font: BdfFont,
 	state: Arc<Mutex<TerminalState>>,
+}
+
+impl ScrollTarget for Terminal {
+	fn total_size(&self) -> (i32, i32) {
+		let state = self.state.lock().unwrap();
+		let glyph_size = self.font.glyph_size('a');
+		(
+			glyph_size.0 * state.contents[0].len() as i32,
+			glyph_size.1 * state.contents.len() as i32,
+		)
+	}
 }
 
 impl Terminal {

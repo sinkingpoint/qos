@@ -12,7 +12,10 @@ use nix::{
 	pty::forkpty,
 	unistd::{execve, write},
 };
-use qui::font::{BdfFont, Font};
+use qui::{
+	ScrollView,
+	font::{BdfFont, Font},
+};
 
 use crate::view::{Terminal, TerminalState};
 
@@ -21,7 +24,7 @@ mod view;
 fn main() {
 	let pty = unsafe { forkpty(None, None) }.expect("failed to fork pty");
 	if pty.fork_result.is_child() {
-		execve(c"/bin/qsh", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
+		execve(c"/bin/bash", &[c"qsh"], &[c"PATH=/bin"]).expect("failed to exec qsh");
 	}
 
 	let font = BdfFont::from_bdf_data(include_bytes!("../assets/ter-u16n.bdf")).expect("failed to load font");
@@ -32,7 +35,7 @@ fn main() {
 	let mut app = qui::App::new("qsh".to_string(), requested_width, requested_height).expect("failed to create app");
 	let state = Arc::new(Mutex::new(TerminalState::new(80, 24)));
 	let terminal = Terminal::new(Arc::clone(&state));
-	app.set_content(terminal);
+	app.set_content(ScrollView::new(terminal));
 	app.render().expect("failed to render app");
 
 	let read_fd = pty.master.as_raw_fd();

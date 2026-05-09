@@ -3,8 +3,10 @@ use std::any::Any;
 use crate::{AppEvent, canvas::Canvas};
 
 mod button;
+mod scrollview;
 mod topbar;
 pub use button::{Button, ButtonEvent};
+pub use scrollview::{ScrollBarEvent, ScrollTarget, ScrollView, Scrollbar};
 pub use topbar::{TopBar, TopBarEvent};
 
 pub trait Widget {
@@ -18,6 +20,7 @@ pub trait Widget {
 pub(crate) trait AnyWidget {
 	fn handle_event_any(&mut self, event: &AppEvent) -> Vec<Box<dyn Any>>;
 	fn render(&mut self, canvas: &mut Canvas);
+	fn size_hint(&self) -> (i32, i32);
 }
 
 impl<W: Widget> AnyWidget for W {
@@ -29,5 +32,9 @@ impl<W: Widget> AnyWidget for W {
 	}
 	fn render(&mut self, canvas: &mut Canvas) {
 		<Self as Widget>::render(self, canvas);
+	}
+
+	fn size_hint(&self) -> (i32, i32) {
+		<Self as Widget>::size_hint(self)
 	}
 }
