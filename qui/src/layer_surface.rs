@@ -175,6 +175,7 @@ impl LayerSurface {
 						pressed: event.state != 0,
 						x: self.last_pointer_position.map(|(x, _)| x).unwrap_or(0),
 						y: self.last_pointer_position.map(|(_, y)| y).unwrap_or(0),
+						serial: event.serial,
 					}));
 				}
 				_ => {}

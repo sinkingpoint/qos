@@ -31,8 +31,9 @@ impl Widget for Button {
 		if let AppEvent::PointerMotion { x, y } = event {
 			self.hovered = *x >= 0 && *x < self.width && *y >= 0 && *y < self.height;
 		}
-		if let AppEvent::PointerButton { button, pressed, x, y } = event
-			&& *button == 0x110
+		if let AppEvent::PointerButton {
+			button, pressed, x, y, ..
+		} = event && *button == 0x110
 		{
 			self.pressed = *pressed && *x >= 0 && *x < self.width && *y >= 0 && *y < self.height;
 			if self.pressed {

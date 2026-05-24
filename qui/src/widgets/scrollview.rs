@@ -43,12 +43,13 @@ impl Widget for Scrollbar {
 			AppEvent::Resize { height, .. } => {
 				self.height = *height;
 			}
-			AppEvent::PointerButton { x, y, button, pressed }
-				if *button == 0
-					&& *pressed && *x >= target_bounds.0
-					&& *x <= target_bounds.0 + target_bounds.2
-					&& *y >= target_bounds.1
-					&& *y <= target_bounds.1 + target_bounds.3 =>
+			AppEvent::PointerButton {
+				x, y, button, pressed, ..
+			} if *button == 0
+				&& *pressed && *x >= target_bounds.0
+				&& *x <= target_bounds.0 + target_bounds.2
+				&& *y >= target_bounds.1
+				&& *y <= target_bounds.1 + target_bounds.3 =>
 			{
 				self.start_drag_y = Some(*y);
 				return vec![ScrollBarEvent::ScrolledTo(self.scroll_position)];
@@ -72,7 +73,9 @@ impl Widget for Scrollbar {
 		// Render the scrollbar background
 		canvas.fill_rect(0, 0, 20, self.height, 0xFFCCCCCC);
 		let thumb_y = ((self.height - self.thumb_height) as f32 * self.scroll_position) as i32;
-		canvas.fill_rect(0, thumb_y, 20, self.thumb_height, 0xFF888888);
+		if self.thumb_height > 0 && self.thumb_height < self.height {
+			canvas.fill_rect(0, thumb_y, 20, self.thumb_height, 0xFF888888);
+		}
 	}
 
 	fn size_hint(&self) -> (i32, i32) {

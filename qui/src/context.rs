@@ -160,7 +160,7 @@ impl WaylandContext {
 			// Motion events require active focus; button events are routed to the
 			// last entered surface so releases aren't dropped after a Leave.
 			let route_to = match &event {
-				PointerEvent::Button(_) => self.mouse_focus.or(self.last_mouse_surface),
+				PointerEvent::Button(_) | PointerEvent::Leave(_) => self.mouse_focus.or(self.last_mouse_surface),
 				_ => self.mouse_focus,
 			};
 			if let Some(focus) = route_to {

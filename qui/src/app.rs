@@ -30,8 +30,8 @@ impl App {
 		self.scene.handle_event(event);
 		// drain topbar events and handle drag internally
 		while let Some(ev) = self.scene.poll() {
-			if let Some(TopBarEvent::DragStarted) = self.top_bar.extract(&ev) {
-				self.window.start_move()?;
+			if let Some(TopBarEvent::DragStarted(serial)) = self.top_bar.extract(&ev) {
+				self.window.start_move(*serial)?;
 			}
 		}
 		Ok(())

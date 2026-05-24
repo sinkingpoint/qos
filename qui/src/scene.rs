@@ -123,16 +123,24 @@ fn translate_event(event: &AppEvent, rect: &Rect) -> AppEvent {
 			x: x - rect.x,
 			y: y - rect.y,
 		},
-		AppEvent::PointerButton { x, y, button, pressed } => AppEvent::PointerButton {
+		AppEvent::PointerButton {
+			x,
+			y,
+			button,
+			pressed,
+			serial,
+		} => AppEvent::PointerButton {
 			x: x - rect.x,
 			y: y - rect.y,
 			button: *button,
 			pressed: *pressed,
+			serial: *serial,
 		},
 		other => other.clone(),
 	}
 }
 
+#[derive(Debug)]
 struct Rect {
 	x: i32,
 	y: i32,

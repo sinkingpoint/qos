@@ -30,7 +30,6 @@ pub struct Window {
 	xdg_toplevel_id: u32,
 	buffers: DoubleBuffer,
 	frame_callback_id: u32,
-	last_interaction_serial: Option<u32>,
 	last_pointer_position: Option<(i32, i32)>,
 	awaiting_frame: bool,
 	awaiting_release: bool,
@@ -101,7 +100,6 @@ impl Window {
 			xdg_surface_id,
 			xdg_toplevel_id,
 			frame_callback_id,
-			last_interaction_serial: None,
 			last_pointer_position: None,
 			context: ctx,
 			buffers,
@@ -116,16 +114,12 @@ impl Window {
 		self.buffers.canvas()
 	}
 
-	pub fn start_move(&mut self) -> io::Result<()> {
-		if let Some(serial) = self.last_interaction_serial {
-			MoveRequest {
-				serial,
-				seat_id: self.context.borrow().globals.seat.unwrap(),
-			}
-			.write_as_packet(self.xdg_toplevel_id, &self.context.borrow().conn.stream)
-		} else {
-			Ok(())
+	pub fn start_move(&mut self, serial: u32) -> io::Result<()> {
+		MoveRequest {
+			serial,
+			seat_id: self.context.borrow().globals.seat.unwrap(),
 		}
+		.write_as_packet(self.xdg_toplevel_id, &self.context.borrow().conn.stream)
 	}
 
 	pub fn poll(&mut self) -> io::Result<AppEvent> {
@@ -170,6 +164,12 @@ impl Window {
 	fn interpret_event(&mut self, object_id: u32, event: ContextEvent) -> io::Result<Option<AppEvent>> {
 		if let ContextEvent::Pointer(pointer_event) = event {
 			match pointer_event {
+				PointerEvent::Enter(event) => {
+					self.last_pointer_position = Some((event.x / 256, event.y / 256));
+				}
+				PointerEvent::Leave(_) => {
+					self.last_pointer_position = None;
+				}
 				PointerEvent::Move(event) => {
 					self.last_pointer_position = Some((event.x / 256, event.y / 256));
 					return Ok(Some(AppEvent::PointerMotion {
@@ -178,19 +178,18 @@ impl Window {
 					}));
 				}
 				PointerEvent::Button(event) => {
-					self.last_interaction_serial = Some(event.serial);
 					return Ok(Some(AppEvent::PointerButton {
 						button: event.button,
 						pressed: event.state != 0,
-						x: self.last_pointer_position.map(|(x, _)| x).unwrap_or(0),
-						y: self.last_pointer_position.map(|(_, y)| y).unwrap_or(0),
+						x: self.last_pointer_position.map(|(x, _)| x).unwrap_or(-1),
+						y: self.last_pointer_position.map(|(_, y)| y).unwrap_or(-1),
+						serial: event.serial,
 					}));
 				}
 				_ => {}
 			}
 		} else if let ContextEvent::Keyboard(keyboard_event, resolved_keysym) = event {
 			if let KeyboardEvent::Key(event) = keyboard_event {
-				self.last_interaction_serial = Some(event.serial);
 				return Ok(Some(AppEvent::Keyboard {
 					keycode: event.key,
 					pressed: event.state != 0,
@@ -272,6 +271,7 @@ pub enum AppEvent {
 	PointerButton {
 		button: u32,
 		pressed: bool,
+		serial: u32,
 		x: i32,
 		y: i32,
 	},
@@ -294,6 +294,7 @@ impl TryFrom<PointerEvent> for AppEvent {
 			PointerEvent::Button(event) => Ok(AppEvent::PointerButton {
 				button: event.button,
 				pressed: event.state != 0,
+				serial: event.serial,
 				x: 0,
 				y: 0,
 			}),

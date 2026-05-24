@@ -2,7 +2,7 @@ use crate::Widget;
 
 #[derive(Debug)]
 pub enum TopBarEvent {
-	DragStarted,
+	DragStarted(u32),
 }
 
 pub struct TopBar {
@@ -21,11 +21,15 @@ impl Widget for TopBar {
 	type Event = TopBarEvent;
 
 	fn handle_event(&mut self, event: &crate::AppEvent) -> Vec<Self::Event> {
-		if let crate::AppEvent::PointerButton { button, pressed, .. } = event
-			&& *button == 0x110
+		if let crate::AppEvent::PointerButton {
+			button,
+			pressed,
+			serial,
+			..
+		} = event && *button == 0x110
 			&& *pressed
 		{
-			return vec![TopBarEvent::DragStarted];
+			return vec![TopBarEvent::DragStarted(*serial)];
 		}
 
 		if let crate::AppEvent::Resize { width, .. } = event {
